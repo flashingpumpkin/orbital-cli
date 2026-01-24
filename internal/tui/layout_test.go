@@ -18,7 +18,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        0,
 			wantTooSmall:     false,
-			wantScrollHeight: 32, // 40 - (0 + 2 + 2 + 4)
+			wantScrollHeight: 30, // 40 - (1 + 0 + 2 + 2 + 5)
 			wantTaskHeight:   0,
 		},
 		{
@@ -27,7 +27,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        3,
 			wantTooSmall:     false,
-			wantScrollHeight: 28, // 40 - (4 + 2 + 2 + 4)
+			wantScrollHeight: 26, // 40 - (1 + 4 + 2 + 2 + 5)
 			wantTaskHeight:   4,  // 3 tasks + 1 header
 		},
 		{
@@ -36,7 +36,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        6,
 			wantTooSmall:     false,
-			wantScrollHeight: 25, // 40 - (7 + 2 + 2 + 4)
+			wantScrollHeight: 23, // 40 - (1 + 7 + 2 + 2 + 5)
 			wantTaskHeight:   7,  // 6 tasks + 1 header
 		},
 		{
@@ -45,7 +45,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        10,
 			wantTooSmall:     false,
-			wantScrollHeight: 25, // 40 - (7 + 2 + 2 + 4) - capped at max
+			wantScrollHeight: 23, // 40 - (1 + 7 + 2 + 2 + 5) - capped at max
 			wantTaskHeight:   7,  // max 6 + 1 header
 		},
 		{
@@ -68,7 +68,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           24,
 			taskCount:        0,
 			wantTooSmall:     false,
-			wantScrollHeight: 16, // 24 - (0 + 2 + 2 + 4)
+			wantScrollHeight: 14, // 24 - (1 + 0 + 2 + 2 + 5)
 			wantTaskHeight:   0,
 		},
 		{
@@ -77,7 +77,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           24,
 			taskCount:        6,
 			wantTooSmall:     false,
-			wantScrollHeight: 9, // 24 - (7 + 2 + 2 + 4)
+			wantScrollHeight: 7, // 24 - (1 + 7 + 2 + 2 + 5)
 			wantTaskHeight:   7, // 6 tasks + 1 header
 		},
 	}
@@ -179,7 +179,7 @@ func TestCalculateLayoutWithWorktree(t *testing.T) {
 			taskCount:               0,
 			hasWorktree:             false,
 			wantTooSmall:            false,
-			wantScrollHeight:        32, // 40 - (0 + 2 + 2 + 4)
+			wantScrollHeight:        30, // 40 - (1 + 0 + 2 + 2 + 5)
 			wantWorktreePanelHeight: 0,
 		},
 		{
@@ -189,7 +189,7 @@ func TestCalculateLayoutWithWorktree(t *testing.T) {
 			taskCount:               0,
 			hasWorktree:             true,
 			wantTooSmall:            false,
-			wantScrollHeight:        30, // 40 - (0 + 2 + 2 + 1 + 5) - extra border + worktree panel
+			wantScrollHeight:        28, // 40 - (1 + 0 + 2 + 2 + 1 + 6) - extra border + worktree panel
 			wantWorktreePanelHeight: 1,
 		},
 		{
@@ -199,7 +199,7 @@ func TestCalculateLayoutWithWorktree(t *testing.T) {
 			taskCount:               3,
 			hasWorktree:             true,
 			wantTooSmall:            false,
-			wantScrollHeight:        26, // 40 - (4 + 2 + 2 + 1 + 5)
+			wantScrollHeight:        24, // 40 - (1 + 4 + 2 + 2 + 1 + 6)
 			wantWorktreePanelHeight: 1,
 		},
 	}

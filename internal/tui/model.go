@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +13,23 @@ import (
 
 // Task is an alias to the shared tasks.Task type for TUI use.
 type Task = tasks.Task
+
+// TabType represents the type of content in a tab.
+type TabType int
+
+const (
+	// TabOutput is the streaming output tab.
+	TabOutput TabType = iota
+	// TabFile is a file content tab.
+	TabFile
+)
+
+// Tab represents a single tab in the tab bar.
+type Tab struct {
+	Name     string  // Display name for the tab
+	Type     TabType // Type of tab content
+	FilePath string  // Path to file (for TabFile type)
+}
 
 // SessionInfo contains the file paths for the current session.
 type SessionInfo struct {
@@ -54,6 +73,12 @@ type Model struct {
 	session     SessionInfo
 	worktree    WorktreeInfo
 
+	// Tabs
+	tabs         []Tab             // List of tabs
+	activeTab    int               // Index of active tab
+	fileContents map[string]string // Cached file contents by path
+	fileScroll   map[string]int    // Scroll offset per file
+
 	// Styles
 	styles Styles
 
@@ -77,14 +102,21 @@ type Styles struct {
 	TooSmallMessage lipgloss.Style
 	WorktreeLabel   lipgloss.Style
 	WorktreeValue   lipgloss.Style
+	TabActive       lipgloss.Style
+	TabInactive     lipgloss.Style
+	TabBar          lipgloss.Style
 }
 
 // NewModel creates a new TUI model.
 func NewModel() Model {
 	return Model{
-		outputLines: make([]string, 0),
-		tasks:       make([]Task, 0),
-		styles:      defaultStyles(),
+		outputLines:  make([]string, 0),
+		tasks:        make([]Task, 0),
+		tabs:         []Tab{{Name: "Output", Type: TabOutput}},
+		activeTab:    0,
+		fileContents: make(map[string]string),
+		fileScroll:   make(map[string]int),
+		styles:       defaultStyles(),
 		progress: ProgressInfo{
 			Iteration:    1,
 			MaxIteration: 50,
@@ -109,12 +141,59 @@ func defaultStyles() Styles {
 		TooSmallMessage: lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
 		WorktreeLabel:   lipgloss.NewStyle().Foreground(lipgloss.Color("141")).Bold(true),
 		WorktreeValue:   lipgloss.NewStyle().Foreground(lipgloss.Color("183")),
+		TabActive:       lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Background(lipgloss.Color("240")).Bold(true).Padding(0, 1),
+		TabInactive:     lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Padding(0, 1),
+		TabBar:          lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
 	}
 }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	return nil
+}
+
+// FileContentMsg contains loaded file content.
+type FileContentMsg struct {
+	Path    string
+	Content string
+	Error   error
+}
+
+// maxFileSize is the maximum file size to load (1MB).
+const maxFileSize = 1024 * 1024
+
+// loadFileCmd creates a command to load file content.
+func loadFileCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		// Check file size first
+		info, err := os.Stat(path)
+		if err != nil {
+			return FileContentMsg{Path: path, Error: err}
+		}
+		if info.Size() > maxFileSize {
+			return FileContentMsg{
+				Path:    path,
+				Content: "(File too large to display: " + formatFileSize(info.Size()) + ")",
+			}
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return FileContentMsg{Path: path, Error: err}
+		}
+		return FileContentMsg{Path: path, Content: string(content)}
+	}
+}
+
+// formatFileSize formats a file size in human-readable form.
+func formatFileSize(size int64) string {
+	if size < 1024 {
+		return intToString(int(size)) + " B"
+	}
+	if size < 1024*1024 {
+		return intToString(int(size/1024)) + " KB"
+	}
+	return intToString(int(size/(1024*1024))) + " MB"
 }
 
 // Update implements tea.Model.
@@ -148,6 +227,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SessionMsg:
 		m.session = SessionInfo(msg)
+		m.tabs = m.buildTabs()
+		// Clamp activeTab to valid range if tabs changed
+		if m.activeTab >= len(m.tabs) {
+			m.activeTab = 0
+		}
 		return m, nil
 
 	case WorktreeMsg:
@@ -157,13 +241,267 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case FileContentMsg:
+		if msg.Error != nil {
+			m.fileContents[msg.Path] = "Error loading file: " + msg.Error.Error()
+		} else {
+			m.fileContents[msg.Path] = msg.Content
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "left", "h":
+			return m.prevTab()
+		case "right", "l":
+			return m.nextTab()
+		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+			idx := int(msg.String()[0] - '1')
+			if idx < len(m.tabs) {
+				return m.switchToTab(idx)
+			}
+		case "tab":
+			return m.nextTab()
+		case "shift+tab":
+			return m.prevTab()
+		case "up", "k":
+			return m.scrollUp()
+		case "down", "j":
+			return m.scrollDown()
+		case "pgup":
+			return m.scrollPageUp()
+		case "pgdown":
+			return m.scrollPageDown()
+		case "r":
+			return m.reloadCurrentFile()
+		}
+
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+			// Check if click is in tab bar area (first row)
+			if msg.Y == 0 {
+				return m.handleTabClick(msg.X)
+			}
 		}
 	}
 
+	return m, nil
+}
+
+// buildTabs creates the tab list based on session info.
+func (m Model) buildTabs() []Tab {
+	tabs := []Tab{{Name: "Output", Type: TabOutput}}
+
+	// Add spec files
+	for _, path := range m.session.SpecFiles {
+		tabs = append(tabs, Tab{
+			Name:     "Spec: " + filepath.Base(path),
+			Type:     TabFile,
+			FilePath: path,
+		})
+	}
+
+	// Add notes file
+	if m.session.NotesFile != "" {
+		tabs = append(tabs, Tab{
+			Name:     "Notes",
+			Type:     TabFile,
+			FilePath: m.session.NotesFile,
+		})
+	}
+
+	// Add context files (handle both ", " and "," separators)
+	if m.session.ContextFile != "" {
+		// Split on comma, then trim spaces from each part
+		for _, path := range strings.Split(m.session.ContextFile, ",") {
+			path = strings.TrimSpace(path)
+			if path != "" {
+				tabs = append(tabs, Tab{
+					Name:     "Ctx: " + filepath.Base(path),
+					Type:     TabFile,
+					FilePath: path,
+				})
+			}
+		}
+	}
+
+	return tabs
+}
+
+// prevTab switches to the previous tab.
+func (m Model) prevTab() (tea.Model, tea.Cmd) {
+	if m.activeTab > 0 {
+		return m.switchToTab(m.activeTab - 1)
+	}
+	return m, nil
+}
+
+// nextTab switches to the next tab.
+func (m Model) nextTab() (tea.Model, tea.Cmd) {
+	if m.activeTab < len(m.tabs)-1 {
+		return m.switchToTab(m.activeTab + 1)
+	}
+	return m, nil
+}
+
+// switchToTab switches to a specific tab by index.
+func (m Model) switchToTab(idx int) (tea.Model, tea.Cmd) {
+	if idx < 0 || idx >= len(m.tabs) {
+		return m, nil
+	}
+
+	m.activeTab = idx
+	tab := m.tabs[idx]
+
+	// If it's a file tab and we haven't loaded the content yet, load it
+	if tab.Type == TabFile && tab.FilePath != "" {
+		if _, ok := m.fileContents[tab.FilePath]; !ok {
+			return m, loadFileCmd(tab.FilePath)
+		}
+	}
+
+	return m, nil
+}
+
+// handleTabClick handles a mouse click on the tab bar.
+func (m Model) handleTabClick(x int) (tea.Model, tea.Cmd) {
+	// Calculate tab positions based on rendered width (must match renderTabBar)
+	width := m.layout.Width
+	sepWidth := 1 // separator "│" width
+	currentX := 0
+
+	for i, tab := range m.tabs {
+		// Tab name with number prefix (must match renderTabBar logic)
+		name := tab.Name
+		if i < 9 {
+			name = intToString(i+1) + ":" + name
+		}
+		// Tab width is name length + 2 (for padding from style)
+		tabWidth := ansi.StringWidth(name) + 2
+
+		// Check if this tab would overflow (match renderTabBar logic)
+		neededWidth := tabWidth
+		if i > 0 {
+			neededWidth += sepWidth
+		}
+		if currentX+neededWidth > width {
+			break // Tab is truncated, not clickable
+		}
+
+		// Add separator width for tabs after the first
+		clickStart := currentX
+		if i > 0 {
+			clickStart += sepWidth
+		}
+
+		if x >= clickStart && x < clickStart+tabWidth {
+			return m.switchToTab(i)
+		}
+
+		currentX += neededWidth
+	}
+	return m, nil
+}
+
+// scrollUp scrolls the current file tab up.
+func (m Model) scrollUp() (tea.Model, tea.Cmd) {
+	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+		return m, nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile && tab.FilePath != "" {
+		if offset, ok := m.fileScroll[tab.FilePath]; ok && offset > 0 {
+			m.fileScroll[tab.FilePath] = offset - 1
+		}
+	}
+	return m, nil
+}
+
+// scrollDown scrolls the current file tab down.
+func (m Model) scrollDown() (tea.Model, tea.Cmd) {
+	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+		return m, nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile && tab.FilePath != "" {
+		content, ok := m.fileContents[tab.FilePath]
+		if !ok {
+			return m, nil
+		}
+		lines := strings.Split(content, "\n")
+		maxOffset := len(lines) - m.layout.ScrollAreaHeight
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		offset := m.fileScroll[tab.FilePath]
+		if offset < maxOffset {
+			m.fileScroll[tab.FilePath] = offset + 1
+		}
+	}
+	return m, nil
+}
+
+// scrollPageUp scrolls the current file tab up by a page.
+func (m Model) scrollPageUp() (tea.Model, tea.Cmd) {
+	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+		return m, nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile && tab.FilePath != "" {
+		offset := m.fileScroll[tab.FilePath]
+		newOffset := offset - m.layout.ScrollAreaHeight
+		if newOffset < 0 {
+			newOffset = 0
+		}
+		m.fileScroll[tab.FilePath] = newOffset
+	}
+	return m, nil
+}
+
+// scrollPageDown scrolls the current file tab down by a page.
+func (m Model) scrollPageDown() (tea.Model, tea.Cmd) {
+	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+		return m, nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile && tab.FilePath != "" {
+		content, ok := m.fileContents[tab.FilePath]
+		if !ok {
+			return m, nil
+		}
+		lines := strings.Split(content, "\n")
+		maxOffset := len(lines) - m.layout.ScrollAreaHeight
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		offset := m.fileScroll[tab.FilePath]
+		newOffset := offset + m.layout.ScrollAreaHeight
+		if newOffset > maxOffset {
+			newOffset = maxOffset
+		}
+		m.fileScroll[tab.FilePath] = newOffset
+	}
+	return m, nil
+}
+
+// reloadCurrentFile reloads the content of the current file tab.
+func (m Model) reloadCurrentFile() (tea.Model, tea.Cmd) {
+	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+		return m, nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile && tab.FilePath != "" {
+		// Clear cached content to trigger reload
+		delete(m.fileContents, tab.FilePath)
+		return m, loadFileCmd(tab.FilePath)
+	}
 	return m, nil
 }
 
@@ -189,8 +527,12 @@ func (m Model) renderTooSmall() string {
 func (m Model) renderFull() string {
 	var sections []string
 
-	// Scrolling output area
-	sections = append(sections, m.renderScrollArea())
+	// Tab bar at the top
+	sections = append(sections, m.renderTabBar())
+	sections = append(sections, m.renderSeparator())
+
+	// Main content area (output or file content)
+	sections = append(sections, m.renderMainContent())
 
 	// Horizontal separator
 	sections = append(sections, m.renderSeparator())
@@ -217,6 +559,126 @@ func (m Model) renderFull() string {
 	}
 
 	return strings.Join(sections, "\n")
+}
+
+// renderTabBar renders the tab bar with all tabs, truncating if needed.
+func (m Model) renderTabBar() string {
+	width := m.layout.Width
+	separator := m.styles.TabBar.Render("│")
+	sepWidth := ansi.StringWidth(separator)
+
+	var tabs []string
+	currentWidth := 0
+
+	for i, tab := range m.tabs {
+		var style lipgloss.Style
+		if i == m.activeTab {
+			style = m.styles.TabActive
+		} else {
+			style = m.styles.TabInactive
+		}
+
+		// Add number hint for keyboard navigation
+		name := tab.Name
+		if i < 9 {
+			name = intToString(i+1) + ":" + name
+		}
+
+		// Calculate tab width (name + padding from style)
+		tabWidth := ansi.StringWidth(name) + 2 // +2 for padding
+
+		// Check if this tab would overflow
+		neededWidth := tabWidth
+		if len(tabs) > 0 {
+			neededWidth += sepWidth
+		}
+
+		if currentWidth+neededWidth > width {
+			// Truncate: show "..." indicator and stop
+			if currentWidth+sepWidth+5 <= width { // 5 = "..." + minimal padding
+				tabs = append(tabs, m.styles.TabInactive.Render("..."))
+			}
+			break
+		}
+
+		tabs = append(tabs, style.Render(name))
+		currentWidth += neededWidth
+	}
+
+	return strings.Join(tabs, separator)
+}
+
+// renderMainContent renders either the output stream or file content based on active tab.
+func (m Model) renderMainContent() string {
+	if m.activeTab == 0 || m.activeTab >= len(m.tabs) {
+		return m.renderScrollArea()
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile {
+		return m.renderFileContent(tab.FilePath)
+	}
+
+	return m.renderScrollArea()
+}
+
+// renderFileContent renders the content of a file.
+func (m Model) renderFileContent(path string) string {
+	height := m.layout.ScrollAreaHeight
+	width := m.layout.ContentWidth()
+
+	content, ok := m.fileContents[path]
+	if !ok {
+		// File not loaded yet
+		lines := make([]string, height)
+		lines[0] = m.styles.Label.Render("  Loading " + path + "...")
+		return strings.Join(lines, "\n")
+	}
+
+	// Split content into lines
+	fileLines := strings.Split(content, "\n")
+
+	// Get scroll offset
+	offset := m.fileScroll[path]
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(fileLines)-height {
+		offset = len(fileLines) - height
+		if offset < 0 {
+			offset = 0
+		}
+	}
+
+	// Build visible lines with line numbers
+	var lines []string
+	for i := 0; i < height; i++ {
+		lineIdx := offset + i
+		if lineIdx >= len(fileLines) {
+			lines = append(lines, "")
+			continue
+		}
+
+		line := fileLines[lineIdx]
+		lineNum := lineIdx + 1
+
+		// Format line number (right-aligned, 5 chars)
+		numStr := intToString(lineNum)
+		for len(numStr) < 5 {
+			numStr = " " + numStr
+		}
+		numStr = m.styles.Label.Render(numStr + "│")
+
+		// Truncate long lines (ANSI-aware)
+		visibleWidth := width - 6 // Account for line number column
+		if ansi.StringWidth(line) > visibleWidth {
+			line = ansi.Truncate(line, visibleWidth-3, "...")
+		}
+
+		lines = append(lines, numStr+line)
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // renderScrollArea renders the scrolling output region.
