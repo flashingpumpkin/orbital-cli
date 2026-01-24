@@ -390,15 +390,6 @@ func findSubstring(s, substr string) bool {
 	return false
 }
 
-// mockProgram captures messages sent to it for testing.
-type mockProgram struct {
-	messages []interface{}
-}
-
-func (m *mockProgram) Send(msg interface{}) {
-	m.messages = append(m.messages, msg)
-}
-
 // TestBridgeMessageQueue verifies the non-blocking message queue behaviour.
 func TestBridgeMessageQueue(t *testing.T) {
 	t.Run("sends messages through queue", func(t *testing.T) {
@@ -426,10 +417,7 @@ func TestBridgeMessageQueue(t *testing.T) {
 		// Verify queue received messages (non-blocking check)
 		// With nil program, the pump isn't running, so messages stay in queue
 		queueLen := len(bridge.msgQueue)
-		if queueLen == 0 {
-			// This is expected when program is nil as the pump isn't started
-			// Verify the bridge processes without blocking
-		}
+		_ = queueLen // Verify the bridge processes without blocking
 	})
 
 	t.Run("handles queue full gracefully", func(t *testing.T) {

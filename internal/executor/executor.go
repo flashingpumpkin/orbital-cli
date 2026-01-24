@@ -116,7 +116,7 @@ func (e *Executor) BuildArgs(prompt string) []string {
 func extractStats(rawOutput string) (int, int, float64) {
 	parser := output.NewParser()
 	for _, line := range strings.Split(rawOutput, "\n") {
-		parser.ParseLine([]byte(line))
+		_, _ = parser.ParseLine([]byte(line))
 	}
 	stats := parser.GetStats()
 	return stats.TokensIn, stats.TokensOut, stats.CostUSD

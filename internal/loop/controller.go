@@ -192,7 +192,7 @@ func ParseVerificationResponse(output string) (bool, int, int) {
 	verifiedRe := regexp.MustCompile(`VERIFIED:\s*0\s*unchecked,\s*(\d+)\s*checked`)
 	if matches := verifiedRe.FindStringSubmatch(output); len(matches) > 1 {
 		var checked int
-		fmt.Sscanf(matches[1], "%d", &checked)
+		_, _ = fmt.Sscanf(matches[1], "%d", &checked)
 		return true, 0, checked
 	}
 
@@ -200,8 +200,8 @@ func ParseVerificationResponse(output string) (bool, int, int) {
 	incompleteRe := regexp.MustCompile(`INCOMPLETE:\s*(\d+)\s*unchecked,\s*(\d+)\s*checked`)
 	if matches := incompleteRe.FindStringSubmatch(output); len(matches) > 2 {
 		var unchecked, checked int
-		fmt.Sscanf(matches[1], "%d", &unchecked)
-		fmt.Sscanf(matches[2], "%d", &checked)
+		_, _ = fmt.Sscanf(matches[1], "%d", &unchecked)
+		_, _ = fmt.Sscanf(matches[2], "%d", &checked)
 		return false, unchecked, checked
 	}
 

@@ -943,9 +943,10 @@ func runWorkflowLoop(
 		// Log step completion (non-TUI mode)
 		if tuiProgram == nil {
 			formatter.PrintStepComplete(info.Name, stepDuration, result.CostUSD, result.TokensIn+result.TokensOut)
-			if gateResult == workflow.GatePassed {
+			switch gateResult {
+			case workflow.GatePassed:
 				formatter.PrintGateResult(true, info.GateRetries, info.MaxRetries)
-			} else if gateResult == workflow.GateFailed {
+			case workflow.GateFailed:
 				formatter.PrintGateResult(false, info.GateRetries, info.MaxRetries)
 			}
 		}

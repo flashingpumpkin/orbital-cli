@@ -216,10 +216,9 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 						return result, fmt.Errorf("step %q: on_fail target %q not found", step.Name, step.OnFail)
 					}
 					stepIndex = targetIndex
-				} else {
-					// No on_fail specified, just retry this step
-					// Don't increment stepIndex
 				}
+				// No on_fail specified, just retry this step
+				// Don't increment stepIndex
 
 			case GateNotFound:
 				// No gate signal found - treat as failure
