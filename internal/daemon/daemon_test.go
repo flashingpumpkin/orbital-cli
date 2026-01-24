@@ -247,7 +247,9 @@ func TestRegistryUpdateStatus(t *testing.T) {
 		ID:     "test123",
 		Status: StatusRunning,
 	}
-	r.Add(session)
+	if err := r.Add(session); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
 
 	// Update to completed
 	if err := r.UpdateStatus("test123", StatusCompleted, ""); err != nil {
@@ -287,8 +289,12 @@ func TestRegistryPersistence(t *testing.T) {
 		WorkflowName:  "spec-driven",
 		MaxIterations: 50,
 	}
-	r.Add(session)
-	r.UpdateStatus("test123", StatusCompleted, "")
+	if err := r.Add(session); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	if err := r.UpdateStatus("test123", StatusCompleted, ""); err != nil {
+		t.Fatalf("UpdateStatus failed: %v", err)
+	}
 
 	// Create new registry and load
 	r2 := NewRegistry(dir)
@@ -312,7 +318,9 @@ func TestRegistryPersistence(t *testing.T) {
 func TestRegistryLoadInterruptedSessions(t *testing.T) {
 	dir := t.TempDir()
 	stateFile := filepath.Join(dir, ".orbital", "daemon-state.json")
-	os.MkdirAll(filepath.Dir(stateFile), 0755)
+	if err := os.MkdirAll(filepath.Dir(stateFile), 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 
 	// Write state with running session
 	state := struct {
@@ -325,7 +333,9 @@ func TestRegistryLoadInterruptedSessions(t *testing.T) {
 		},
 	}
 	data, _ := json.Marshal(state)
-	os.WriteFile(stateFile, data, 0644)
+	if err := os.WriteFile(stateFile, data, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	// Load registry
 	r := NewRegistry(dir)
@@ -356,7 +366,9 @@ func TestRegistryCorruptRecovery(t *testing.T) {
 	dir := t.TempDir()
 	stateFile := filepath.Join(dir, ".orbital", "daemon-state.json")
 	backupFile := stateFile + ".bak"
-	os.MkdirAll(filepath.Dir(stateFile), 0755)
+	if err := os.MkdirAll(filepath.Dir(stateFile), 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 
 	// Write valid backup
 	state := struct {
@@ -367,10 +379,14 @@ func TestRegistryCorruptRecovery(t *testing.T) {
 		},
 	}
 	data, _ := json.Marshal(state)
-	os.WriteFile(backupFile, data, 0644)
+	if err := os.WriteFile(backupFile, data, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	// Write corrupt main file
-	os.WriteFile(stateFile, []byte("{corrupt json"), 0644)
+	if err := os.WriteFile(stateFile, []byte("{corrupt json"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	// Load should recover from backup
 	r := NewRegistry(dir)
@@ -393,7 +409,9 @@ func TestRegistrySubscribeBroadcast(t *testing.T) {
 		ID:     "test123",
 		Status: StatusRunning,
 	}
-	r.Add(session)
+	if err := r.Add(session); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
 
 	// Subscribe
 	ch, history, done, err := r.Subscribe("test123")
@@ -429,7 +447,9 @@ func TestRegistrySubscribeBroadcast(t *testing.T) {
 	}
 
 	// Verify done channel works
-	r.UpdateStatus("test123", StatusCompleted, "")
+	if err := r.UpdateStatus("test123", StatusCompleted, ""); err != nil {
+		t.Fatalf("UpdateStatus failed: %v", err)
+	}
 	select {
 	case <-done:
 		// Good
@@ -486,7 +506,7 @@ func TestRegistryConcurrent(t *testing.T) {
 	r := NewRegistry(dir)
 
 	// Add initial session
-	r.Add(&Session{ID: "test1", Status: StatusRunning})
+	_ = r.Add(&Session{ID: "test1", Status: StatusRunning})
 
 	var wg sync.WaitGroup
 
@@ -509,7 +529,7 @@ func TestRegistryConcurrent(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < 50; j++ {
-				r.UpdateProgress("test1", j, float64(j)*0.1, j*100, j*50)
+				_ = r.UpdateProgress("test1", j, float64(j)*0.1, j*100, j*50)
 			}
 		}(i)
 	}

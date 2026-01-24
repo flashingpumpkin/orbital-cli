@@ -200,8 +200,8 @@ func (r *Registry) Load() error {
 	// Check for temp file left over from interrupted write
 	tempPath := r.stateFile + ".tmp"
 	if _, err := os.Stat(tempPath); err == nil {
-		// Temp file exists - try to use it if main file is missing/corrupt
-		os.Remove(tempPath) // Clean up orphaned temp file
+		// Temp file exists - clean up orphaned temp file (best-effort)
+		_ = os.Remove(tempPath)
 	}
 
 	// Check for backup file and recover if main file is corrupt
@@ -293,10 +293,8 @@ func (r *Registry) saveLocked() error {
 	// Create backup of existing state file before writing
 	backupPath := r.stateFile + ".bak"
 	if _, err := os.Stat(r.stateFile); err == nil {
-		// Main file exists, create backup
-		if backupErr := copyFile(r.stateFile, backupPath); backupErr != nil {
-			// Log but don't fail - backup is best-effort
-		}
+		// Main file exists, create backup (best-effort, ignore errors)
+		_ = copyFile(r.stateFile, backupPath)
 	}
 
 	// Atomic write

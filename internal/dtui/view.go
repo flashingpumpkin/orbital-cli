@@ -17,13 +17,6 @@ var (
 			Foreground(lipgloss.Color("205")).
 			Padding(0, 1)
 
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("252")).
-			Background(lipgloss.Color("235")).
-			Padding(0, 1).
-			Width(80)
-
 	groupStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("39"))
@@ -49,11 +42,6 @@ var (
 
 	statusStopped = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("214"))
-
-	borderStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(0, 1)
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
@@ -183,7 +171,7 @@ func (m Model) renderGroup(group string, selected bool) string {
 		style = groupStyle
 	}
 
-	label := fmt.Sprintf("%s %s (%d)", arrow, strings.Title(group), count)
+	label := fmt.Sprintf("%s %s (%d)", arrow, capitalizeFirst(group), count)
 	line := style.Render(label)
 
 	if selected {
@@ -540,4 +528,12 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// capitalizeFirst capitalizes the first letter of a string.
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

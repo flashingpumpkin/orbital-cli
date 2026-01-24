@@ -68,7 +68,6 @@ type Session struct {
 
 	// Runtime fields (not persisted)
 	mu           sync.RWMutex     `json:"-"`
-	cancelFunc   func()           `json:"-"`
 	outputBuffer *RingBuffer      `json:"-"`
 	subscribers  []chan OutputMsg `json:"-"`
 	done         chan struct{}    `json:"-"` // Closed when session completes

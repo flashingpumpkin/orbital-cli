@@ -110,10 +110,10 @@ func (r *SessionRunner) Start(ctx context.Context, req StartSessionRequest) (*Se
 
 	// Add to registry
 	if err := r.registry.Add(session); err != nil {
-		// Cleanup worktree if we created one
+		// Cleanup worktree if we created one (best-effort)
 		if session.Worktree != nil {
 			cleanup := worktree.NewCleanup(r.projectDir)
-			cleanup.Run(session.Worktree.Path, session.Worktree.Branch)
+			_ = cleanup.Run(session.Worktree.Path, session.Worktree.Branch)
 		}
 		return nil, fmt.Errorf("failed to add session: %w", err)
 	}
@@ -253,7 +253,7 @@ func (r *SessionRunner) Merge(sessionID string) error {
 
 	result, err := merge.Run(context.Background(), mergeOpts)
 	if err != nil {
-		r.registry.UpdateStatus(sessionID, StatusFailed, fmt.Sprintf("merge failed: %v", err))
+		_ = r.registry.UpdateStatus(sessionID, StatusFailed, fmt.Sprintf("merge failed: %v", err))
 		r.registry.Broadcast(sessionID, OutputMsg{
 			Type:      "error",
 			Content:   fmt.Sprintf("Merge failed: %v", err),
@@ -263,7 +263,7 @@ func (r *SessionRunner) Merge(sessionID string) error {
 	}
 
 	if !result.Success {
-		r.registry.UpdateStatus(sessionID, StatusConflict, "merge conflict")
+		_ = r.registry.UpdateStatus(sessionID, StatusConflict, "merge conflict")
 		r.registry.Broadcast(sessionID, OutputMsg{
 			Type:      "error",
 			Content:   "Merge conflict - manual resolution required",
@@ -284,7 +284,7 @@ func (r *SessionRunner) Merge(sessionID string) error {
 	}
 
 	// Update status to merged
-	r.registry.UpdateStatus(sessionID, StatusMerged, "")
+	_ = r.registry.UpdateStatus(sessionID, StatusMerged, "")
 	r.registry.Broadcast(sessionID, OutputMsg{
 		Type:      "status",
 		Content:   "Merge completed successfully",
@@ -349,10 +349,8 @@ func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSess
 
 	defer func() {
 		r.mu.Lock()
-		// Only delete if still present (Stop() may have already removed it)
-		if _, exists := r.cancels[session.ID]; exists {
-			delete(r.cancels, session.ID)
-		}
+		// Delete if present (no-op if Stop() already removed it)
+		delete(r.cancels, session.ID)
 		r.mu.Unlock()
 
 		// If session is still running (e.g., daemon shutdown), mark as interrupted
@@ -361,7 +359,7 @@ func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSess
 			status := sess.Status
 			sess.mu.RUnlock()
 			if status == StatusRunning {
-				r.registry.UpdateStatus(session.ID, StatusInterrupted, "session interrupted")
+				_ = r.registry.UpdateStatus(session.ID, StatusInterrupted, "session interrupted")
 			}
 		}
 	}()
@@ -416,7 +414,7 @@ func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSess
 	})
 
 	controller.SetIterationCallback(func(iteration int, totalCost float64, tokensIn, tokensOut int) error {
-		r.registry.UpdateProgress(session.ID, iteration, totalCost, tokensIn, tokensOut)
+		_ = r.registry.UpdateProgress(session.ID, iteration, totalCost, tokensIn, tokensOut)
 		return nil
 	})
 
@@ -447,14 +445,14 @@ func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSess
 				sess.mu.RUnlock()
 				if status == StatusRunning {
 					// Not stopped explicitly, must be daemon shutdown
-					r.registry.UpdateStatus(session.ID, StatusInterrupted, "session interrupted")
+					_ = r.registry.UpdateStatus(session.ID, StatusInterrupted, "session interrupted")
 				}
 			}
 			return
 		case loop.ErrMaxIterationsReached:
-			r.registry.UpdateStatus(session.ID, StatusFailed, "max iterations reached")
+			_ = r.registry.UpdateStatus(session.ID, StatusFailed, "max iterations reached")
 		case loop.ErrBudgetExceeded:
-			r.registry.UpdateStatus(session.ID, StatusFailed, "budget exceeded")
+			_ = r.registry.UpdateStatus(session.ID, StatusFailed, "budget exceeded")
 		default:
 			r.handleError(session.ID, err)
 		}
@@ -462,7 +460,7 @@ func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSess
 	}
 
 	if loopState != nil && loopState.Completed {
-		r.registry.UpdateStatus(session.ID, StatusCompleted, "")
+		_ = r.registry.UpdateStatus(session.ID, StatusCompleted, "")
 		r.registry.Broadcast(session.ID, OutputMsg{
 			Type:      "status",
 			Content:   "Session completed successfully",
@@ -507,7 +505,7 @@ func (r *SessionRunner) runWorkflowLoop(
 		loopState.TotalTokens = loopState.TotalTokensIn + loopState.TotalTokensOut
 		loopState.LastOutput = result.Output
 
-		r.registry.UpdateProgress(session.ID, loopState.Iteration, loopState.TotalCost, loopState.TotalTokensIn, loopState.TotalTokensOut)
+		_ = r.registry.UpdateProgress(session.ID, loopState.Iteration, loopState.TotalCost, loopState.TotalTokensIn, loopState.TotalTokensOut)
 		return nil
 	})
 
@@ -624,7 +622,7 @@ func (r *SessionRunner) resolveWorkflow(name string) (*workflow.Workflow, error)
 
 // handleError updates session status on error.
 func (r *SessionRunner) handleError(sessionID string, err error) {
-	r.registry.UpdateStatus(sessionID, StatusFailed, err.Error())
+	_ = r.registry.UpdateStatus(sessionID, StatusFailed, err.Error())
 	r.registry.Broadcast(sessionID, OutputMsg{
 		Type:      "error",
 		Content:   err.Error(),

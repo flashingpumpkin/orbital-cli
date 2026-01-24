@@ -52,7 +52,7 @@ func (c *Client) IsRunning() bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode == http.StatusOK
 }
@@ -68,7 +68,7 @@ func (c *Client) Health(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("daemon not reachable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("daemon unhealthy: status %d", resp.StatusCode)
@@ -88,7 +88,7 @@ func (c *Client) Status(ctx context.Context) (*DaemonStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var status DaemonStatus
 	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
@@ -109,7 +109,7 @@ func (c *Client) ListSessions(ctx context.Context) ([]*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var listResp SessionListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -130,7 +130,7 @@ func (c *Client) GetSession(ctx context.Context, id string) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("session not found")
@@ -165,7 +165,7 @@ func (c *Client) StartSession(ctx context.Context, req StartSessionRequest) (*Se
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -191,7 +191,7 @@ func (c *Client) StopSession(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -212,7 +212,7 @@ func (c *Client) ResumeSession(ctx context.Context, id string) (*Session, error)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -238,7 +238,7 @@ func (c *Client) TriggerMerge(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusAccepted {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -273,7 +273,7 @@ func (c *Client) StreamOutput(ctx context.Context, id string, handler func(Outpu
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -340,7 +340,7 @@ func (c *Client) SendChat(ctx context.Context, sessionID string, message string)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -375,11 +375,11 @@ func (c *Client) Shutdown(ctx context.Context, force bool) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
 		var result map[string]interface{}
-		json.NewDecoder(resp.Body).Decode(&result)
+		_ = json.NewDecoder(resp.Body).Decode(&result)
 		return fmt.Errorf("%v running sessions - use --force to override", result["running_sessions"])
 	}
 

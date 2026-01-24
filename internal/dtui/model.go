@@ -80,7 +80,6 @@ type chatMessage struct {
 }
 
 type newSessionOptions struct {
-	specFile string
 	worktree bool
 	budget   float64
 }
@@ -471,10 +470,10 @@ func (m Model) updateSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Up):
 		m.following = false
-		m.viewport.LineUp(1)
+		m.viewport.SetYOffset(m.viewport.YOffset - 1)
 
 	case key.Matches(msg, m.keys.Down):
-		m.viewport.LineDown(1)
+		m.viewport.SetYOffset(m.viewport.YOffset + 1)
 		if m.viewport.AtBottom() {
 			m.following = true
 		}
@@ -594,13 +593,6 @@ func (m Model) getVisibleItems() []listItem {
 	return items
 }
 
-// streamSubscription tracks an active output stream subscription.
-type streamSubscription struct {
-	sessionID string
-	cancel    context.CancelFunc
-	msgCh     chan daemon.OutputMsg
-}
-
 // Command functions
 
 func (m Model) startOutputStream() tea.Cmd {
@@ -668,7 +660,7 @@ func (m Model) stopSession(id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		m.client.StopSession(ctx, id)
+		_ = m.client.StopSession(ctx, id)
 		return nil
 	}
 }
@@ -677,7 +669,7 @@ func (m Model) resumeSession(id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		m.client.ResumeSession(ctx, id)
+		_, _ = m.client.ResumeSession(ctx, id)
 		return nil
 	}
 }
@@ -686,7 +678,7 @@ func (m Model) triggerMerge(id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		m.client.TriggerMerge(ctx, id)
+		_ = m.client.TriggerMerge(ctx, id)
 		return nil
 	}
 }

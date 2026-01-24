@@ -88,13 +88,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Make socket accessible
 	if err := os.Chmod(s.socketPath, 0660); err != nil {
-		listener.Close()
+		_ = listener.Close()
 		return fmt.Errorf("failed to chmod socket: %w", err)
 	}
 
 	// Write PID file
 	if err := s.writePIDFile(); err != nil {
-		listener.Close()
+		_ = listener.Close()
 		return fmt.Errorf("failed to write PID file: %w", err)
 	}
 
@@ -140,7 +140,7 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) Shutdown() error {
 	// Stop all running sessions
 	for _, session := range s.registry.ListByStatus(StatusRunning) {
-		s.runner.Stop(session.ID)
+		_ = s.runner.Stop(session.ID)
 	}
 
 	// Shutdown HTTP server with timeout
@@ -152,8 +152,8 @@ func (s *Server) Shutdown() error {
 	}
 
 	// Remove socket and PID file
-	os.Remove(s.socketPath)
-	os.Remove(s.pidFile)
+	_ = os.Remove(s.socketPath)
+	_ = os.Remove(s.pidFile)
 
 	return nil
 }
@@ -180,7 +180,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // handleStatus handles GET /status
@@ -199,7 +199,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 // handleSessions handles /sessions
@@ -222,7 +222,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		Total:    len(sessions),
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // maxRequestBodySize is the maximum allowed request body size (1MB).
@@ -271,7 +271,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(SessionResponse{Session: session})
+	_ = json.NewEncoder(w).Encode(SessionResponse{Session: session})
 }
 
 // isValidSessionID checks if a session ID is valid (alphanumeric only).
@@ -280,7 +280,10 @@ func isValidSessionID(id string) bool {
 		return false
 	}
 	for _, c := range id {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+		isLower := c >= 'a' && c <= 'z'
+		isUpper := c >= 'A' && c <= 'Z'
+		isDigit := c >= '0' && c <= '9'
+		if !isLower && !isUpper && !isDigit {
 			return false
 		}
 	}
@@ -337,7 +340,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 // getSession handles GET /sessions/{id}
 func (s *Server) getSession(w http.ResponseWriter, session *Session) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SessionResponse{Session: session})
+	_ = json.NewEncoder(w).Encode(SessionResponse{Session: session})
 }
 
 // stopSession handles DELETE /sessions/{id}
@@ -375,7 +378,7 @@ func (s *Server) streamOutput(w http.ResponseWriter, r *http.Request, sessionID 
 	// Send history first
 	for _, msg := range history {
 		data, _ := json.Marshal(msg)
-		fmt.Fprintf(w, "data: %s\n\n", data)
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 	}
 	flusher.Flush()
 
@@ -392,7 +395,7 @@ func (s *Server) streamOutput(w http.ResponseWriter, r *http.Request, sessionID 
 				return
 			}
 			data, _ := json.Marshal(msg)
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()
 		}
 	}
@@ -431,11 +434,11 @@ func (s *Server) triggerMerge(w http.ResponseWriter, r *http.Request, sessionID 
 		}
 		// Merge completed successfully (fast merge)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "merged"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "merged"})
 	case <-time.After(500 * time.Millisecond):
 		// Merge is running in background
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]string{"status": "merging"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "merging"})
 	}
 }
 
@@ -457,7 +460,7 @@ func (s *Server) sendChat(w http.ResponseWriter, r *http.Request, session *Sessi
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ChatResponse{Response: response})
+	_ = json.NewEncoder(w).Encode(ChatResponse{Response: response})
 }
 
 // streamChat handles GET /sessions/{id}/chat (SSE for chat responses)
@@ -488,7 +491,7 @@ func (s *Server) resumeSession(w http.ResponseWriter, r *http.Request, sessionID
 	// Refresh session data
 	session, _ = s.registry.Get(sessionID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SessionResponse{Session: session})
+	_ = json.NewEncoder(w).Encode(SessionResponse{Session: session})
 }
 
 // handleShutdown handles POST /shutdown
@@ -506,7 +509,7 @@ func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
 	if len(running) > 0 && !force {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":            "sessions are still running",
 			"running_sessions": len(running),
 			"hint":             "use ?force=true to force shutdown",
@@ -515,7 +518,7 @@ func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(map[string]string{"status": "shutting down"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "shutting down"})
 
 	// Trigger shutdown in background (platform-independent)
 	go func() {

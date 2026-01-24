@@ -81,10 +81,10 @@ func runDaemonStatus(projectDir string, out io.Writer) error {
 	}
 
 	// Print formatted output
-	fmt.Fprintf(out, "Orbital Daemon (PID %d)\n", status.PID)
-	fmt.Fprintf(out, "Project: %s\n", status.ProjectDir)
-	fmt.Fprintf(out, "Started: %s\n", status.StartedAt.Format("2006-01-02 15:04:05"))
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintf(out, "Orbital Daemon (PID %d)\n", status.PID)
+	_, _ = fmt.Fprintf(out, "Project: %s\n", status.ProjectDir)
+	_, _ = fmt.Fprintf(out, "Started: %s\n", status.StartedAt.Format("2006-01-02 15:04:05"))
+	_, _ = fmt.Fprintln(out)
 
 	// Group sessions by status
 	running := filterSessions(sessions, daemon.StatusRunning, daemon.StatusMerging)
@@ -93,43 +93,43 @@ func runDaemonStatus(projectDir string, out io.Writer) error {
 	stopped := filterSessions(sessions, daemon.StatusStopped, daemon.StatusInterrupted)
 
 	if len(running) > 0 {
-		fmt.Fprintf(out, "RUNNING (%d)\n", len(running))
+		_, _ = fmt.Fprintf(out, "RUNNING (%d)\n", len(running))
 		for _, s := range running {
 			printSessionLine(out, s)
 		}
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 
 	if len(completed) > 0 {
-		fmt.Fprintf(out, "COMPLETED (%d)\n", len(completed))
+		_, _ = fmt.Fprintf(out, "COMPLETED (%d)\n", len(completed))
 		for _, s := range completed {
 			printSessionLine(out, s)
 		}
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 
 	if len(failed) > 0 {
-		fmt.Fprintf(out, "FAILED (%d)\n", len(failed))
+		_, _ = fmt.Fprintf(out, "FAILED (%d)\n", len(failed))
 		for _, s := range failed {
 			printSessionLine(out, s)
 		}
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 
 	if len(stopped) > 0 {
-		fmt.Fprintf(out, "STOPPED (%d)\n", len(stopped))
+		_, _ = fmt.Fprintf(out, "STOPPED (%d)\n", len(stopped))
 		for _, s := range stopped {
 			printSessionLine(out, s)
 		}
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 
 	if len(sessions) == 0 {
-		fmt.Fprintln(out, "No sessions. Start one with 'orbital <spec-file>'")
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out, "No sessions. Start one with 'orbital <spec-file>'")
+		_, _ = fmt.Fprintln(out)
 	}
 
-	fmt.Fprintf(out, "Total cost: $%.2f\n", status.TotalCost)
+	_, _ = fmt.Fprintf(out, "Total cost: $%.2f\n", status.TotalCost)
 	return nil
 }
 
@@ -161,7 +161,7 @@ func printSessionLine(out io.Writer, s *daemon.Session) {
 		worktree = fmt.Sprintf(" [%s]", s.Worktree.Branch)
 	}
 
-	fmt.Fprintf(out, "  %-30s iter %d/%-4d $%-8.2f %s%s\n",
+	_, _ = fmt.Fprintf(out, "  %-30s iter %d/%-4d $%-8.2f %s%s\n",
 		truncateString(specName, 30),
 		s.Iteration,
 		s.MaxIterations,
@@ -218,10 +218,10 @@ func runLocalStatus(projectDir string, out io.Writer) error {
 	hasQueue := queue != nil && !queue.IsEmpty()
 
 	if !hasState && !hasQueue {
-		fmt.Fprintln(out, "No orbital session in this directory")
-		fmt.Fprintln(out, "")
-		fmt.Fprintln(out, "Start with: orbital <spec-file>")
-		fmt.Fprintln(out, "Or use --daemon flag to run via daemon")
+		_, _ = fmt.Fprintln(out, "No orbital session in this directory")
+		_, _ = fmt.Fprintln(out, "")
+		_, _ = fmt.Fprintln(out, "Start with: orbital <spec-file>")
+		_, _ = fmt.Fprintln(out, "Or use --daemon flag to run via daemon")
 		return nil
 	}
 
@@ -237,51 +237,51 @@ func runLocalStatus(projectDir string, out io.Writer) error {
 	}
 
 	// Print header
-	fmt.Fprintln(out, "Orbital Status (local)")
-	fmt.Fprintln(out, "=====================")
+	_, _ = fmt.Fprintln(out, "Orbital Status (local)")
+	_, _ = fmt.Fprintln(out, "=====================")
 
 	// Print status indicator
 	if isRunning {
-		fmt.Fprintln(out, "Status:     RUNNING")
+		_, _ = fmt.Fprintln(out, "Status:     RUNNING")
 	} else if hasState {
-		fmt.Fprintln(out, "Status:     STOPPED (run 'orbital continue' to resume)")
+		_, _ = fmt.Fprintln(out, "Status:     STOPPED (run 'orbital continue' to resume)")
 	} else {
-		fmt.Fprintln(out, "Status:     PENDING (queued files waiting)")
+		_, _ = fmt.Fprintln(out, "Status:     PENDING (queued files waiting)")
 	}
 
 	// Print state info if available
 	if hasState {
-		fmt.Fprintf(out, "PID:        %d\n", st.PID)
-		fmt.Fprintf(out, "Session:    %s\n", st.SessionID)
-		fmt.Fprintf(out, "Iteration:  %d\n", st.Iteration)
-		fmt.Fprintf(out, "Cost:       $%.2f USD\n", st.TotalCost)
-		fmt.Fprintf(out, "Started:    %s\n", st.StartedAt.Format("2006-01-02 15:04:05"))
+		_, _ = fmt.Fprintf(out, "PID:        %d\n", st.PID)
+		_, _ = fmt.Fprintf(out, "Session:    %s\n", st.SessionID)
+		_, _ = fmt.Fprintf(out, "Iteration:  %d\n", st.Iteration)
+		_, _ = fmt.Fprintf(out, "Cost:       $%.2f USD\n", st.TotalCost)
+		_, _ = fmt.Fprintf(out, "Started:    %s\n", st.StartedAt.Format("2006-01-02 15:04:05"))
 	}
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out)
 
 	// Print active files
 	if hasState && len(st.ActiveFiles) > 0 {
-		fmt.Fprintln(out, "Active Files:")
+		_, _ = fmt.Fprintln(out, "Active Files:")
 		for _, f := range st.ActiveFiles {
-			fmt.Fprintf(out, "  - %s\n", f)
+			_, _ = fmt.Fprintf(out, "  - %s\n", f)
 		}
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 
 	// Print queued files
 	if hasQueue {
-		fmt.Fprintln(out, "Queued Files:")
+		_, _ = fmt.Fprintln(out, "Queued Files:")
 		for _, f := range queue.QueuedFiles {
 			addedAt, ok := queue.AddedAt[f]
 			if ok {
 				ago := formatDuration(time.Since(addedAt))
-				fmt.Fprintf(out, "  - %s (added %s ago)\n", f, ago)
+				_, _ = fmt.Fprintf(out, "  - %s (added %s ago)\n", f, ago)
 			} else {
-				fmt.Fprintf(out, "  - %s\n", f)
+				_, _ = fmt.Fprintf(out, "  - %s\n", f)
 			}
 		}
 	} else if hasState {
-		fmt.Fprintln(out, "Queued Files: (none)")
+		_, _ = fmt.Fprintln(out, "Queued Files: (none)")
 	}
 
 	return nil
@@ -299,9 +299,4 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
-}
-
-// newStatusCmd is no longer needed - kept for backwards compatibility
-func newStatusCmd() *cobra.Command {
-	return statusCmd
 }
