@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/completion"
-	"github.com/flashingpumpkin/orbit-cli/internal/config"
-	"github.com/flashingpumpkin/orbit-cli/internal/executor"
-	"github.com/flashingpumpkin/orbit-cli/internal/spec"
+	"github.com/flashingpumpkin/orbital/internal/completion"
+	"github.com/flashingpumpkin/orbital/internal/config"
+	"github.com/flashingpumpkin/orbital/internal/executor"
+	"github.com/flashingpumpkin/orbital/internal/spec"
 )
 
 // ErrBudgetExceeded is returned when the execution cost exceeds the configured maximum budget.

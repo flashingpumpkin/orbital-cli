@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
+	"github.com/flashingpumpkin/orbital/internal/tasks"
 )
 
 // StreamProcessor processes Claude CLI stream-json output and formats it for display.

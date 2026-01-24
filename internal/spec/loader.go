@@ -70,8 +70,8 @@ var SystemPromptTemplate string
 var CompletionPromise string
 
 // NotesFile holds the path to the notes file for cross-iteration context.
-// Default: .orbit/notes.md
-var NotesFile = ".orbit/notes.md"
+// Default: .orbital/notes.md
+var NotesFile = ".orbital/notes.md"
 
 // DefaultSystemPrompt contains methodology and rules appended to Claude's system prompt.
 // This stays constant across iterations.

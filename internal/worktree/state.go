@@ -31,7 +31,7 @@ type StateManager struct {
 // NewStateManager creates a new StateManager.
 func NewStateManager(workingDir string) *StateManager {
 	return &StateManager{
-		stateDir: filepath.Join(workingDir, ".orbit"),
+		stateDir: filepath.Join(workingDir, ".orbital"),
 	}
 }
 
@@ -60,7 +60,7 @@ func (m *StateManager) Load() (*StateFile, error) {
 
 // Save persists the worktree state to disk.
 func (m *StateManager) Save(state *StateFile) error {
-	// Ensure .orbit directory exists
+	// Ensure .orbital directory exists
 	if err := os.MkdirAll(m.stateDir, 0755); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}

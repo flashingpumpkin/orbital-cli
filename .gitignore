@@ -1,5 +1,5 @@
 # Binaries
-/orbit
+/orbital
 *.exe
 *.exe~
 *.dll
@@ -37,5 +37,4 @@ build/
 
 # Claude Code
 .claude/
-/orbit-cli
-.orbit/
+.orbital/

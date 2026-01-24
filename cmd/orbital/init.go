@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
+	"github.com/flashingpumpkin/orbital/internal/workflow"
 )
 
 // DefaultConfigTemplate is the commented template written by orbit init.
-const DefaultConfigTemplate = `# Orbit CLI Configuration
-# See: https://github.com/flashingpumpkin/orbit-cli
+const DefaultConfigTemplate = `# Orbital CLI Configuration
+# See: https://github.com/flashingpumpkin/orbital
 
 # Workflow configuration
 # Use a preset: spec-driven (default), reviewed, or tdd
@@ -60,7 +60,7 @@ var (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Create a default configuration file",
-	Long: `Create a default .orbit/config.toml configuration file.
+	Long: `Create a default .orbital/config.toml configuration file.
 
 The configuration file contains commented examples for:
 - Workflow configuration (presets or custom steps)
@@ -90,7 +90,7 @@ func newInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Create a default configuration file",
-		Long: `Create a default .orbit/config.toml configuration file.
+		Long: `Create a default .orbital/config.toml configuration file.
 
 The configuration file contains commented examples for:
 - Workflow configuration (presets or custom steps)
@@ -114,7 +114,7 @@ func runInitWithOptions(cmd *cobra.Command, force bool, preset string) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	orbitDir := filepath.Join(workingDir, ".orbit")
+	orbitDir := filepath.Join(workingDir, ".orbital")
 	configPath := filepath.Join(orbitDir, "config.toml")
 
 	// Check if config already exists
@@ -132,7 +132,7 @@ func runInitWithOptions(cmd *cobra.Command, force bool, preset string) error {
 		return fmt.Errorf("invalid preset %q, valid options: %s", preset, strings.Join(names, ", "))
 	}
 
-	// Create .orbit directory if it doesn't exist
+	// Create .orbital directory if it doesn't exist
 	if err := os.MkdirAll(orbitDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", orbitDir, err)
 	}
@@ -173,8 +173,8 @@ func generateConfigContent(preset string) string {
 
 	// Generate config with full workflow steps
 	var sb strings.Builder
-	sb.WriteString(`# Orbit CLI Configuration
-# See: https://github.com/flashingpumpkin/orbit-cli
+	sb.WriteString(`# Orbital CLI Configuration
+# See: https://github.com/flashingpumpkin/orbital
 
 # Workflow configuration (`)
 	sb.WriteString(preset)
@@ -236,8 +236,8 @@ name = "`)
 // generateConfigWithPresetName generates config with just the preset name (fallback).
 func generateConfigWithPresetName(preset string) string {
 	var sb strings.Builder
-	sb.WriteString(`# Orbit CLI Configuration
-# See: https://github.com/flashingpumpkin/orbit-cli
+	sb.WriteString(`# Orbital CLI Configuration
+# See: https://github.com/flashingpumpkin/orbital
 
 # Workflow configuration
 [workflow]

@@ -1,4 +1,4 @@
-// Package main provides the CLI entry point for orbit.
+// Package main provides the CLI entry point for orbital.
 package main
 
 import (
@@ -14,17 +14,17 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/flashingpumpkin/orbit-cli/internal/completion"
-	"github.com/flashingpumpkin/orbit-cli/internal/config"
-	"github.com/flashingpumpkin/orbit-cli/internal/executor"
-	"github.com/flashingpumpkin/orbit-cli/internal/loop"
-	"github.com/flashingpumpkin/orbit-cli/internal/output"
-	"github.com/flashingpumpkin/orbit-cli/internal/spec"
-	"github.com/flashingpumpkin/orbit-cli/internal/state"
-	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
-	"github.com/flashingpumpkin/orbit-cli/internal/tui"
-	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
-	"github.com/flashingpumpkin/orbit-cli/internal/worktree"
+	"github.com/flashingpumpkin/orbital/internal/completion"
+	"github.com/flashingpumpkin/orbital/internal/config"
+	"github.com/flashingpumpkin/orbital/internal/executor"
+	"github.com/flashingpumpkin/orbital/internal/loop"
+	"github.com/flashingpumpkin/orbital/internal/output"
+	"github.com/flashingpumpkin/orbital/internal/spec"
+	"github.com/flashingpumpkin/orbital/internal/state"
+	"github.com/flashingpumpkin/orbital/internal/tasks"
+	"github.com/flashingpumpkin/orbital/internal/tui"
+	"github.com/flashingpumpkin/orbital/internal/workflow"
+	"github.com/flashingpumpkin/orbital/internal/worktree"
 	"golang.org/x/term"
 )
 
@@ -58,9 +58,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "orbit-cli <spec-file>",
+	Use:     "orbital <spec-file>",
 	Short:   "Autonomous Claude Code iteration loop",
-	Long: `Orbit implements the "Ralph Wiggum" method for autonomous Claude Code execution.
+	Long: `Orbital implements the "Ralph Wiggum" method for autonomous Claude Code execution.
 
 It runs Claude Code in a loop, monitoring output for a completion promise string.
 The loop continues until the promise is detected, max iterations reached, or
@@ -70,7 +70,7 @@ Named after Ralph Wiggum's optimistic persistence: "I'm learnding!"
 
 USAGE
 
-    orbit-cli <spec-file> [--context <file>]... [--notes <file>] [flags]
+    orbital <spec-file> [--context <file>]... [--notes <file>] [flags]
 
 The spec file contains the main task specification. Additional context files
 can be provided with --context (repeatable). A notes file for cross-iteration
@@ -78,7 +78,7 @@ context can be specified with --notes.
 
 CONFIGURATION FILE
 
-Orbit can be configured via a TOML file. By default, it looks for .orbit/config.toml
+Orbital can be configured via a TOML file. By default, it looks for .orbital/config.toml
 in the working directory. Use --config to specify a different path.`,
 	Args:    cobra.ExactArgs(1),
 	Version: "0.1.0",
@@ -98,7 +98,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&checkerModel, "checker-model", "haiku", "Claude model to use for completion checking")
 	rootCmd.PersistentFlags().Float64VarP(&budget, "budget", "b", 100.00, "Maximum budget in USD")
 	rootCmd.PersistentFlags().StringVarP(&workingDir, "working-dir", "d", ".", "Working directory for execution")
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "Path to config file (default: .orbit/config.toml)")
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "Path to config file (default: .orbital/config.toml)")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Suppress verbose output")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Stream all raw JSON output from Claude")
 	rootCmd.PersistentFlags().BoolVar(&showUnhandled, "show-unhandled", false, "Show raw JSON for unhandled event types")
@@ -171,7 +171,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("config file not found: %s", configFile)
 		}
 	} else {
-		// Try default .orbit/config.toml
+		// Try default .orbital/config.toml
 		fileConfig, err = config.LoadFileConfig(workingDir)
 		if err != nil {
 			return fmt.Errorf("failed to load config file: %w", err)
@@ -505,7 +505,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 				wtFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
 				wtFormatter.PrintWorktreePreserved(wtState.Path)
 			}
-			fmt.Println("Session state preserved. Run 'orbit-cli continue' to resume.")
+			fmt.Println("Session state preserved. Run 'orbital continue' to resume.")
 			os.Exit(130)
 		default:
 			os.Exit(4)

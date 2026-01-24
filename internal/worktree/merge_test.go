@@ -27,7 +27,7 @@ func TestMergePhase(t *testing.T) {
 		}
 
 		opts := MergeOptions{
-			WorktreePath:   ".orbit/worktrees/add-user-auth",
+			WorktreePath:   ".orbital/worktrees/add-user-auth",
 			BranchName:     "orbit/add-user-auth",
 			OriginalBranch: "main",
 		}
@@ -79,7 +79,7 @@ func TestMergePhase(t *testing.T) {
 
 		merge := NewMerge(mockExec)
 		result, err := merge.Run(context.Background(), MergeOptions{
-			WorktreePath:   ".orbit/worktrees/test",
+			WorktreePath:   ".orbital/worktrees/test",
 			BranchName:     "orbit/test",
 			OriginalBranch: "main",
 		})
@@ -104,7 +104,7 @@ func TestMergePhase(t *testing.T) {
 
 		merge := NewMerge(mockExec)
 		result, err := merge.Run(context.Background(), MergeOptions{
-			WorktreePath:   ".orbit/worktrees/test",
+			WorktreePath:   ".orbital/worktrees/test",
 			BranchName:     "orbit/test",
 			OriginalBranch: "main",
 		})
@@ -126,7 +126,7 @@ func TestMergePhase(t *testing.T) {
 
 		merge := NewMerge(mockExec)
 		_, err := merge.Run(context.Background(), MergeOptions{
-			WorktreePath:   ".orbit/worktrees/test",
+			WorktreePath:   ".orbital/worktrees/test",
 			BranchName:     "orbit/test",
 			OriginalBranch: "main",
 		})
@@ -152,7 +152,7 @@ func TestMergePhase(t *testing.T) {
 
 		merge := NewMerge(mockExec)
 		result, err := merge.Run(context.Background(), MergeOptions{
-			WorktreePath:   ".orbit/worktrees/feature",
+			WorktreePath:   ".orbital/worktrees/feature",
 			BranchName:     "orbit/feature",
 			OriginalBranch: "develop",
 		})
@@ -225,7 +225,7 @@ func TestContainsSuccessMarker(t *testing.T) {
 
 func TestBuildMergePrompt(t *testing.T) {
 	opts := MergeOptions{
-		WorktreePath:   ".orbit/worktrees/my-feature",
+		WorktreePath:   ".orbital/worktrees/my-feature",
 		BranchName:     "orbit/my-feature",
 		OriginalBranch: "main",
 	}

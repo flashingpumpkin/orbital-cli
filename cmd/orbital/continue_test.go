@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/state"
+	"github.com/flashingpumpkin/orbital/internal/state"
 )
 
 func TestRunContinue_NoState(t *testing.T) {
@@ -74,8 +74,8 @@ func TestRunContinue_InstanceAlreadyRunning(t *testing.T) {
 	if errStr == "" {
 		t.Error("expected non-empty error message")
 	}
-	// The error message format is: "orbit-cli instance already running (PID: NNNNN)"
-	expectedPrefix := "orbit-cli instance already running"
+	// The error message format is: "orbital instance already running (PID: NNNNN)"
+	expectedPrefix := "orbital instance already running"
 	if len(errStr) < len(expectedPrefix) || errStr[:len(expectedPrefix)] != expectedPrefix {
 		t.Errorf("expected error to start with '%s', got: %s", expectedPrefix, errStr)
 	}
@@ -184,7 +184,7 @@ func TestRunContinue_UsesActualWorkingDir(t *testing.T) {
 	}
 
 	// Create a config file in the temp directory with a custom prompt
-	configDir := tempDir + "/.orbit"
+	configDir := tempDir + "/.orbital"
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}

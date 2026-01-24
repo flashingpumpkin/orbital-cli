@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
+	"github.com/flashingpumpkin/orbital/internal/workflow"
 )
 
 // WorkflowState captures the workflow configuration and progress.
@@ -47,7 +47,7 @@ type State struct {
 // StateDir returns the path to the state directory for the given working directory.
 func StateDir(workingDir string) string {
 	workingDir = strings.TrimSuffix(workingDir, "/")
-	return filepath.Join(workingDir, ".orbit", "state")
+	return filepath.Join(workingDir, ".orbital", "state")
 }
 
 // NewState creates a new State with the current process ID and timestamp.

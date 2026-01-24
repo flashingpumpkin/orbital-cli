@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
+	"github.com/flashingpumpkin/orbital/internal/workflow"
 )
 
 func TestStateDir_ReturnsCorrectPath(t *testing.T) {
 	dir := StateDir("/some/project")
 
-	want := "/some/project/.orbit/state"
+	want := "/some/project/.orbital/state"
 	if dir != want {
 		t.Errorf("StateDir() = %q; want %q", dir, want)
 	}
@@ -21,7 +21,7 @@ func TestStateDir_ReturnsCorrectPath(t *testing.T) {
 func TestStateDir_HandlesTrailingSlash(t *testing.T) {
 	dir := StateDir("/some/project/")
 
-	want := "/some/project/.orbit/state"
+	want := "/some/project/.orbital/state"
 	if dir != want {
 		t.Errorf("StateDir() = %q; want %q", dir, want)
 	}

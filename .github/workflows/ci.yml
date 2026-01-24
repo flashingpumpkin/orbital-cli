@@ -66,19 +66,19 @@ jobs:
 
       - name: Build binaries
         run: |
-          GOOS=darwin GOARCH=amd64 go build -o orbit-cli-darwin-amd64 ./cmd/orbit-cli
-          GOOS=darwin GOARCH=arm64 go build -o orbit-cli-darwin-arm64 ./cmd/orbit-cli
-          GOOS=linux GOARCH=amd64 go build -o orbit-cli-linux-amd64 ./cmd/orbit-cli
-          GOOS=linux GOARCH=arm64 go build -o orbit-cli-linux-arm64 ./cmd/orbit-cli
-          GOOS=windows GOARCH=amd64 go build -o orbit-cli-windows-amd64.exe ./cmd/orbit-cli
+          GOOS=darwin GOARCH=amd64 go build -o orbital-darwin-amd64 ./cmd/orbital
+          GOOS=darwin GOARCH=arm64 go build -o orbital-darwin-arm64 ./cmd/orbital
+          GOOS=linux GOARCH=amd64 go build -o orbital-linux-amd64 ./cmd/orbital
+          GOOS=linux GOARCH=arm64 go build -o orbital-linux-arm64 ./cmd/orbital
+          GOOS=windows GOARCH=amd64 go build -o orbital-windows-amd64.exe ./cmd/orbital
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binaries
           path: |
-            orbit-cli-darwin-amd64
-            orbit-cli-darwin-arm64
-            orbit-cli-linux-amd64
-            orbit-cli-linux-arm64
-            orbit-cli-windows-amd64.exe
+            orbital-darwin-amd64
+            orbital-darwin-arm64
+            orbital-linux-amd64
+            orbital-linux-arm64
+            orbital-windows-amd64.exe

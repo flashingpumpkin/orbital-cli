@@ -4,13 +4,13 @@ This file provides context for Claude Code when working on this project.
 
 ## Project Overview
 
-Orbit CLI is a Go tool that implements the "Ralph Wiggum method" - an iterative development technique where Claude Code receives the same prompt repeatedly until a completion promise is detected in the output.
+Orbital CLI is a Go tool that implements the "Ralph Wiggum method" - an iterative development technique where Claude Code receives the same prompt repeatedly until a completion promise is detected in the output.
 
 ## Repository Structure
 
 ```
-orbit-cli/
-├── cmd/orbit-cli/             # CLI entry point
+orbital/
+├── cmd/orbital/             # CLI entry point
 │   ├── main.go             # Calls rootCmd.Execute()
 │   ├── root.go             # Cobra command, flags, main logic
 │   └── signal.go           # SIGINT/SIGTERM handler
@@ -24,7 +24,7 @@ orbit-cli/
 │   ├── executor/           # Claude CLI process management
 │   └── loop/               # Main iteration controller
 ├── docs/plans/             # Tech spec and user stories
-├── go.mod                  # Module: github.com/flashingpumpkin/orbit-cli
+├── go.mod                  # Module: github.com/flashingpumpkin/orbital
 └── go.sum
 ```
 
@@ -61,7 +61,7 @@ claude -p \
 
 ```bash
 # Build
-go build ./cmd/orbit-cli
+go build ./cmd/orbital
 
 # Test all packages
 go test ./...
@@ -70,7 +70,7 @@ go test ./...
 go test -cover ./...
 
 # Install to GOPATH/bin
-go install ./cmd/orbit-cli
+go install ./cmd/orbital
 ```
 
 ## Dependencies
@@ -111,7 +111,7 @@ IterationTimeout:  30 * time.Minute
 
 ## Configuration File
 
-Orbit supports an optional TOML config file at `.orbit/config.toml` (or custom path via `--config`).
+Orbital supports an optional TOML config file at `.orbital/config.toml` (or custom path via `--config`).
 
 ```toml
 # Custom prompt template with placeholders
@@ -129,7 +129,7 @@ Placeholders:
 
 1. Write tests first (TDD)
 2. Implement in appropriate `internal/` package
-3. Wire into `cmd/orbit-cli/root.go` if CLI-facing
+3. Wire into `cmd/orbital/root.go` if CLI-facing
 4. Update README.md if user-facing
 5. Run `go test ./...` before committing
 

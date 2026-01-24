@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/fatih/color"
-	"github.com/flashingpumpkin/orbit-cli/internal/output"
-	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
+	"github.com/flashingpumpkin/orbital/internal/output"
+	"github.com/flashingpumpkin/orbital/internal/tasks"
 )
 
 // Bridge connects the Claude CLI stream output to the bubbletea TUI.

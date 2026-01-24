@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/config"
-	"github.com/flashingpumpkin/orbit-cli/internal/output"
+	"github.com/flashingpumpkin/orbital/internal/config"
+	"github.com/flashingpumpkin/orbital/internal/output"
 )
 
 // ExecutionResult contains the result of a Claude CLI execution.

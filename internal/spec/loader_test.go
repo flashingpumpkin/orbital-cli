@@ -140,10 +140,10 @@ func TestBuildPrompt_MultipleFiles(t *testing.T) {
 func TestBuildSystemPrompt_ContainsKeyContent(t *testing.T) {
 	// Set completion promise and notes file for the test
 	CompletionPromise = "<promise>COMPLETE</promise>"
-	NotesFile = ".orbit/notes.md"
+	NotesFile = ".orbital/notes.md"
 	defer func() {
 		CompletionPromise = ""
-		NotesFile = ".orbit/notes.md"
+		NotesFile = ".orbital/notes.md"
 	}()
 
 	systemPrompt := BuildSystemPrompt()
@@ -176,7 +176,7 @@ func TestBuildSystemPrompt_SubstitutesPromise(t *testing.T) {
 
 func TestBuildSystemPrompt_SubstitutesNotesFile(t *testing.T) {
 	NotesFile = "custom/notes.md"
-	defer func() { NotesFile = ".orbit/notes.md" }()
+	defer func() { NotesFile = ".orbital/notes.md" }()
 
 	systemPrompt := BuildSystemPrompt()
 

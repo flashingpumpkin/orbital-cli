@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/state"
+	"github.com/flashingpumpkin/orbital/internal/state"
 )
 
 func TestStatusCmd_ShowsNoSessionWhenNoState(t *testing.T) {
@@ -35,7 +35,7 @@ func TestStatusCmd_ShowsNoSessionWhenNoState(t *testing.T) {
 	}
 
 	output := buf.String()
-	expected := "No orbit session in this directory"
+	expected := "No orbital session in this directory"
 	if !strings.Contains(output, expected) {
 		t.Errorf("output = %q; want to contain %q", output, expected)
 	}
@@ -116,7 +116,7 @@ func TestStatusCmd_ShowsRunningInstanceStatus(t *testing.T) {
 
 	// Check for key elements
 	checks := []string{
-		"Orbit Status",
+		"Orbital Status",
 		"session-abc123",
 		"5", // Iteration
 		"$1.23", // Cost

@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
+	"github.com/flashingpumpkin/orbital/internal/workflow"
 )
 
-// FileConfig represents the configuration loaded from .orbit/config.toml.
+// FileConfig represents the configuration loaded from .orbital/config.toml.
 type FileConfig struct {
 	// Prompt is the custom prompt template. Use {{files}} as placeholder for spec file paths.
 	Prompt string `toml:"prompt"`
@@ -42,10 +42,10 @@ const DefaultPromptTemplate = `Implement the user stories in the following spec 
 
 {{files}}`
 
-// LoadFileConfig reads configuration from .orbit/config.toml in the working directory.
+// LoadFileConfig reads configuration from .orbital/config.toml in the working directory.
 // Returns nil if the file doesn't exist (not an error).
 func LoadFileConfig(workingDir string) (*FileConfig, error) {
-	configPath := filepath.Join(workingDir, ".orbit", "config.toml")
+	configPath := filepath.Join(workingDir, ".orbital", "config.toml")
 	return LoadFileConfigFrom(configPath)
 }
 

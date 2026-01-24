@@ -33,7 +33,7 @@ func TestInitCmd_CreatesConfigFile(t *testing.T) {
 	}
 
 	// Check file was created
-	configPath := filepath.Join(tempDir, ".orbit", "config.toml")
+	configPath := filepath.Join(tempDir, ".orbital", "config.toml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Errorf("config file was not created at %s", configPath)
 	}
@@ -73,9 +73,9 @@ func TestInitCmd_FailsIfConfigExists(t *testing.T) {
 	}
 
 	// Create existing config
-	orbitDir := filepath.Join(tempDir, ".orbit")
+	orbitDir := filepath.Join(tempDir, ".orbital")
 	if err := os.MkdirAll(orbitDir, 0755); err != nil {
-		t.Fatalf("failed to create .orbit directory: %v", err)
+		t.Fatalf("failed to create .orbital directory: %v", err)
 	}
 	configPath := filepath.Join(orbitDir, "config.toml")
 	if err := os.WriteFile(configPath, []byte("existing config"), 0644); err != nil {
@@ -122,9 +122,9 @@ func TestInitCmd_ForceOverwritesExisting(t *testing.T) {
 	}
 
 	// Create existing config
-	orbitDir := filepath.Join(tempDir, ".orbit")
+	orbitDir := filepath.Join(tempDir, ".orbital")
 	if err := os.MkdirAll(orbitDir, 0755); err != nil {
-		t.Fatalf("failed to create .orbit directory: %v", err)
+		t.Fatalf("failed to create .orbital directory: %v", err)
 	}
 	configPath := filepath.Join(orbitDir, "config.toml")
 	if err := os.WriteFile(configPath, []byte("existing config"), 0644); err != nil {
@@ -170,9 +170,9 @@ func TestInitCmd_CreatesOrbitDirectory(t *testing.T) {
 	}
 
 	// Ensure .orbit doesn't exist
-	orbitDir := filepath.Join(tempDir, ".orbit")
+	orbitDir := filepath.Join(tempDir, ".orbital")
 	if _, err := os.Stat(orbitDir); !os.IsNotExist(err) {
-		t.Fatalf(".orbit directory already exists")
+		t.Fatalf(".orbital directory already exists")
 	}
 
 	cmd := newInitCmd()
@@ -184,9 +184,9 @@ func TestInitCmd_CreatesOrbitDirectory(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	// Check .orbit directory was created
+	// Check .orbital directory was created
 	if _, err := os.Stat(orbitDir); os.IsNotExist(err) {
-		t.Errorf(".orbit directory was not created")
+		t.Errorf(".orbital directory was not created")
 	}
 }
 
@@ -216,7 +216,7 @@ func TestInitCmd_WithPreset(t *testing.T) {
 	}
 
 	// Check file contains full workflow steps
-	configPath := filepath.Join(tempDir, ".orbit", "config.toml")
+	configPath := filepath.Join(tempDir, ".orbital", "config.toml")
 	content, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("failed to read config file: %v", err)

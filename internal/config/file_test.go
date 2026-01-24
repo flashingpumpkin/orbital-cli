@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
+	"github.com/flashingpumpkin/orbital/internal/workflow"
 )
 
 func TestLoadFileConfig_NotExists(t *testing.T) {
@@ -21,7 +21,7 @@ func TestLoadFileConfig_NotExists(t *testing.T) {
 func TestLoadFileConfig_ValidConfig(t *testing.T) {
 	// Create temp directory with config
 	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, ".orbit")
+	configDir := filepath.Join(tmpDir, ".orbital")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestLoadFileConfig_ValidConfig(t *testing.T) {
 
 func TestLoadFileConfig_InvalidTOML(t *testing.T) {
 	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, ".orbit")
+	configDir := filepath.Join(tmpDir, ".orbital")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestLoadFileConfig_InvalidTOML(t *testing.T) {
 
 func TestLoadFileConfig_WithAgents(t *testing.T) {
 	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, ".orbit")
+	configDir := filepath.Join(tmpDir, ".orbital")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ model = "opus"
 
 func TestLoadFileConfig_AgentsOnly(t *testing.T) {
 	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, ".orbit")
+	configDir := filepath.Join(tmpDir, ".orbital")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestBuildPromptFromTemplate(t *testing.T) {
 
 func TestLoadFileConfig_WithWorkflow(t *testing.T) {
 	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, ".orbit")
+	configDir := filepath.Join(tmpDir, ".orbital")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ on_fail = "implement"
 
 func TestLoadFileConfig_WithPreset(t *testing.T) {
 	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, ".orbit")
+	configDir := filepath.Join(tmpDir, ".orbital")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}

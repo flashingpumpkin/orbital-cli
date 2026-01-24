@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/config"
+	"github.com/flashingpumpkin/orbital/internal/config"
 )
 
 func TestNew(t *testing.T) {

@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
+	"github.com/flashingpumpkin/orbital/internal/tasks"
 )
 
 // TaskTracker is an alias to the shared tasks.Tracker type for TUI use.

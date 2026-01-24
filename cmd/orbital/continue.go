@@ -8,28 +8,28 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/flashingpumpkin/orbit-cli/internal/completion"
-	"github.com/flashingpumpkin/orbit-cli/internal/config"
-	"github.com/flashingpumpkin/orbit-cli/internal/executor"
-	"github.com/flashingpumpkin/orbit-cli/internal/loop"
-	"github.com/flashingpumpkin/orbit-cli/internal/output"
-	"github.com/flashingpumpkin/orbit-cli/internal/spec"
-	"github.com/flashingpumpkin/orbit-cli/internal/state"
-	"github.com/flashingpumpkin/orbit-cli/internal/worktree"
+	"github.com/flashingpumpkin/orbital/internal/completion"
+	"github.com/flashingpumpkin/orbital/internal/config"
+	"github.com/flashingpumpkin/orbital/internal/executor"
+	"github.com/flashingpumpkin/orbital/internal/loop"
+	"github.com/flashingpumpkin/orbital/internal/output"
+	"github.com/flashingpumpkin/orbital/internal/spec"
+	"github.com/flashingpumpkin/orbital/internal/state"
+	"github.com/flashingpumpkin/orbital/internal/worktree"
 )
 
 var continueCmd = &cobra.Command{
 	Use:   "continue",
 	Short: "Resume a terminated session",
-	Long: `Resume a previously terminated orbit session.
+	Long: `Resume a previously terminated orbital session.
 
-This command loads the session state from .orbit/state/ and resumes
+This command loads the session state from .orbital/state/ and resumes
 execution with the same session ID. Use this after:
 - Ctrl+C interruption
 - Unexpected termination
 - System restart
 
-If a orbit instance is already running, an error is returned.`,
+If a orbital instance is already running, an error is returned.`,
 	Args: cobra.NoArgs,
 	RunE: runContinue,
 }
@@ -38,15 +38,15 @@ func newContinueCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "continue",
 		Short: "Resume a terminated session",
-		Long: `Resume a previously terminated orbit session.
+		Long: `Resume a previously terminated orbital session.
 
-This command loads the session state from .orbit/state/ and resumes
+This command loads the session state from .orbital/state/ and resumes
 execution with the same session ID. Use this after:
 - Ctrl+C interruption
 - Unexpected termination
 - System restart
 
-If a orbit instance is already running, an error is returned.`,
+If a orbital instance is already running, an error is returned.`,
 		Args: cobra.NoArgs,
 		RunE: runContinue,
 	}
@@ -92,7 +92,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 
 			// Check if an instance is already running (PID is alive)
 			if !st.IsStale() {
-				return fmt.Errorf("orbit-cli instance already running (PID: %d)", st.PID)
+				return fmt.Errorf("orbital instance already running (PID: %d)", st.PID)
 			}
 
 			sessID = st.SessionID
@@ -286,7 +286,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		if wtState != nil {
 			fmt.Printf("\nWorktree preserved: %s\n", wtState.Path)
-			fmt.Println("Run 'orbit-cli continue' to resume.")
+			fmt.Println("Run 'orbital continue' to resume.")
 		}
 		switch err {
 		case loop.ErrMaxIterationsReached:
@@ -300,7 +300,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 			if wtState != nil {
 				fmt.Printf("Worktree preserved: %s\n", wtState.Path)
 			}
-			fmt.Println("Session state preserved. Run 'orbit-cli continue' to resume.")
+			fmt.Println("Session state preserved. Run 'orbital continue' to resume.")
 			os.Exit(130)
 		default:
 			os.Exit(4)
@@ -322,14 +322,14 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		if mergeErr != nil {
 			fmt.Fprintf(os.Stderr, "Merge phase failed: %v\n", mergeErr)
 			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
-			fmt.Println("Resolve manually and run 'orbit-cli continue' to retry.")
+			fmt.Println("Resolve manually and run 'orbital continue' to retry.")
 			os.Exit(4)
 		}
 
 		if !mergeResult.Success {
 			fmt.Fprintln(os.Stderr, "Merge phase did not complete successfully.")
 			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
-			fmt.Println("Resolve manually and run 'orbit-cli continue' to retry.")
+			fmt.Println("Resolve manually and run 'orbital continue' to retry.")
 			os.Exit(4)
 		}
 

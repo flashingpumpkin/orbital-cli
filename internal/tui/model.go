@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
+	"github.com/flashingpumpkin/orbital/internal/tasks"
 )
 
 // Task is an alias to the shared tasks.Task type for TUI use.

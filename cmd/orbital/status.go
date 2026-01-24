@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/flashingpumpkin/orbit-cli/internal/state"
+	"github.com/flashingpumpkin/orbital/internal/state"
 )
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Display the current session state",
-	Long: `Display the current orbit session state.
+	Long: `Display the current orbital session state.
 
 Shows information about the running instance including:
 - Process ID (PID)
@@ -29,7 +29,7 @@ func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Display the current session state",
-		Long: `Display the current orbit session state.
+		Long: `Display the current orbital session state.
 
 Shows information about the running instance including:
 - Process ID (PID)
@@ -72,21 +72,21 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	hasQueue := queue != nil && !queue.IsEmpty()
 
 	if !hasState && !hasQueue {
-		_, _ = fmt.Fprintln(out, "No orbit session in this directory")
+		_, _ = fmt.Fprintln(out, "No orbital session in this directory")
 		_, _ = fmt.Fprintln(out, "")
-		_, _ = fmt.Fprintln(out, "Start with: orbit-cli <spec-file>")
+		_, _ = fmt.Fprintln(out, "Start with: orbital <spec-file>")
 		return nil
 	}
 
 	// Print header
-	_, _ = fmt.Fprintln(out, "Orbit Status")
+	_, _ = fmt.Fprintln(out, "Orbital Status")
 	_, _ = fmt.Fprintln(out, "=============")
 
 	// Print status indicator
 	if isRunning {
 		_, _ = fmt.Fprintln(out, "Status:     RUNNING")
 	} else if hasState {
-		_, _ = fmt.Fprintln(out, "Status:     STOPPED (run 'orbit-cli continue' to resume)")
+		_, _ = fmt.Fprintln(out, "Status:     STOPPED (run 'orbital continue' to resume)")
 	} else {
 		_, _ = fmt.Fprintln(out, "Status:     PENDING (queued files waiting)")
 	}

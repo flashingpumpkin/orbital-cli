@@ -1,4 +1,4 @@
-# Orbit CLI
+# Orbital CLI
 
 > **Note:** This entire project was built through AI-assisted development. No line of code was manually written or reviewed by a human.
 
@@ -17,25 +17,25 @@ Each iteration builds on the previous work since files remain modified on disk. 
 ## Installation
 
 ```bash
-go install github.com/flashingpumpkin/orbit-cli/cmd/orbit-cli@latest
+go install github.com/flashingpumpkin/orbital/cmd/orbital@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/flashingpumpkin/orbit-cli.git
-cd orbit-cli
-go build -o orbit-cli ./cmd/orbit-cli
+git clone https://github.com/flashingpumpkin/orbital.git
+cd orbital
+go build -o orbital ./cmd/orbital
 ```
 
 To install from a cloned repository:
 
 ```bash
 # From within the repository directory
-go install ./cmd/orbit-cli
+go install ./cmd/orbital
 
 # Or build and copy to a specific location
-go build -o /usr/local/bin/orbit-cli ./cmd/orbit-cli
+go build -o /usr/local/bin/orbital ./cmd/orbital
 ```
 
 ## Prerequisites
@@ -47,41 +47,41 @@ go build -o /usr/local/bin/orbit-cli ./cmd/orbit-cli
 ## Usage
 
 ```bash
-orbit-cli <spec-file> [--context <file>]... [--notes <file>] [flags]
+orbital <spec-file> [--context <file>]... [--notes <file>] [flags]
 ```
 
 ### Examples
 
 ```bash
 # Single spec file
-orbit-cli ./spec.md
+orbital ./spec.md
 
 # With additional context files
-orbit-cli ./spec.md --context ./docs/architecture.md --context ./docs/api.md
+orbital ./spec.md --context ./docs/architecture.md --context ./docs/api.md
 
 # With a notes file for cross-iteration context
-orbit-cli ./spec.md --notes ./notes.md
+orbital ./spec.md --notes ./notes.md
 
 # Specify custom completion promise
-orbit-cli ./spec.md --promise "DONE"
+orbital ./spec.md --promise "DONE"
 
 # Quiet mode (suppress verbose output)
-orbit-cli ./spec.md --quiet
+orbital ./spec.md --quiet
 
 # Dry run to see what would happen
-orbit-cli ./spec.md --dry-run
+orbital ./spec.md --dry-run
 
 # Use a different model for completion checking
-orbit-cli ./spec.md --checker-model sonnet
+orbital ./spec.md --checker-model sonnet
 ```
 
 ### Subcommands
 
 | Command | Description |
 |---------|-------------|
-| `orbit-cli status` | Display current session state and active files |
-| `orbit-cli continue` | Resume a previously interrupted session |
-| `orbit-cli init` | Create a default configuration file |
+| `orbital status` | Display current session state and active files |
+| `orbital continue` | Resume a previously interrupted session |
+| `orbital init` | Create a default configuration file |
 
 #### Session Resume
 
@@ -89,15 +89,15 @@ If orbit is interrupted (Ctrl+C or terminal closed), you can resume:
 
 ```bash
 # Start a long-running task
-orbit-cli ./large-spec.md --iterations 100
+orbital ./large-spec.md --iterations 100
 
 # ... interrupted ...
 
 # Resume from where you left off
-orbit-cli continue
+orbital continue
 ```
 
-State is stored in `.orbit/state/` and automatically cleaned up on successful completion.
+State is stored in `.orbital/state/` and automatically cleaned up on successful completion.
 
 ### Flags
 
@@ -111,7 +111,7 @@ State is stored in `.orbit/state/` and automatically cleaned up on successful co
 | `--checker-model` | | `haiku` | Claude model to use for completion checking |
 | `--budget` | `-b` | 100.00 | Maximum USD to spend on API calls |
 | `--working-dir` | `-d` | `.` | Working directory for Claude Code |
-| `--config` | `-c` | `.orbit/config.toml` | Path to config file |
+| `--config` | `-c` | `.orbital/config.toml` | Path to config file |
 | `--quiet` | `-q` | false | Suppress verbose output (verbose is default) |
 | `--debug` | | false | Stream raw JSON output from Claude |
 | `--dry-run` | | false | Show what would be executed without running |
@@ -120,10 +120,10 @@ State is stored in `.orbit/state/` and automatically cleaned up on successful co
 
 ### Configuration File
 
-Orbit can be configured via a TOML file. By default, it looks for `.orbit/config.toml` in the working directory.
+Orbit can be configured via a TOML file. By default, it looks for `.orbital/config.toml` in the working directory.
 
 ```toml
-# .orbit/config.toml
+# .orbital/config.toml
 
 # Custom prompt template
 prompt = """
@@ -185,13 +185,13 @@ When all requirements are met and tests pass, output:
 ## Architecture
 
 ```
-orbit-cli/
-├── cmd/orbit-cli/       # CLI entry point
+orbital/
+├── cmd/orbital/       # CLI entry point
 │   ├── main.go
 │   ├── root.go          # Main command and flags
-│   ├── init.go          # orbit-cli init subcommand
-│   ├── status.go        # orbit-cli status subcommand
-│   ├── continue.go      # orbit-cli continue subcommand
+│   ├── init.go          # orbital init subcommand
+│   ├── status.go        # orbital status subcommand
+│   ├── continue.go      # orbital continue subcommand
 │   └── signal.go        # Graceful shutdown
 ├── internal/
 │   ├── config/          # Configuration parsing
@@ -224,7 +224,7 @@ go test ./...
 ### Building
 
 ```bash
-go build ./cmd/orbit-cli
+go build ./cmd/orbital
 ```
 
 ## References

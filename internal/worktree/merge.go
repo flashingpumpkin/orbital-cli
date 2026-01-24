@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/output"
+	"github.com/flashingpumpkin/orbital/internal/output"
 )
 
 // Merge handles the worktree merge phase.
@@ -79,7 +79,7 @@ func buildMergePrompt(opts MergeOptions) string {
 3. If there are conflicts:
    - Resolve them appropriately
    - Continue the rebase: git rebase --continue
-4. Navigate to the main repository (parent of .orbit directory)
+4. Navigate to the main repository (parent of .orbitalal directory)
 5. Checkout the original branch: git checkout %s
 6. Fast-forward merge: git merge --ff-only %s
 7. Output the result:

@@ -116,8 +116,8 @@ func TestModelViewFull(t *testing.T) {
 
 	model.SetSession(SessionInfo{
 		SpecFiles: []string{"docs/plans/auth-feature.md"},
-		NotesFile: ".orbit/notes.md",
-		StateFile: ".orbit/state.json",
+		NotesFile: ".orbital/notes.md",
+		StateFile: ".orbital/state.json",
 	})
 
 	view := model.View()

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/state"
+	"github.com/flashingpumpkin/orbital/internal/state"
 )
 
 func TestGenerateSessionID_ReturnsNonEmptyString(t *testing.T) {

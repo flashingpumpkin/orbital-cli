@@ -27,7 +27,7 @@ func TestStateManager(t *testing.T) {
 		mgr := NewStateManager(tmpDir)
 
 		wt := WorktreeState{
-			Path:           ".orbit/worktrees/test-feature",
+			Path:           ".orbital/worktrees/test-feature",
 			Branch:         "orbit/test-feature",
 			OriginalBranch: "main",
 			SpecFiles:      []string{"docs/plans/test.md"},
@@ -69,7 +69,7 @@ func TestStateManager(t *testing.T) {
 
 		before := time.Now()
 		wt := WorktreeState{
-			Path:   ".orbit/worktrees/test",
+			Path:   ".orbital/worktrees/test",
 			Branch: "orbit/test",
 		}
 		if err := mgr.Add(wt); err != nil {
@@ -91,7 +91,7 @@ func TestStateManager(t *testing.T) {
 
 		specificTime := time.Date(2026, 1, 24, 10, 30, 0, 0, time.UTC)
 		wt := WorktreeState{
-			Path:      ".orbit/worktrees/test",
+			Path:      ".orbital/worktrees/test",
 			Branch:    "orbit/test",
 			CreatedAt: specificTime,
 		}
@@ -110,11 +110,11 @@ func TestStateManager(t *testing.T) {
 		mgr := NewStateManager(tmpDir)
 
 		// Add two worktrees
-		_ = mgr.Add(WorktreeState{Path: ".orbit/worktrees/first", Branch: "orbit/first"})
-		_ = mgr.Add(WorktreeState{Path: ".orbit/worktrees/second", Branch: "orbit/second"})
+		_ = mgr.Add(WorktreeState{Path: ".orbital/worktrees/first", Branch: "orbit/first"})
+		_ = mgr.Add(WorktreeState{Path: ".orbital/worktrees/second", Branch: "orbit/second"})
 
 		// Remove the first one
-		if err := mgr.Remove(".orbit/worktrees/first"); err != nil {
+		if err := mgr.Remove(".orbital/worktrees/first"); err != nil {
 			t.Fatalf("Remove() error = %v; want nil", err)
 		}
 
@@ -123,8 +123,8 @@ func TestStateManager(t *testing.T) {
 			t.Fatalf("Worktrees = %d; want 1", len(state.Worktrees))
 		}
 
-		if state.Worktrees[0].Path != ".orbit/worktrees/second" {
-			t.Errorf("remaining worktree Path = %q; want %q", state.Worktrees[0].Path, ".orbit/worktrees/second")
+		if state.Worktrees[0].Path != ".orbital/worktrees/second" {
+			t.Errorf("remaining worktree Path = %q; want %q", state.Worktrees[0].Path, ".orbital/worktrees/second")
 		}
 	})
 
@@ -133,15 +133,15 @@ func TestStateManager(t *testing.T) {
 		mgr := NewStateManager(tmpDir)
 
 		_ = mgr.Add(WorktreeState{
-			Path:      ".orbit/worktrees/first",
+			Path:      ".orbital/worktrees/first",
 			SpecFiles: []string{"docs/plans/user-auth.md"},
 		})
 		_ = mgr.Add(WorktreeState{
-			Path:      ".orbit/worktrees/second",
+			Path:      ".orbital/worktrees/second",
 			SpecFiles: []string{"docs/plans/other.md"},
 		})
 		_ = mgr.Add(WorktreeState{
-			Path:      ".orbit/worktrees/third",
+			Path:      ".orbital/worktrees/third",
 			SpecFiles: []string{"docs/plans/user-auth.md", "docs/plans/other.md"},
 		})
 
@@ -159,7 +159,7 @@ func TestStateManager(t *testing.T) {
 			paths[m.Path] = true
 		}
 
-		if !paths[".orbit/worktrees/first"] || !paths[".orbit/worktrees/third"] {
+		if !paths[".orbital/worktrees/first"] || !paths[".orbital/worktrees/third"] {
 			t.Errorf("unexpected matches: %v", matches)
 		}
 	})
@@ -168,8 +168,8 @@ func TestStateManager(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := NewStateManager(tmpDir)
 
-		_ = mgr.Add(WorktreeState{Path: ".orbit/worktrees/first"})
-		_ = mgr.Add(WorktreeState{Path: ".orbit/worktrees/second"})
+		_ = mgr.Add(WorktreeState{Path: ".orbital/worktrees/first"})
+		_ = mgr.Add(WorktreeState{Path: ".orbital/worktrees/second"})
 
 		list, err := mgr.List()
 		if err != nil {
@@ -185,10 +185,10 @@ func TestStateManager(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := NewStateManager(tmpDir)
 
-		_ = mgr.Add(WorktreeState{Path: ".orbit/worktrees/target", Branch: "orbit/target"})
-		_ = mgr.Add(WorktreeState{Path: ".orbit/worktrees/other", Branch: "orbit/other"})
+		_ = mgr.Add(WorktreeState{Path: ".orbital/worktrees/target", Branch: "orbit/target"})
+		_ = mgr.Add(WorktreeState{Path: ".orbital/worktrees/other", Branch: "orbit/other"})
 
-		found, err := mgr.FindByPath(".orbit/worktrees/target")
+		found, err := mgr.FindByPath(".orbital/worktrees/target")
 		if err != nil {
 			t.Fatalf("FindByPath() error = %v; want nil", err)
 		}
@@ -206,9 +206,9 @@ func TestStateManager(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := NewStateManager(tmpDir)
 
-		_ = mgr.Add(WorktreeState{Path: ".orbit/worktrees/other"})
+		_ = mgr.Add(WorktreeState{Path: ".orbital/worktrees/other"})
 
-		found, err := mgr.FindByPath(".orbit/worktrees/nonexistent")
+		found, err := mgr.FindByPath(".orbital/worktrees/nonexistent")
 		if err != nil {
 			t.Fatalf("FindByPath() error = %v; want nil", err)
 		}
@@ -222,13 +222,13 @@ func TestStateManager(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := NewStateManager(tmpDir)
 
-		_ = mgr.Add(WorktreeState{Path: ".orbit/worktrees/test", SessionID: "old-session"})
+		_ = mgr.Add(WorktreeState{Path: ".orbital/worktrees/test", SessionID: "old-session"})
 
-		if err := mgr.UpdateSessionID(".orbit/worktrees/test", "new-session"); err != nil {
+		if err := mgr.UpdateSessionID(".orbital/worktrees/test", "new-session"); err != nil {
 			t.Fatalf("UpdateSessionID() error = %v; want nil", err)
 		}
 
-		found, _ := mgr.FindByPath(".orbit/worktrees/test")
+		found, _ := mgr.FindByPath(".orbital/worktrees/test")
 		if found.SessionID != "new-session" {
 			t.Errorf("SessionID = %q; want %q", found.SessionID, "new-session")
 		}
@@ -238,7 +238,7 @@ func TestStateManager(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := NewStateManager(tmpDir)
 
-		err := mgr.UpdateSessionID(".orbit/worktrees/nonexistent", "session")
+		err := mgr.UpdateSessionID(".orbital/worktrees/nonexistent", "session")
 		if err == nil {
 			t.Fatal("UpdateSessionID() error = nil; want error")
 		}
@@ -247,25 +247,25 @@ func TestStateManager(t *testing.T) {
 	t.Run("StatePath returns correct location", func(t *testing.T) {
 		mgr := NewStateManager("/project")
 
-		want := filepath.Join("/project", ".orbit", "worktree-state.json")
+		want := filepath.Join("/project", ".orbital", "worktree-state.json")
 		if got := mgr.StatePath(); got != want {
 			t.Errorf("StatePath() = %q; want %q", got, want)
 		}
 	})
 
-	t.Run("creates .orbit directory if needed", func(t *testing.T) {
+	t.Run("creates .orbital directory if needed", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := NewStateManager(tmpDir)
 
-		orbitDir := filepath.Join(tmpDir, ".orbit")
+		orbitDir := filepath.Join(tmpDir, ".orbital")
 		if _, err := os.Stat(orbitDir); !os.IsNotExist(err) {
-			t.Fatal(".orbit directory should not exist before Save")
+			t.Fatal(".orbital directory should not exist before Save")
 		}
 
 		_ = mgr.Add(WorktreeState{Path: "test"})
 
 		if _, err := os.Stat(orbitDir); os.IsNotExist(err) {
-			t.Error(".orbit directory should exist after Save")
+			t.Error(".orbital directory should exist after Save")
 		}
 	})
 }

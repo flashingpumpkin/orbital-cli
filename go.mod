@@ -1,4 +1,4 @@
-module github.com/flashingpumpkin/orbit-cli
+module github.com/flashingpumpkin/orbital
 
 go 1.24.0
 

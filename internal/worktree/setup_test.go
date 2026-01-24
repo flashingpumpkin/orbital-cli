@@ -33,7 +33,7 @@ func streamJSON(text string) string {
 func TestSetupPhase(t *testing.T) {
 	t.Run("invokes executor with spec content", func(t *testing.T) {
 		// Use stream-json format for output
-		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/add-user-auth\n") + "\n" +
+		output := streamJSON("WORKTREE_PATH: .orbital/worktrees/add-user-auth\n") + "\n" +
 			streamJSON("BRANCH_NAME: orbit/add-user-auth")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
@@ -61,8 +61,8 @@ func TestSetupPhase(t *testing.T) {
 			t.Errorf("prompt does not contain spec content")
 		}
 
-		if result.WorktreePath != ".orbit/worktrees/add-user-auth" {
-			t.Errorf("WorktreePath = %q; want %q", result.WorktreePath, ".orbit/worktrees/add-user-auth")
+		if result.WorktreePath != ".orbital/worktrees/add-user-auth" {
+			t.Errorf("WorktreePath = %q; want %q", result.WorktreePath, ".orbital/worktrees/add-user-auth")
 		}
 
 		if result.BranchName != "orbit/add-user-auth" {
@@ -71,7 +71,7 @@ func TestSetupPhase(t *testing.T) {
 	})
 
 	t.Run("prompt instructs Claude to create worktree", func(t *testing.T) {
-		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/test-feature\n") + "\n" +
+		output := streamJSON("WORKTREE_PATH: .orbital/worktrees/test-feature\n") + "\n" +
 			streamJSON("BRANCH_NAME: orbit/test-feature")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
@@ -94,7 +94,7 @@ func TestSetupPhase(t *testing.T) {
 		// Verify prompt contains instructions for Claude
 		requiredInstructions := []string{
 			"kebab-case",
-			".orbit/worktrees/",
+			".orbital/worktrees/",
 			"orbit/",
 			"git worktree",
 			"WORKTREE_PATH:",
@@ -140,7 +140,7 @@ func TestSetupPhase(t *testing.T) {
 
 	t.Run("returns error when branch marker not found", func(t *testing.T) {
 		// Use stream-json format with path but no branch marker
-		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/test\n") + "\n" +
+		output := streamJSON("WORKTREE_PATH: .orbital/worktrees/test\n") + "\n" +
 			streamJSON("No branch marker here.")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
@@ -161,7 +161,7 @@ func TestSetupPhase(t *testing.T) {
 	})
 
 	t.Run("uses provided worktree name when specified", func(t *testing.T) {
-		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/my-custom-name\n") + "\n" +
+		output := streamJSON("WORKTREE_PATH: .orbital/worktrees/my-custom-name\n") + "\n" +
 			streamJSON("BRANCH_NAME: orbit/my-custom-name")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
@@ -193,7 +193,7 @@ func TestSetupPhase(t *testing.T) {
 	})
 
 	t.Run("captures cost and tokens from execution", func(t *testing.T) {
-		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/test\n") + "\n" +
+		output := streamJSON("WORKTREE_PATH: .orbital/worktrees/test\n") + "\n" +
 			streamJSON("BRANCH_NAME: orbit/test")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
@@ -236,23 +236,23 @@ func TestExtractMarker(t *testing.T) {
 		{
 			name: "extracts value from middle of output",
 			output: streamJSON("Some text\n") + "\n" +
-				streamJSON("WORKTREE_PATH: .orbit/worktrees/test\n") + "\n" +
+				streamJSON("WORKTREE_PATH: .orbital/worktrees/test\n") + "\n" +
 				streamJSON("More text"),
 			marker: "WORKTREE_PATH: ",
-			want:   ".orbit/worktrees/test",
+			want:   ".orbital/worktrees/test",
 		},
 		{
 			name: "extracts value at end of output",
 			output: streamJSON("Some text\n") + "\n" +
-				streamJSON("WORKTREE_PATH: .orbit/worktrees/test"),
+				streamJSON("WORKTREE_PATH: .orbital/worktrees/test"),
 			marker: "WORKTREE_PATH: ",
-			want:   ".orbit/worktrees/test",
+			want:   ".orbital/worktrees/test",
 		},
 		{
 			name:   "trims whitespace from value",
-			output: streamJSON("WORKTREE_PATH:   .orbit/worktrees/test  \n"),
+			output: streamJSON("WORKTREE_PATH:   .orbital/worktrees/test  \n"),
 			marker: "WORKTREE_PATH: ",
-			want:   ".orbit/worktrees/test",
+			want:   ".orbital/worktrees/test",
 		},
 		{
 			name:        "returns error when marker not found",
@@ -271,11 +271,11 @@ func TestExtractMarker(t *testing.T) {
 		{
 			name: "extracts worktree path when followed by success in separate event",
 			output: streamJSON("Setting up worktree...") + "\n" +
-				streamJSON("WORKTREE_PATH: .orbit/worktrees/fix-tracking") + "\n" +
+				streamJSON("WORKTREE_PATH: .orbital/worktrees/fix-tracking") + "\n" +
 				streamJSON("success") + "\n" +
 				streamJSON("BRANCH_NAME: orbit/fix-tracking"),
 			marker: "WORKTREE_PATH: ",
-			want:   ".orbit/worktrees/fix-tracking",
+			want:   ".orbital/worktrees/fix-tracking",
 		},
 		{
 			name: "extracts branch correctly when many events follow",

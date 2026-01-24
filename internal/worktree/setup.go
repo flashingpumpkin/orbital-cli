@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/flashingpumpkin/orbit-cli/internal/output"
+	"github.com/flashingpumpkin/orbital/internal/output"
 )
 
 // ErrNotGitRepository is returned when the working directory is not a git repository.
@@ -166,15 +166,15 @@ If a worktree with your chosen name already exists, append a numeric suffix (e.g
 
 1. Read and understand the task specification above.
 2. %s
-3. Create the worktree using: git worktree add -b orbit/<name> .orbit/worktrees/<name> HEAD
+3. Create the worktree using: git worktree add -b orbit/<name> .orbital/worktrees/<name> HEAD
 4. Output the results in this exact format:
 
-WORKTREE_PATH: .orbit/worktrees/<name>
+WORKTREE_PATH: .orbital/worktrees/<name>
 BRANCH_NAME: orbit/<name>
 
 ## Important
 
-- The worktree directory MUST be under .orbit/worktrees/
+- The worktree directory MUST be under .orbital/worktrees/
 - The branch name MUST start with orbit/
 - Output WORKTREE_PATH: and BRANCH_NAME: markers exactly as shown
 - If the branch already exists, pick a different name

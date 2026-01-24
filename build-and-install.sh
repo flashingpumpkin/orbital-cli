@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-echo "Building orbit-cli..."
-go build ./cmd/orbit-cli
+echo "Building orbital..."
+go build ./cmd/orbital
 
 echo "Installing to GOPATH/bin..."
-go install ./cmd/orbit-cli
+go install ./cmd/orbital
 
 echo "Done."
