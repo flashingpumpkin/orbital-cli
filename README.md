@@ -2,6 +2,12 @@
 
 A Go CLI tool that implements the Ralph Wiggum method for autonomous Claude Code iteration.
 
+## Development Notice
+
+This project was developed entirely through AI-driven development using Claude Code. No human has written, reviewed, or directly modified any code in this repository. Every line of Go, every test, and every piece of documentation was generated through natural language conversation with Claude.
+
+This serves as both a practical tool and an experiment in autonomous software development.
+
 ## What is the Ralph Wiggum Method?
 
 The Ralph Wiggum method is an iterative AI development technique where a prompt is repeatedly fed to Claude Code until completion criteria are met. Named after the Simpsons character's optimistic persistence ("I'm learnding!"), it embodies:
