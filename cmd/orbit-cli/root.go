@@ -327,16 +327,18 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			MaxIteration: cfg.MaxIterations,
 			Budget:       cfg.MaxBudget,
 		}
-		tuiProgram = tui.New(session, progress)
-
-		// Send worktree info to TUI if worktree mode is active
+		// Pass worktree info to New() if worktree mode is active.
+		// We must pass it at creation time rather than via SendWorktree
+		// because tea.Program.Send() blocks until the program is running,
+		// which would cause a deadlock.
 		if worktreeMode && wtState != nil {
-			tuiProgram.SendWorktree(tui.WorktreeInfo{
+			tuiProgram = tui.New(session, progress, tui.WorktreeInfo{
 				Path:   wtState.Path,
 				Branch: wtState.Branch,
 			})
+		} else {
+			tuiProgram = tui.New(session, progress)
 		}
-
 		exec.SetStreamWriter(tuiProgram.Bridge())
 	} else if cfg.Verbose || cfg.ShowUnhandled || todosOnly {
 		// Minimal/verbose mode: formatted output
