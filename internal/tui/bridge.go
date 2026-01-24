@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"encoding/json"
 	"strings"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/fatih/color"
 	"github.com/flashingpumpkin/orbit-cli/internal/output"
 	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
 )
@@ -16,7 +18,8 @@ type Bridge struct {
 	tracker *tasks.Tracker
 	parser  *output.Parser
 
-	mu sync.Mutex
+	mu        sync.Mutex
+	textShown bool // tracks if we're in a streaming text block
 }
 
 // NewBridge creates a new Bridge with the given program and tracker.
@@ -81,45 +84,79 @@ func (b *Bridge) processLine(line string) {
 
 // formatEvent formats a stream event into a display string.
 func (b *Bridge) formatEvent(event *output.StreamEvent) string {
+	cyan := color.New(color.FgCyan)
+	dim := color.New(color.Faint)
+	green := color.New(color.FgGreen)
+	yellow := color.New(color.FgYellow)
+	red := color.New(color.FgRed, color.Bold)
+
 	switch event.Type {
 	case "system":
 		if event.Content != "" {
-			return "  " + event.Content
+			b.textShown = false
+			return dim.Sprint("⚙ " + event.Content)
 		}
 
 	case "content_block_start":
 		if event.Content == "tool_use" && event.ToolName != "" {
-			return "  -> " + event.ToolName + formatToolSummary(event.ToolName, event.ToolInput)
+			b.textShown = false
+			summary := formatToolSummary(event.ToolName, event.ToolInput)
+			return cyan.Sprint("  → ") + cyan.Sprint(event.ToolName) + dim.Sprint(summary)
+		}
+
+	case "content_block_stop":
+		if b.textShown {
+			b.textShown = false
+			return "" // End of text block, no additional output needed
 		}
 
 	case "assistant":
 		if event.ToolName != "" {
-			return "  -> " + event.ToolName + formatToolSummary(event.ToolName, event.ToolInput)
+			b.textShown = false
+			summary := formatToolSummary(event.ToolName, event.ToolInput)
+			return cyan.Sprint("  → ") + cyan.Sprint(event.ToolName) + dim.Sprint(summary)
 		}
 		if event.Content != "" {
-			// Truncate long content
-			content := event.Content
-			if len(content) > 100 {
-				content = content[:100] + "..."
+			// Format as assistant thought with 💭 prefix
+			var result string
+			if !b.textShown {
+				// Starting a new thought block - emoji visible, not dimmed
+				result = "\n  💭 "
+				b.textShown = true
 			}
-			return "  " + content
+			return result + yellow.Sprint(event.Content)
+		}
+
+	case "content_block_delta":
+		// Streaming text content
+		if event.Content != "" {
+			var result string
+			if !b.textShown {
+				// Starting a new thought block - emoji visible, not dimmed
+				result = "\n  💭 "
+				b.textShown = true
+			}
+			return result + yellow.Sprint(event.Content)
 		}
 
 	case "user":
 		if event.Content != "" {
-			content := event.Content
-			if len(content) > 80 {
-				content = content[:80] + "..."
+			b.textShown = false
+			content := cleanToolResult(event.Content)
+			if content == "" {
+				return ""
 			}
-			return "    <- " + content
+			return green.Sprint("    ✓ ") + dim.Sprint(content)
 		}
 
 	case "error":
 		if event.Content != "" {
-			return "  ERROR: " + event.Content
+			b.textShown = false
+			return red.Sprint("✗ Error: " + event.Content)
 		}
 
 	case "result":
+		b.textShown = false
 		stats := b.parser.GetStats()
 		return formatResultLine(stats)
 	}
@@ -158,6 +195,10 @@ func formatToolSummary(toolName, input string) string {
 			}
 			return " " + cmd
 		}
+	case "Skill":
+		if skill := extractJSONField(input, "skill"); skill != "" {
+			return " " + skill
+		}
 	case "TaskCreate":
 		if subject := extractJSONField(input, "subject"); subject != "" {
 			return " " + subject
@@ -169,9 +210,62 @@ func formatToolSummary(toolName, input string) string {
 			}
 			return " #" + taskID
 		}
+	case "TodoWrite":
+		return formatTodoWriteInput(input)
 	}
 
 	return ""
+}
+
+// formatTodoWriteInput formats TodoWrite tool input as multi-line task list.
+func formatTodoWriteInput(input string) string {
+	var data struct {
+		Todos []struct {
+			Content string `json:"content"`
+			Status  string `json:"status"`
+		} `json:"todos"`
+	}
+
+	if err := json.Unmarshal([]byte(input), &data); err != nil {
+		return ""
+	}
+
+	if len(data.Todos) == 0 {
+		return ""
+	}
+
+	green := color.New(color.FgGreen)
+	yellow := color.New(color.FgYellow)
+	dim := color.New(color.Faint)
+
+	var lines []string
+	for _, todo := range data.Todos {
+		if todo.Content == "" {
+			continue
+		}
+
+		content := todo.Content
+		if len(content) > 60 {
+			content = content[:60] + "..."
+		}
+
+		var line string
+		switch todo.Status {
+		case "completed":
+			line = green.Sprint("✓") + " " + content
+		case "in_progress":
+			line = yellow.Sprint("▶") + " " + content
+		default:
+			line = dim.Sprint("○") + " " + content
+		}
+		lines = append(lines, "      "+line)
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+
+	return "\n" + strings.Join(lines, "\n")
 }
 
 // extractJSONField extracts a string field from JSON without full parsing.
@@ -207,6 +301,43 @@ func shortenPath(path string) string {
 		return path
 	}
 	return ".../" + strings.Join(parts[len(parts)-2:], "/")
+}
+
+// cleanToolResult extracts useful info from tool result content.
+func cleanToolResult(content string) string {
+	// If it starts with a line number prefix, it's file content - skip it
+	trimmed := strings.TrimSpace(content)
+	if strings.HasPrefix(trimmed, "1→") ||
+		strings.HasPrefix(trimmed, "     1→") {
+		return ""
+	}
+
+	// If it's a path, shorten it
+	if strings.HasPrefix(content, "/") && !strings.Contains(content, "\n") {
+		return shortenPath(content)
+	}
+
+	// If it contains "files", it's a count - keep it
+	if strings.Contains(content, " files") || strings.Contains(content, "No files") {
+		return content
+	}
+
+	// If it's a skill launch message, keep it
+	if strings.HasPrefix(content, "Launching skill:") {
+		return content
+	}
+
+	// If it's a todo confirmation, shorten it
+	if strings.HasPrefix(content, "Todos have been") {
+		return "todos updated"
+	}
+
+	// For short content, show it
+	if len(content) < 80 && !strings.Contains(content, "\n") {
+		return content
+	}
+
+	return ""
 }
 
 // formatResultLine formats the result statistics line.
