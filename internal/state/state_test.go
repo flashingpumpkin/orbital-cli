@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
 )
 
 func TestStateDir_ReturnsCorrectPath(t *testing.T) {
@@ -295,5 +297,125 @@ func TestState_SaveAndLoad_HandlesEmptyNotesAndContext(t *testing.T) {
 	}
 	if len(loaded.ContextFiles) != 0 {
 		t.Errorf("len(ContextFiles) = %d; want 0", len(loaded.ContextFiles))
+	}
+}
+
+func TestState_SetWorkflow(t *testing.T) {
+	tempDir := t.TempDir()
+	state := NewState("session-123", tempDir, []string{}, "", nil)
+
+	w := &workflow.Workflow{
+		Preset: "tdd",
+		Steps: []workflow.Step{
+			{Name: "red", Prompt: "Write test"},
+			{Name: "green", Prompt: "Make pass"},
+			{Name: "refactor", Prompt: "Clean up"},
+			{Name: "review", Prompt: "Review", Gate: true, OnFail: "refactor"},
+		},
+	}
+
+	state.SetWorkflow(w)
+
+	if state.Workflow == nil {
+		t.Fatal("Workflow is nil after SetWorkflow()")
+	}
+	if state.Workflow.PresetName != "tdd" {
+		t.Errorf("PresetName = %q; want \"tdd\"", state.Workflow.PresetName)
+	}
+	if len(state.Workflow.Steps) != 4 {
+		t.Errorf("len(Steps) = %d; want 4", len(state.Workflow.Steps))
+	}
+	if state.Workflow.CurrentStepIndex != 0 {
+		t.Errorf("CurrentStepIndex = %d; want 0", state.Workflow.CurrentStepIndex)
+	}
+}
+
+func TestState_UpdateWorkflowStep(t *testing.T) {
+	tempDir := t.TempDir()
+	state := NewState("session-123", tempDir, []string{}, "", nil)
+
+	w := &workflow.Workflow{
+		Steps: []workflow.Step{
+			{Name: "step1", Prompt: "First"},
+			{Name: "step2", Prompt: "Second"},
+		},
+	}
+	state.SetWorkflow(w)
+
+	state.UpdateWorkflowStep(1)
+
+	if state.Workflow.CurrentStepIndex != 1 {
+		t.Errorf("CurrentStepIndex = %d; want 1", state.Workflow.CurrentStepIndex)
+	}
+}
+
+func TestState_GateRetryTracking(t *testing.T) {
+	tempDir := t.TempDir()
+	state := NewState("session-123", tempDir, []string{}, "", nil)
+
+	w := &workflow.Workflow{
+		Steps: []workflow.Step{
+			{Name: "review", Prompt: "Review", Gate: true},
+		},
+	}
+	state.SetWorkflow(w)
+
+	// Initially zero
+	if state.GetGateRetryCount("review") != 0 {
+		t.Errorf("initial retry count = %d; want 0", state.GetGateRetryCount("review"))
+	}
+
+	// Increment
+	state.IncrementGateRetry("review")
+	if state.GetGateRetryCount("review") != 1 {
+		t.Errorf("after first increment = %d; want 1", state.GetGateRetryCount("review"))
+	}
+
+	// Increment again
+	state.IncrementGateRetry("review")
+	if state.GetGateRetryCount("review") != 2 {
+		t.Errorf("after second increment = %d; want 2", state.GetGateRetryCount("review"))
+	}
+}
+
+func TestState_SaveAndLoad_PreservesWorkflow(t *testing.T) {
+	tempDir := t.TempDir()
+
+	original := NewState("session-abc", tempDir, []string{"/path/spec.md"}, "", nil)
+	w := &workflow.Workflow{
+		Preset: "reviewed",
+		Steps: []workflow.Step{
+			{Name: "implement", Prompt: "Do it"},
+			{Name: "review", Prompt: "Review", Gate: true, OnFail: "implement"},
+		},
+	}
+	original.SetWorkflow(w)
+	original.UpdateWorkflowStep(1)
+	original.IncrementGateRetry("review")
+
+	err := original.Save()
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := Load(tempDir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if loaded.Workflow == nil {
+		t.Fatal("Workflow is nil after Load()")
+	}
+	if loaded.Workflow.PresetName != "reviewed" {
+		t.Errorf("PresetName = %q; want \"reviewed\"", loaded.Workflow.PresetName)
+	}
+	if len(loaded.Workflow.Steps) != 2 {
+		t.Errorf("len(Steps) = %d; want 2", len(loaded.Workflow.Steps))
+	}
+	if loaded.Workflow.CurrentStepIndex != 1 {
+		t.Errorf("CurrentStepIndex = %d; want 1", loaded.Workflow.CurrentStepIndex)
+	}
+	if loaded.GetGateRetryCount("review") != 1 {
+		t.Errorf("GateRetries[review] = %d; want 1", loaded.GetGateRetryCount("review"))
 	}
 }

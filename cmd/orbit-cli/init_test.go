@@ -189,3 +189,76 @@ func TestInitCmd_CreatesOrbitDirectory(t *testing.T) {
 		t.Errorf(".orbit directory was not created")
 	}
 }
+
+func TestInitCmd_WithPreset(t *testing.T) {
+	tempDir := t.TempDir()
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(originalWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change to temp directory: %v", err)
+	}
+
+	cmd := newInitCmd()
+	cmd.SetArgs([]string{"--preset", "tdd"})
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	// Check file contains preset
+	configPath := filepath.Join(tempDir, ".orbit", "config.toml")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read config file: %v", err)
+	}
+	if !strings.Contains(string(content), `preset = "tdd"`) {
+		t.Errorf("config file missing preset = \"tdd\"")
+	}
+
+	// Check output mentions preset
+	output := buf.String()
+	if !strings.Contains(output, "Using workflow preset: tdd") {
+		t.Errorf("output = %q; want to contain preset message", output)
+	}
+}
+
+func TestInitCmd_InvalidPreset(t *testing.T) {
+	tempDir := t.TempDir()
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(originalWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change to temp directory: %v", err)
+	}
+
+	cmd := newInitCmd()
+	cmd.SetArgs([]string{"--preset", "invalid"})
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	err = cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid preset, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid preset") {
+		t.Errorf("error = %q; want to contain 'invalid preset'", err.Error())
+	}
+}

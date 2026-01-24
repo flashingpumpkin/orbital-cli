@@ -20,6 +20,7 @@ import (
 	"github.com/flashingpumpkin/orbit-cli/internal/output"
 	"github.com/flashingpumpkin/orbit-cli/internal/spec"
 	"github.com/flashingpumpkin/orbit-cli/internal/state"
+	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
 )
 
 var (
@@ -43,6 +44,7 @@ var (
 	agents        string
 	notesFile     string
 	contextFiles  []string
+	workflowFlag  string
 )
 
 var rootCmd = &cobra.Command{
@@ -99,6 +101,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&agents, "agents", "", "JSON object defining custom agents for Claude CLI")
 	rootCmd.PersistentFlags().StringVar(&notesFile, "notes", "", "Path to notes file (default: auto-generated in docs/notes/)")
 	rootCmd.PersistentFlags().StringArrayVar(&contextFiles, "context", []string{}, "Additional context file (can be repeated)")
+	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: spec-driven (default), reviewed, tdd")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {
@@ -502,4 +505,29 @@ func toKebabCase(s string) string {
 	kebab = strings.Trim(kebab, "-")
 
 	return kebab
+}
+
+// resolveWorkflow determines the workflow to use based on CLI flag and config file.
+// CLI flag takes precedence over config file. If neither specified, uses spec-driven default.
+func resolveWorkflow(flagValue string, fileConfig *config.FileConfig) (*workflow.Workflow, error) {
+	// CLI flag takes precedence
+	if flagValue != "" {
+		if !workflow.IsValidPreset(flagValue) {
+			validPresets := workflow.ValidPresets()
+			names := make([]string, len(validPresets))
+			for i, p := range validPresets {
+				names[i] = string(p)
+			}
+			return nil, fmt.Errorf("invalid workflow preset %q, valid options: %s", flagValue, strings.Join(names, ", "))
+		}
+		return workflow.GetPreset(workflow.PresetName(flagValue))
+	}
+
+	// Check config file
+	if fileConfig != nil && fileConfig.Workflow != nil {
+		return fileConfig.Workflow.ToWorkflow()
+	}
+
+	// Default to spec-driven
+	return workflow.GetPreset(workflow.PresetSpecDriven)
 }

@@ -9,7 +9,24 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
 )
+
+// WorkflowState captures the workflow configuration and progress.
+type WorkflowState struct {
+	// PresetName is the name of the preset used, if any.
+	PresetName string `json:"preset_name,omitempty"`
+
+	// Steps contains the full workflow step definitions.
+	Steps []workflow.Step `json:"steps"`
+
+	// CurrentStepIndex is the index of the current step being executed.
+	CurrentStepIndex int `json:"current_step_index"`
+
+	// GateRetries tracks the number of times each gate step has failed.
+	GateRetries map[string]int `json:"gate_retries,omitempty"`
+}
 
 // State represents the current execution state of a orbit session.
 type State struct {
@@ -22,6 +39,9 @@ type State struct {
 	TotalCost    float64   `json:"total_cost"`
 	NotesFile    string    `json:"notes_file,omitempty"`
 	ContextFiles []string  `json:"context_files,omitempty"`
+
+	// Workflow captures the workflow configuration and progress.
+	Workflow *WorkflowState `json:"workflow,omitempty"`
 }
 
 // StateDir returns the path to the state directory for the given working directory.
@@ -121,4 +141,39 @@ func (s *State) Cleanup() error {
 func (s *State) UpdateIteration(iteration int, cost float64) {
 	s.Iteration = iteration
 	s.TotalCost = cost
+}
+
+// SetWorkflow initialises the workflow state from a workflow configuration.
+func (s *State) SetWorkflow(w *workflow.Workflow) {
+	s.Workflow = &WorkflowState{
+		PresetName:       w.Preset,
+		Steps:            w.Steps,
+		CurrentStepIndex: 0,
+		GateRetries:      make(map[string]int),
+	}
+}
+
+// UpdateWorkflowStep updates the current step index.
+func (s *State) UpdateWorkflowStep(stepIndex int) {
+	if s.Workflow != nil {
+		s.Workflow.CurrentStepIndex = stepIndex
+	}
+}
+
+// IncrementGateRetry increments the retry count for a gate step.
+func (s *State) IncrementGateRetry(stepName string) {
+	if s.Workflow != nil {
+		if s.Workflow.GateRetries == nil {
+			s.Workflow.GateRetries = make(map[string]int)
+		}
+		s.Workflow.GateRetries[stepName]++
+	}
+}
+
+// GetGateRetryCount returns the current retry count for a gate step.
+func (s *State) GetGateRetryCount(stepName string) int {
+	if s.Workflow == nil || s.Workflow.GateRetries == nil {
+		return 0
+	}
+	return s.Workflow.GateRetries[stepName]
 }
