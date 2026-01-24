@@ -181,3 +181,117 @@ ok  github.com/flashingpumpkin/orbital/internal/worktree
 ```
 
 Build successful.
+
+---
+
+## Code Review: Iteration 2
+
+**Reviewer**: Automated review gate
+**Date**: 2026-01-24
+
+### Summary
+
+Commit `ffced19` ("refactor(worktree): Replace Claude setup with local name generation") completes tickets 1.3, 1.4, and 2.2. This refactor replaces Claude-based worktree setup with direct git commands and local name generation, simplifies the merge prompt, and removes obsolete code.
+
+### Findings
+
+#### Correctness: PASS
+
+1. **Setup flow** (`root.go`): The `runWorktreeSetup()` function now generates names locally using `GenerateUniqueName()` and creates worktrees directly via `CreateWorktree()`. The `--worktree-name` flag override is preserved.
+
+2. **State persistence** (`root.go`): The worktree name is extracted from the path using `filepath.Base()` and stored in the state. This is correct since `WorktreePath()` returns `.orbital/worktrees/<name>`.
+
+3. **Obsolete code removal** (`setup.go`): The Claude-based setup functions (`buildSetupPrompt`, `extractMarker`, etc.) are removed. The new `SetupDirect()` function provides a clean API for local setup.
+
+4. **Merge prompt** (`merge.go`): Directory navigation instructions removed. The prompt still contains all necessary git commands (rebase, merge). The executor sets `cmd.Dir` so Claude operates in the correct directory automatically.
+
+5. **Tests** (`merge_test.go`): Added explicit verification that "Navigate to" instructions are absent from the merge prompt.
+
+#### Edge Cases: PASS
+
+1. `runWorktreeSetup()` handles `--worktree-name` override correctly.
+2. `ListWorktreeNames()` failure is treated as non-fatal (returns empty exclusion list).
+3. `SetupDirect()` correctly returns zero cost since no Claude invocation occurs.
+
+#### Code Quality: PASS
+
+1. Code is well-commented explaining the changes.
+2. `SetupDirect()` provides a clean, testable API separate from Claude invocation.
+3. Test file comments explain why integration tests are deferred.
+
+#### Test Coverage: PASS
+
+1. `setup_test.go`: Tests `SetupOptions` and `SetupResult` structs.
+2. `merge_test.go`: Tests prompt content and verifies navigation instructions are absent.
+3. All packages pass tests.
+
+#### Observations (Non-blocking)
+
+1. There is code duplication between `runWorktreeSetup()` in `root.go` and `SetupDirect()` in `setup.go`. Both generate names and create worktrees. Consider consolidating in a future iteration.
+
+2. The `worktreeExecutorAdapter` is retained for the merge phase. This is correct since merge still requires Claude to handle rebases and conflict resolution.
+
+### Verdict
+
+**PASS** - All changes are correct, well-tested, and follow project conventions. The refactor successfully eliminates Claude invocation from the setup phase.
+
+---
+
+## Iteration 3
+
+### Summary
+
+Final verification of all tickets. All acceptance criteria and definition of done items have been marked complete in the spec file.
+
+### Verification
+
+1. **All tests pass**: `go test ./...` succeeds
+2. **Build succeeds**: `go build ./...` succeeds
+3. **No unchecked boxes**: All `[ ]` items in spec file are now `[x]`
+
+### Tickets Verified
+
+All 10 tickets are complete:
+
+**Epic 1: Deterministic Worktree Naming**
+- Ticket 1.1: Create adjective-animal name generator
+- Ticket 1.2: Create git worktree helper functions
+- Ticket 1.3: Integrate name generator into setup flow
+- Ticket 1.4: Remove obsolete setup code
+
+**Epic 2: Working Directory Enforcement**
+- Ticket 2.1: Set cmd.Dir in executor
+- Ticket 2.2: Remove directory navigation from merge prompt
+
+**Epic 3: Simplified Setup Phase**
+- Ticket 3.1: Update state file format
+- Ticket 3.2: Display worktree name in TUI
+
+**Epic 4: Error Handling Improvements**
+- Ticket 4.1: Add branch name validation
+- Ticket 4.2: Improve cleanup error messages
+
+### Implementation Summary
+
+The worktree implementation has been refactored to:
+
+1. **Generate names locally** using adjective-animal combinations (e.g., "swift-falcon")
+2. **Create worktrees directly** via git commands without Claude invocation
+3. **Set working directory** correctly in the executor for worktree mode
+4. **Simplify merge prompt** by removing directory navigation instructions
+5. **Validate branch names** to catch corruption patterns
+6. **Include context in errors** with branch names and git output
+
+### Test Coverage
+
+All packages have passing tests:
+- `internal/worktree`: names.go, git.go, state.go, setup.go, merge.go
+- `internal/executor`: executor.go with working directory tests
+- `internal/tui`: model.go with WorktreeInfo rendering
+
+### Success Metrics Achieved
+
+- Worktree cleanup succeeds without branch name corruption errors (validation prevents it)
+- Claude CLI executes in worktree directory (cmd.Dir is set)
+- Setup phase cost reduced to zero (no Claude invocation)
+- No regression in existing worktree functionality (all tests pass)

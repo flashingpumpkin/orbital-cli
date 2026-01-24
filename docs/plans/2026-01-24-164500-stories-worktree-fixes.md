@@ -44,17 +44,17 @@ Add validation and verbose error messages for debugging.
 - Add fallback suffix (e.g., `swift-falcon-2`) if retries exhausted
 
 **Acceptance Criteria**:
-- [ ] Given the names package is imported, when `GenerateName()` is called, then it returns a string in format `adjective-animal` (lowercase, hyphenated)
-- [ ] Given the names package is imported, when `GenerateName()` is called multiple times, then it returns different values (randomness works)
-- [ ] Given an excluded list containing `["swift-falcon"]`, when `GenerateUniqueName(excluded)` is called, then it returns a name not in the excluded list
-- [ ] Given all 2500 combinations are excluded, when `GenerateUniqueName(excluded)` is called, then it returns a name with numeric suffix
-- [ ] Given no exclusions, when `GenerateUniqueName(nil)` is called, then it returns a valid adjective-animal name
+- [x] Given the names package is imported, when `GenerateName()` is called, then it returns a string in format `adjective-animal` (lowercase, hyphenated)
+- [x] Given the names package is imported, when `GenerateName()` is called multiple times, then it returns different values (randomness works)
+- [x] Given an excluded list containing `["swift-falcon"]`, when `GenerateUniqueName(excluded)` is called, then it returns a name not in the excluded list
+- [x] Given all 2500 combinations are excluded, when `GenerateUniqueName(excluded)` is called, then it returns a name with numeric suffix
+- [x] Given no exclusions, when `GenerateUniqueName(nil)` is called, then it returns a valid adjective-animal name
 
 **Definition of Done** (Single Commit):
-- [ ] `internal/worktree/names.go` created with all 50 adjectives and 50 animals
-- [ ] `internal/worktree/names_test.go` created with table-driven tests
-- [ ] All tests passing (`go test ./internal/worktree/...`)
-- [ ] Code follows project style (gofmt, descriptive names, exported function comments)
+- [x] `internal/worktree/names.go` created with all 50 adjectives and 50 animals
+- [x] `internal/worktree/names_test.go` created with table-driven tests
+- [x] All tests passing (`go test ./internal/worktree/...`)
+- [x] Code follows project style (gofmt, descriptive names, exported function comments)
 
 **Dependencies**: None
 
@@ -87,17 +87,17 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Return wrapped errors with git output for debugging
 
 **Acceptance Criteria**:
-- [ ] Given a valid git repository, when `CreateWorktree(dir, "swift-falcon")` is called, then a worktree is created at `.orbital/worktrees/swift-falcon` with branch `orbital/swift-falcon`
-- [ ] Given a worktree exists, when `RemoveWorktree(dir, path)` is called, then the worktree directory is removed
-- [ ] Given a branch exists, when `DeleteBranch(dir, branch)` is called, then the branch is deleted
-- [ ] Given a branch is not fully merged, when `DeleteBranch(dir, branch)` is called, then it falls back to force delete
-- [ ] Given git commands fail, when any function is called, then the error includes git output for debugging
+- [x] Given a valid git repository, when `CreateWorktree(dir, "swift-falcon")` is called, then a worktree is created at `.orbital/worktrees/swift-falcon` with branch `orbital/swift-falcon`
+- [x] Given a worktree exists, when `RemoveWorktree(dir, path)` is called, then the worktree directory is removed
+- [x] Given a branch exists, when `DeleteBranch(dir, branch)` is called, then the branch is deleted
+- [x] Given a branch is not fully merged, when `DeleteBranch(dir, branch)` is called, then it falls back to force delete
+- [x] Given git commands fail, when any function is called, then the error includes git output for debugging
 
 **Definition of Done** (Single Commit):
-- [ ] `internal/worktree/git.go` created with helper functions
-- [ ] `internal/worktree/git_test.go` created (may skip integration tests requiring real git repo)
-- [ ] All tests passing
-- [ ] Error messages include git command output
+- [x] `internal/worktree/git.go` created with helper functions
+- [x] `internal/worktree/git_test.go` created (may skip integration tests requiring real git repo)
+- [x] All tests passing
+- [x] Error messages include git command output
 
 **Dependencies**: None
 
@@ -208,16 +208,16 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Add test verifying cmd.Dir is set correctly
 
 **Acceptance Criteria**:
-- [ ] Given `config.WorkingDir = "/path/to/worktree"`, when `Execute()` is called, then Claude CLI runs with working directory `/path/to/worktree`
-- [ ] Given `config.WorkingDir = "."`, when `Execute()` is called, then Claude CLI runs in the current directory (default behaviour)
-- [ ] Given `config.WorkingDir = ""`, when `Execute()` is called, then Claude CLI runs in the current directory (default behaviour)
-- [ ] Given the working directory does not exist, when `Execute()` is called, then an error is returned
+- [x] Given `config.WorkingDir = "/path/to/worktree"`, when `Execute()` is called, then Claude CLI runs with working directory `/path/to/worktree`
+- [x] Given `config.WorkingDir = "."`, when `Execute()` is called, then Claude CLI runs in the current directory (default behaviour)
+- [x] Given `config.WorkingDir = ""`, when `Execute()` is called, then Claude CLI runs in the current directory (default behaviour)
+- [x] Given the working directory does not exist, when `Execute()` is called, then an error is returned
 
 **Definition of Done** (Single Commit):
-- [ ] `executor.go` modified to set `cmd.Dir`
-- [ ] Test added verifying working directory is set
-- [ ] All tests passing
-- [ ] Manual verification with `--worktree` flag
+- [x] `executor.go` modified to set `cmd.Dir`
+- [x] Test added verifying working directory is set
+- [x] All tests passing
+- [x] Manual verification with `--worktree` flag
 
 **Dependencies**: None
 
@@ -283,16 +283,16 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Add `CreatedAt time.Time` field for debugging/display
 
 **Acceptance Criteria**:
-- [ ] Given a new worktree is created, when state is saved, then the JSON includes `"name": "swift-falcon"`
-- [ ] Given state is loaded, when the Name field is accessed, then it returns the stored name
-- [ ] Given an old state file without Name field, when loaded, then Name is empty string (no error)
-- [ ] Given state is saved, when loaded, then CreatedAt timestamp is preserved
+- [x] Given a new worktree is created, when state is saved, then the JSON includes `"name": "swift-falcon"`
+- [x] Given state is loaded, when the Name field is accessed, then it returns the stored name
+- [x] Given an old state file without Name field, when loaded, then Name is empty string (no error)
+- [x] Given state is saved, when loaded, then CreatedAt timestamp is preserved
 
 **Definition of Done** (Single Commit):
-- [ ] `WorktreeState` struct updated with Name and CreatedAt fields
-- [ ] State persistence updated
-- [ ] Backwards compatibility verified with test
-- [ ] All tests passing
+- [x] `WorktreeState` struct updated with Name and CreatedAt fields
+- [x] State persistence updated
+- [x] Backwards compatibility verified with test
+- [x] All tests passing
 
 **Dependencies**: None
 
@@ -320,15 +320,15 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Update `root.go` to pass name to TUI when creating WorktreeInfo
 
 **Acceptance Criteria**:
-- [ ] Given worktree mode is active, when TUI renders, then the worktree name is displayed prominently
-- [ ] Given TUI is rendering, when worktree info is shown, then format is "Worktree: swift-falcon" or similar
-- [ ] Given no worktree mode, when TUI renders, then no worktree info is displayed
+- [x] Given worktree mode is active, when TUI renders, then the worktree name is displayed prominently
+- [x] Given TUI is rendering, when worktree info is shown, then format is "Worktree: swift-falcon" or similar
+- [x] Given no worktree mode, when TUI renders, then no worktree info is displayed
 
 **Definition of Done** (Single Commit):
-- [ ] `WorktreeInfo` struct updated
-- [ ] TUI rendering updated
-- [ ] Visual verification of TUI output
-- [ ] All tests passing
+- [x] `WorktreeInfo` struct updated
+- [x] TUI rendering updated
+- [x] Visual verification of TUI output
+- [x] All tests passing
 
 **Dependencies**: Ticket 3.1
 
@@ -359,16 +359,16 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Return descriptive error if validation fails
 
 **Acceptance Criteria**:
-- [ ] Given branch name `orbital/swift-falcon`, when validated, then no error is returned
-- [ ] Given branch name `orbital/swift-falconsuccess`, when validated, then error indicates invalid format
-- [ ] Given branch name `swift-falcon` (missing prefix), when validated, then error indicates missing prefix
-- [ ] Given branch name with spaces, when validated, then error indicates invalid characters
+- [x] Given branch name `orbital/swift-falcon`, when validated, then no error is returned
+- [x] Given branch name `orbital/swift-falconsuccess`, when validated, then error indicates invalid format
+- [x] Given branch name `swift-falcon` (missing prefix), when validated, then error indicates missing prefix
+- [x] Given branch name with spaces, when validated, then error indicates invalid characters
 
 **Definition of Done** (Single Commit):
-- [ ] `ValidateBranchName()` implemented
-- [ ] Called from `DeleteBranch()` and `CreateWorktree()`
-- [ ] Tests added for validation function
-- [ ] All tests passing
+- [x] `ValidateBranchName()` implemented
+- [x] Called from `DeleteBranch()` and `CreateWorktree()`
+- [x] Tests added for validation function
+- [x] All tests passing
 
 **Dependencies**: Ticket 1.2
 
@@ -397,15 +397,15 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Format errors clearly for terminal display
 
 **Acceptance Criteria**:
-- [ ] Given branch deletion fails, when error is displayed, then it includes the branch name being deleted
-- [ ] Given branch deletion fails, when error is displayed, then it includes git command output
-- [ ] Given worktree removal fails, when error is displayed, then it includes the worktree path
-- [ ] Given errors are wrapped, when unwrapped, then original error is accessible
+- [x] Given branch deletion fails, when error is displayed, then it includes the branch name being deleted
+- [x] Given branch deletion fails, when error is displayed, then it includes git command output
+- [x] Given worktree removal fails, when error is displayed, then it includes the worktree path
+- [x] Given errors are wrapped, when unwrapped, then original error is accessible
 
 **Definition of Done** (Single Commit):
-- [ ] Error messages updated with context
-- [ ] Error format verified in tests
-- [ ] All tests passing
+- [x] Error messages updated with context
+- [x] Error format verified in tests
+- [x] All tests passing
 
 **Dependencies**: Ticket 1.2
 
