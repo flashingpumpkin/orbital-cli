@@ -48,8 +48,8 @@ type Model struct {
 	following      bool
 
 	// Chat view
-	chatInput   textinput.Model
-	chatHistory []chatMessage
+	chatInput    textinput.Model
+	chatHistory  []chatMessage
 	chatViewport viewport.Model
 
 	// New session dialog
@@ -66,8 +66,8 @@ type Model struct {
 	height int
 
 	// State
-	loading bool
-	err     error
+	loading  bool
+	err      error
 	quitting bool
 
 	// Stream subscription
@@ -80,27 +80,27 @@ type chatMessage struct {
 }
 
 type newSessionOptions struct {
-	specFile     string
-	worktree     bool
-	budget       float64
+	specFile string
+	worktree bool
+	budget   float64
 }
 
 // keyMap defines key bindings.
 type keyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	Left     key.Binding
-	Right    key.Binding
-	Enter    key.Binding
-	Back     key.Binding
-	Stop     key.Binding
-	Merge    key.Binding
-	Chat     key.Binding
-	Resume   key.Binding
-	New      key.Binding
-	Follow   key.Binding
-	Quit     key.Binding
-	Help     key.Binding
+	Up        key.Binding
+	Down      key.Binding
+	Left      key.Binding
+	Right     key.Binding
+	Enter     key.Binding
+	Back      key.Binding
+	Stop      key.Binding
+	Merge     key.Binding
+	Chat      key.Binding
+	Resume    key.Binding
+	New       key.Binding
+	Follow    key.Binding
+	Quit      key.Binding
+	Help      key.Binding
 	ForceQuit key.Binding
 }
 
@@ -182,17 +182,17 @@ func NewModel(client *daemon.Client, projectDir string) Model {
 	newTi.CharLimit = 256
 
 	return Model{
-		client:         client,
-		projectDir:     projectDir,
-		view:           ViewManager,
-		expandedGroups: map[string]bool{"running": true, "completed": false, "failed": false, "stopped": false},
-		following:      true,
-		spinner:        s,
-		help:           help.New(),
-		keys:           defaultKeyMap,
-		chatInput:      ti,
+		client:          client,
+		projectDir:      projectDir,
+		view:            ViewManager,
+		expandedGroups:  map[string]bool{"running": true, "completed": false, "failed": false, "stopped": false},
+		following:       true,
+		spinner:         s,
+		help:            help.New(),
+		keys:            defaultKeyMap,
+		chatInput:       ti,
 		newSessionInput: newTi,
-		newSessionOpts: newSessionOptions{budget: 50.0},
+		newSessionOpts:  newSessionOptions{budget: 50.0},
 	}
 }
 

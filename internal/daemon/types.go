@@ -40,25 +40,25 @@ type WorkflowState struct {
 
 // Session represents a running or completed orbital session.
 type Session struct {
-	ID             string         `json:"id"`
-	SpecFiles      []string       `json:"spec_files"`
-	Status         SessionStatus  `json:"status"`
-	WorkingDir     string         `json:"working_dir"`
-	Worktree       *WorktreeInfo  `json:"worktree,omitempty"`
-	Iteration      int            `json:"iteration"`
-	MaxIterations  int            `json:"max_iterations"`
-	TotalCost      float64        `json:"total_cost"`
-	MaxBudget      float64        `json:"max_budget"`
-	StartedAt      time.Time      `json:"started_at"`
-	CompletedAt    *time.Time     `json:"completed_at,omitempty"`
-	ClaudeSession  string         `json:"claude_session,omitempty"`
-	ChatSession    string         `json:"chat_session,omitempty"`
-	Error          string         `json:"error,omitempty"`
-	Workflow       *WorkflowState `json:"workflow,omitempty"`
-	NotesFile      string         `json:"notes_file,omitempty"`
-	ContextFiles   []string       `json:"context_files,omitempty"`
-	TokensIn       int            `json:"tokens_in"`
-	TokensOut      int            `json:"tokens_out"`
+	ID            string         `json:"id"`
+	SpecFiles     []string       `json:"spec_files"`
+	Status        SessionStatus  `json:"status"`
+	WorkingDir    string         `json:"working_dir"`
+	Worktree      *WorktreeInfo  `json:"worktree,omitempty"`
+	Iteration     int            `json:"iteration"`
+	MaxIterations int            `json:"max_iterations"`
+	TotalCost     float64        `json:"total_cost"`
+	MaxBudget     float64        `json:"max_budget"`
+	StartedAt     time.Time      `json:"started_at"`
+	CompletedAt   *time.Time     `json:"completed_at,omitempty"`
+	ClaudeSession string         `json:"claude_session,omitempty"`
+	ChatSession   string         `json:"chat_session,omitempty"`
+	Error         string         `json:"error,omitempty"`
+	Workflow      *WorkflowState `json:"workflow,omitempty"`
+	NotesFile     string         `json:"notes_file,omitempty"`
+	ContextFiles  []string       `json:"context_files,omitempty"`
+	TokensIn      int            `json:"tokens_in"`
+	TokensOut     int            `json:"tokens_out"`
 
 	// Config fields (persisted for resume)
 	Model        string `json:"model,omitempty"`

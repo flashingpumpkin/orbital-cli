@@ -66,7 +66,7 @@ var (
 			Bold(true)
 
 	chatAssistantStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
+				Foreground(lipgloss.Color("252"))
 )
 
 // View renders the model.

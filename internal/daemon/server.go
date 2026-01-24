@@ -17,17 +17,17 @@ import (
 
 // Server is the orbital daemon HTTP server.
 type Server struct {
-	projectDir  string
-	socketPath  string
-	pidFile     string
-	registry    *Registry
-	config      *DaemonConfig
-	httpServer  *http.Server
-	listener    net.Listener
-	runner      *SessionRunner
-	startedAt   time.Time
-	shutdownCh  chan struct{} // Closed to trigger shutdown
-	shutdownMu  sync.Mutex
+	projectDir   string
+	socketPath   string
+	pidFile      string
+	registry     *Registry
+	config       *DaemonConfig
+	httpServer   *http.Server
+	listener     net.Listener
+	runner       *SessionRunner
+	startedAt    time.Time
+	shutdownCh   chan struct{} // Closed to trigger shutdown
+	shutdownMu   sync.Mutex
 	shuttingDown bool
 }
 
