@@ -261,6 +261,31 @@ func TestExtractMarker(t *testing.T) {
 			wantErr:     true,
 			errContains: "not found",
 		},
+		{
+			name: "extracts branch name when followed by success in separate event",
+			output: streamJSON("BRANCH_NAME: orbit/fix-todo-tracking") + "\n" +
+				streamJSON("success"),
+			marker: "BRANCH_NAME: ",
+			want:   "orbit/fix-todo-tracking",
+		},
+		{
+			name: "extracts worktree path when followed by success in separate event",
+			output: streamJSON("Setting up worktree...") + "\n" +
+				streamJSON("WORKTREE_PATH: .orbit/worktrees/fix-tracking") + "\n" +
+				streamJSON("success") + "\n" +
+				streamJSON("BRANCH_NAME: orbit/fix-tracking"),
+			marker: "WORKTREE_PATH: ",
+			want:   ".orbit/worktrees/fix-tracking",
+		},
+		{
+			name: "extracts branch correctly when many events follow",
+			output: streamJSON("BRANCH_NAME: orbit/my-feature") + "\n" +
+				streamJSON("Worktree created successfully!") + "\n" +
+				streamJSON("You can now work in the worktree.") + "\n" +
+				streamJSON("Happy coding!"),
+			marker: "BRANCH_NAME: ",
+			want:   "orbit/my-feature",
+		},
 	}
 
 	for _, tt := range tests {

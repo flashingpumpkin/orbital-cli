@@ -343,6 +343,9 @@ func (p *Parser) GetStats() *OutputStats {
 // It parses each line as JSON and concatenates text from content_block_delta
 // and assistant message events. This is useful for searching for markers in
 // output without being affected by JSON encoding.
+//
+// To preserve line boundaries between events (important for marker extraction),
+// a newline is appended after content that doesn't already end with one.
 func ExtractText(rawOutput string) string {
 	parser := NewParser()
 	var text strings.Builder
@@ -350,6 +353,10 @@ func ExtractText(rawOutput string) string {
 		event, _ := parser.ParseLine([]byte(line))
 		if event != nil && event.Content != "" {
 			text.WriteString(event.Content)
+			// Preserve line boundaries between events
+			if !strings.HasSuffix(event.Content, "\n") {
+				text.WriteString("\n")
+			}
 		}
 	}
 	return text.String()

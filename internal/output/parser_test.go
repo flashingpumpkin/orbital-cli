@@ -431,18 +431,18 @@ func TestExtractText(t *testing.T) {
 		{
 			name:     "single content_block_delta",
 			input:    `{"type":"content_block_delta","delta":{"text":"Hello"}}`,
-			expected: "Hello",
+			expected: "Hello\n",
 		},
 		{
-			name: "multiple content_block_delta lines",
+			name: "multiple content_block_delta lines preserves newlines between events",
 			input: `{"type":"content_block_delta","delta":{"text":"Hello "}}
 {"type":"content_block_delta","delta":{"text":"World"}}`,
-			expected: "Hello World",
+			expected: "Hello \nWorld\n",
 		},
 		{
 			name:     "assistant message with text content",
 			input:    `{"type":"assistant","message":{"content":[{"type":"text","text":"Assistant says hello"}]}}`,
-			expected: "Assistant says hello",
+			expected: "Assistant says hello\n",
 		},
 		{
 			name: "mixed event types extracts only text",
@@ -450,14 +450,20 @@ func TestExtractText(t *testing.T) {
 {"type":"content_block_delta","delta":{"text":"WORKTREE_PATH: .orbit/worktrees/test"}}
 {"type":"content_block_delta","delta":{"text":"\nBRANCH_NAME: orbit/test"}}
 {"type":"result","total_cost_usd":0.05}`,
-			expected: "Initializing...WORKTREE_PATH: .orbit/worktrees/test\nBRANCH_NAME: orbit/test",
+			expected: "Initializing...\nWORKTREE_PATH: .orbit/worktrees/test\n\nBRANCH_NAME: orbit/test\n",
 		},
 		{
 			name: "stream-json with markers embedded in JSON",
 			input: `{"type":"content_block_delta","delta":{"text":"Setting up worktree...\n"}}
 {"type":"content_block_delta","delta":{"text":"WORKTREE_PATH: .orbit/worktrees/fix-bug\n"}}
 {"type":"content_block_delta","delta":{"text":"BRANCH_NAME: orbit/fix-bug"}}`,
-			expected: "Setting up worktree...\nWORKTREE_PATH: .orbit/worktrees/fix-bug\nBRANCH_NAME: orbit/fix-bug",
+			expected: "Setting up worktree...\nWORKTREE_PATH: .orbit/worktrees/fix-bug\nBRANCH_NAME: orbit/fix-bug\n",
+		},
+		{
+			name: "marker followed by success text in separate events",
+			input: `{"type":"content_block_delta","delta":{"text":"BRANCH_NAME: orbit/fix-bug"}}
+{"type":"content_block_delta","delta":{"text":"success"}}`,
+			expected: "BRANCH_NAME: orbit/fix-bug\nsuccess\n",
 		},
 	}
 

@@ -108,17 +108,21 @@ func NewCleanup(workingDir string) *Cleanup {
 func (c *Cleanup) Run(worktreePath, branchName string) error {
 	// Remove the worktree
 	removeCmd := exec.Command("git", "-C", c.workingDir, "worktree", "remove", worktreePath, "--force")
-	if err := removeCmd.Run(); err != nil {
-		return fmt.Errorf("failed to remove worktree: %w", err)
+	removeOutput, err := removeCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to remove worktree %q: %w\ngit output: %s", worktreePath, err, string(removeOutput))
 	}
 
 	// Delete the branch
 	branchCmd := exec.Command("git", "-C", c.workingDir, "branch", "-d", branchName)
-	if err := branchCmd.Run(); err != nil {
+	branchOutput, err := branchCmd.CombinedOutput()
+	if err != nil {
 		// Branch deletion might fail if it wasn't fully merged, try force delete
 		forceBranchCmd := exec.Command("git", "-C", c.workingDir, "branch", "-D", branchName)
-		if forceErr := forceBranchCmd.Run(); forceErr != nil {
-			return fmt.Errorf("failed to delete branch: %w", forceErr)
+		forceOutput, forceErr := forceBranchCmd.CombinedOutput()
+		if forceErr != nil {
+			return fmt.Errorf("failed to delete branch %q: %w\ngit branch -d output: %s\ngit branch -D output: %s",
+				branchName, forceErr, string(branchOutput), string(forceOutput))
 		}
 	}
 
