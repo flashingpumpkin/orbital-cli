@@ -164,3 +164,114 @@ All tests pass. The setup phase now has its core structure in place. The impleme
 ```
 
 All tests continue to pass. The refactoring improves readability and eliminates unnecessary custom code.
+
+### Iteration 8: TDD Review Gate (Setup Phase)
+
+**Review scope**: Test quality, implementation correctness, refactoring quality for the complete TDD cycle (iterations 5-7)
+
+---
+
+#### Test Quality Assessment
+
+**MockExecutor design**:
+- Well-structured test double that records calls and allows configurable responses
+- Uses anonymous struct for call recording which is compact but adequate for these tests
+- Located in the test file rather than a shared location, which is appropriate since it's only used by setup tests
+
+**Test coverage**:
+- Happy path: Executor invoked, path extracted from output
+- Error path: Executor returns error, error propagates
+- Edge case: Output missing the expected marker
+
+**Test assertions**:
+- Error messages use the `got; want` format consistently
+- Fatal used appropriately when subsequent assertions would fail
+- Assertions are focused and verify one thing each
+
+**Minor observations**:
+- The "invokes executor with spec content" test verifies that the prompt *contains* the spec content. The current implementation passes the spec content directly as the prompt. This is intentional since the actual prompt template will be added in a later story. The test is correct for the current scope.
+- No test for empty output (would be caught by the "path marker not found" test)
+- No test for malformed path marker (e.g., `WORKTREE_PATH:` with no value) but `strings.TrimSpace` handles this gracefully
+
+---
+
+#### Implementation Correctness
+
+**Setup.Run method** (`internal/worktree/setup.go:37-49`):
+- Passes spec content directly to executor (correct for current scope)
+- Propagates executor errors correctly
+- Extracts path and wraps in SetupResult
+
+**extractWorktreePath function** (`internal/worktree/setup.go:52-70`):
+- Finds marker using `strings.Index` (efficient linear scan)
+- Handles both newline-terminated and EOF-terminated paths
+- Uses `strings.TrimSpace` to clean extracted path
+- Returns descriptive error when marker not found
+
+**Types**:
+- `ExecutionResult`: Appropriate fields for Claude execution results
+- `Executor` interface: Minimal and focused
+- `SetupResult`: Just the worktree path for now
+
+**Flag implementation** (`cmd/orbit-cli/root.go:52,111`):
+- Declared at package level with other flags
+- Registered using `BoolVar` with sensible defaults
+- Help text is clear
+
+---
+
+#### Refactoring Quality
+
+**Test consolidation**:
+- Both test files now use subtests with a shared setup
+- Subtest names are lowercase and descriptive
+- Code duplication eliminated
+
+**No over-engineering**:
+- Implementation is minimal: just enough to pass tests
+- No premature abstractions or unnecessary complexity
+- The prompt template is not implemented since it's not tested
+
+---
+
+#### Findings
+
+**Positive**:
+- TDD cycle followed correctly: Red (failing test), Green (minimal implementation), Refactor (consolidate tests)
+- Tests are well-structured and readable
+- Implementation is minimal and correct for the tested scope
+- All tests pass
+
+**No issues requiring action items**
+
+---
+
+**Action items**: None required
+
+**Verdict**: The TDD cycle was executed correctly. The implementation is minimal, correct, and well-tested for the current story items.
+
+### Iteration 9: Add failing test for setup phase prompt template
+
+**Test added**: New subtest in `internal/worktree/setup_test.go`
+
+**What it tests**: `TestSetupPhase/prompt_instructs_Claude_to_create_worktree`
+
+The test verifies that the prompt sent to the executor contains the necessary instructions for Claude to create a worktree correctly:
+- "kebab-case" (the naming convention for worktree names)
+- ".orbit/worktrees/" (where worktrees should be created)
+- "orbit/" (the branch prefix)
+- "git worktree" (the command Claude should use)
+- "WORKTREE_PATH:" (the marker Claude must output)
+
+**Test result**: FAIL (as expected)
+```
+=== RUN   TestSetupPhase/prompt_instructs_Claude_to_create_worktree
+    setup_test.go:87: prompt missing required instruction: "kebab-case"
+    setup_test.go:87: prompt missing required instruction: ".orbit/worktrees/"
+    setup_test.go:87: prompt missing required instruction: "orbit/"
+    setup_test.go:87: prompt missing required instruction: "git worktree"
+    setup_test.go:87: prompt missing required instruction: "WORKTREE_PATH:"
+--- FAIL: TestSetupPhase/prompt_instructs_Claude_to_create_worktree (0.00s)
+```
+
+The test fails because the current implementation passes the raw spec content directly to the executor without wrapping it in a proper prompt template. This tests the acceptance criterion: "Claude is given the spec content and asked to: 1. Understand the task, 2. Choose a descriptive kebab-case name, 3. Create worktree at `.orbit/worktrees/<name>` with branch `orbit/<name>`, 4. Output the worktree path"

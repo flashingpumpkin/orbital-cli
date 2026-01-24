@@ -54,6 +54,41 @@ func TestSetupPhase(t *testing.T) {
 		}
 	})
 
+	t.Run("prompt instructs Claude to create worktree", func(t *testing.T) {
+		mockExec := &MockExecutor{
+			ExecuteResult: &ExecutionResult{
+				Output:     "WORKTREE_PATH: .orbit/worktrees/test-feature",
+				CostUSD:    0.01,
+				TokensUsed: 100,
+			},
+		}
+
+		specContent := "# Test Feature\n\nImplement something."
+
+		setup := NewSetup(mockExec)
+		_, err := setup.Run(context.Background(), specContent)
+		if err != nil {
+			t.Fatalf("Run() error = %v; want nil", err)
+		}
+
+		prompt := mockExec.ExecuteCalls[0].Prompt
+
+		// Verify prompt contains instructions for Claude
+		requiredInstructions := []string{
+			"kebab-case",
+			".orbit/worktrees/",
+			"orbit/",
+			"git worktree",
+			"WORKTREE_PATH:",
+		}
+
+		for _, instruction := range requiredInstructions {
+			if !strings.Contains(prompt, instruction) {
+				t.Errorf("prompt missing required instruction: %q", instruction)
+			}
+		}
+	})
+
 	t.Run("returns error on execution failure", func(t *testing.T) {
 		mockExec := &MockExecutor{
 			ExecuteError: errors.New("execution failed"),
