@@ -215,14 +215,39 @@ func TestInitCmd_WithPreset(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	// Check file contains preset
+	// Check file contains full workflow steps
 	configPath := filepath.Join(tempDir, ".orbit", "config.toml")
 	content, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("failed to read config file: %v", err)
 	}
-	if !strings.Contains(string(content), `preset = "tdd"`) {
-		t.Errorf("config file missing preset = \"tdd\"")
+	contentStr := string(content)
+
+	// Should have workflow name
+	if !strings.Contains(contentStr, `name = "tdd"`) {
+		t.Errorf("config file missing workflow name")
+	}
+
+	// Should have TDD steps
+	if !strings.Contains(contentStr, `name = "red"`) {
+		t.Errorf("config file missing red step")
+	}
+	if !strings.Contains(contentStr, `name = "green"`) {
+		t.Errorf("config file missing green step")
+	}
+	if !strings.Contains(contentStr, `name = "refactor"`) {
+		t.Errorf("config file missing refactor step")
+	}
+	if !strings.Contains(contentStr, `name = "review"`) {
+		t.Errorf("config file missing review step")
+	}
+
+	// Should have gate configuration
+	if !strings.Contains(contentStr, "gate = true") {
+		t.Errorf("config file missing gate = true")
+	}
+	if !strings.Contains(contentStr, `on_fail = "refactor"`) {
+		t.Errorf("config file missing on_fail")
 	}
 
 	// Check output mentions preset

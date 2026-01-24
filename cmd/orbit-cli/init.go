@@ -163,7 +163,77 @@ func generateConfigContent(preset string) string {
 		return DefaultConfigTemplate
 	}
 
-	// Generate config with preset workflow
+	// Get the preset workflow
+	w, err := workflow.GetPreset(workflow.PresetName(preset))
+	if err != nil {
+		// Fallback to just the preset name if something goes wrong
+		return generateConfigWithPresetName(preset)
+	}
+
+	// Generate config with full workflow steps
+	var sb strings.Builder
+	sb.WriteString(`# Orbit CLI Configuration
+# See: https://github.com/flashingpumpkin/orbit-cli
+
+# Workflow configuration (`)
+	sb.WriteString(preset)
+	sb.WriteString(` preset)
+# Modify these steps to customise the workflow.
+
+[workflow]
+name = "`)
+	sb.WriteString(preset)
+	sb.WriteString(`"
+
+`)
+
+	// Write each step
+	for _, step := range w.Steps {
+		sb.WriteString("[[workflow.steps]]\n")
+		sb.WriteString(`name = "`)
+		sb.WriteString(step.Name)
+		sb.WriteString("\"\n")
+		sb.WriteString(`prompt = """
+`)
+		sb.WriteString(step.Prompt)
+		sb.WriteString("\n\"\"\"\n")
+		if step.Gate {
+			sb.WriteString("gate = true\n")
+		}
+		if step.OnFail != "" {
+			sb.WriteString(`on_fail = "`)
+			sb.WriteString(step.OnFail)
+			sb.WriteString("\"\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(`# Custom prompt template for Claude. Uncomment and modify to customise.
+# Available placeholders:
+#   {{files}}   - List of spec file paths (formatted as "- /path/to/file")
+#   {{plural}}  - "s" if multiple files, empty string otherwise
+#   {{promise}} - The completion promise string (from --promise flag)
+#
+# prompt = """
+# Implement the user stories in the following spec file{{plural}}:
+#
+# {{files}}
+# """
+
+# Custom agents that Claude can delegate to via the Task tool.
+# Each agent needs a description and prompt; tools and model are optional.
+#
+# [agents.my-agent]
+# description = "Brief description shown in agent list"
+# prompt = "Detailed instructions for the agent"
+# tools = ["Read", "Write", "Bash"]  # optional: restrict available tools
+# model = "sonnet"                    # optional: override model for this agent
+`)
+	return sb.String()
+}
+
+// generateConfigWithPresetName generates config with just the preset name (fallback).
+func generateConfigWithPresetName(preset string) string {
 	var sb strings.Builder
 	sb.WriteString(`# Orbit CLI Configuration
 # See: https://github.com/flashingpumpkin/orbit-cli
