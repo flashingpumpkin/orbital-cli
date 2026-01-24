@@ -15,6 +15,7 @@ import (
 	"github.com/flashingpumpkin/orbit-cli/internal/output"
 	"github.com/flashingpumpkin/orbit-cli/internal/spec"
 	"github.com/flashingpumpkin/orbit-cli/internal/state"
+	"github.com/flashingpumpkin/orbit-cli/internal/worktree"
 )
 
 var continueCmd = &cobra.Command{
@@ -58,33 +59,54 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
+	// Check for worktree state first
+	var wtState *worktree.WorktreeState
+	var wtStateManager *worktree.StateManager
+	wtStateManager = worktree.NewStateManager(wd)
+	worktrees, err := wtStateManager.List()
+	if err == nil && len(worktrees) > 0 {
+		// For now, use the first worktree (could add TUI picker later)
+		wt := worktrees[0]
+		wtState = &wt
+		fmt.Printf("Found worktree session: %s (branch: %s)\n", wtState.Path, wtState.Branch)
+	}
+
 	var st *state.State
 	var files []string
 	var sessID string
+	effectiveWorkingDir := wd
 
-	// Try to load existing state
-	if state.Exists(wd) {
-		st, err = state.Load(wd)
-		if err != nil {
-			return fmt.Errorf("failed to load state: %w", err)
+	// If worktree state exists, use its context
+	if wtState != nil {
+		files = wtState.SpecFiles
+		sessID = wtState.SessionID
+		effectiveWorkingDir = wtState.Path
+		fmt.Printf("Resuming in worktree: %s\n\n", effectiveWorkingDir)
+	} else {
+		// Try to load existing state
+		if state.Exists(wd) {
+			st, err = state.Load(wd)
+			if err != nil {
+				return fmt.Errorf("failed to load state: %w", err)
+			}
+
+			// Check if an instance is already running (PID is alive)
+			if !st.IsStale() {
+				return fmt.Errorf("orbit-cli instance already running (PID: %d)", st.PID)
+			}
+
+			sessID = st.SessionID
+			files = st.ActiveFiles
 		}
 
-		// Check if an instance is already running (PID is alive)
-		if !st.IsStale() {
-			return fmt.Errorf("orbit-cli instance already running (PID: %d)", st.PID)
+		// Also check for queued files
+		stateDir := state.StateDir(wd)
+		queue, err := state.LoadQueue(stateDir)
+		if err == nil && !queue.IsEmpty() {
+			queuedFiles := queue.Pop()
+			files = append(files, queuedFiles...)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d queued file(s)\n", len(queuedFiles))
 		}
-
-		sessID = st.SessionID
-		files = st.ActiveFiles
-	}
-
-	// Also check for queued files
-	stateDir := state.StateDir(wd)
-	queue, err := state.LoadQueue(stateDir)
-	if err == nil && !queue.IsEmpty() {
-		queuedFiles := queue.Pop()
-		files = append(files, queuedFiles...)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d queued file(s)\n", len(queuedFiles))
 	}
 
 	// If no files from state or queue, nothing to continue
@@ -96,7 +118,9 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	if st == nil {
 		sessID = generateSessionID()
 		st = state.NewState(sessID, wd, files, "", nil)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Starting new session %s with %d file(s)...\n", sessID, len(files))
+		if wtState == nil {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Starting new session %s with %d file(s)...\n", sessID, len(files))
+		}
 	} else {
 		// Update state with merged files
 		st.ActiveFiles = files
@@ -110,8 +134,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	// Create config from flags (reuse root command flags)
 	// Note: Only use sessionID if explicitly provided via --session-id flag
 	// to resume an existing Claude conversation. Don't use orbit's internal state ID.
-	// Use wd (actual working directory) instead of workingDir flag to ensure
-	// we resume in the correct directory where the state was found.
+	// Use effectiveWorkingDir (worktree path if resuming worktree, else wd)
 	cfg := &config.Config{
 		SpecPath:          files[0],
 		MaxIterations:     iterations,
@@ -119,7 +142,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		Model:             model,
 		CheckerModel:      checkerModel,
 		MaxBudget:         budget,
-		WorkingDir:        wd,
+		WorkingDir:        effectiveWorkingDir,
 		Verbose:           verbose,
 		Debug:             debug,
 		ShowUnhandled:     showUnhandled,
@@ -258,6 +281,10 @@ func runContinue(cmd *cobra.Command, args []string) error {
 
 	// Handle state cleanup or preservation
 	if err != nil {
+		if wtState != nil {
+			fmt.Printf("\nWorktree preserved: %s\n", wtState.Path)
+			fmt.Println("Run 'orbit-cli continue' to resume.")
+		}
 		switch err {
 		case loop.ErrMaxIterationsReached:
 			os.Exit(1)
@@ -267,10 +294,55 @@ func runContinue(cmd *cobra.Command, args []string) error {
 			os.Exit(3)
 		case context.Canceled:
 			fmt.Println("\nInterrupted by user")
+			if wtState != nil {
+				fmt.Printf("Worktree preserved: %s\n", wtState.Path)
+			}
 			fmt.Println("Session state preserved. Run 'orbit-cli continue' to resume.")
 			os.Exit(130)
 		default:
 			os.Exit(4)
+		}
+	}
+
+	// Worktree mode: run merge phase and cleanup
+	if wtState != nil {
+		fmt.Println("\nWorktree mode: running merge phase...")
+
+		// Run merge phase
+		mergeResult, mergeErr := runWorktreeMerge(ctx, worktreeMergeOptions{
+			model:          mergeModel,
+			worktreePath:   wtState.Path,
+			branchName:     wtState.Branch,
+			originalBranch: wtState.OriginalBranch,
+		})
+
+		if mergeErr != nil {
+			fmt.Fprintf(os.Stderr, "Merge phase failed: %v\n", mergeErr)
+			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
+			fmt.Println("Resolve manually and run 'orbit-cli continue' to retry.")
+			os.Exit(4)
+		}
+
+		if !mergeResult.Success {
+			fmt.Fprintln(os.Stderr, "Merge phase did not complete successfully.")
+			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
+			fmt.Println("Resolve manually and run 'orbit-cli continue' to retry.")
+			os.Exit(4)
+		}
+
+		fmt.Printf("Merge cost: $%.4f\n", mergeResult.CostUSD)
+
+		// Cleanup worktree and branch
+		cleanup := worktree.NewCleanup(wd)
+		if err := cleanup.Run(wtState.Path, wtState.Branch); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup worktree: %v\n", err)
+		} else {
+			fmt.Println("Worktree and branch cleaned up.")
+		}
+
+		// Remove worktree state entry
+		if err := wtStateManager.Remove(wtState.Path); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to remove worktree state: %v\n", err)
 		}
 	}
 

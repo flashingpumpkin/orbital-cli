@@ -43,9 +43,10 @@ func GetCurrentBranch(dir string) (string, error) {
 
 // ExecutionResult contains the result of executing Claude.
 type ExecutionResult struct {
-	Output     string
-	CostUSD    float64
-	TokensUsed int
+	Output    string
+	CostUSD   float64
+	TokensIn  int
+	TokensOut int
 }
 
 // Executor runs Claude with a prompt and returns the result.
@@ -63,7 +64,8 @@ type SetupResult struct {
 	WorktreePath string
 	BranchName   string
 	CostUSD      float64
-	TokensUsed   int
+	TokensIn     int
+	TokensOut    int
 }
 
 // NewSetup creates a new Setup instance.
@@ -103,7 +105,8 @@ func (s *Setup) RunWithOptions(ctx context.Context, specContent string, opts Set
 		WorktreePath: path,
 		BranchName:   branch,
 		CostUSD:      result.CostUSD,
-		TokensUsed:   result.TokensUsed,
+		TokensIn:     result.TokensIn,
+		TokensOut:    result.TokensOut,
 	}, nil
 }
 

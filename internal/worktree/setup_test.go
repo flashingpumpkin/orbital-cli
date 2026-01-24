@@ -27,7 +27,7 @@ func TestSetupPhase(t *testing.T) {
 			ExecuteResult: &ExecutionResult{
 				Output:     "WORKTREE_PATH: .orbit/worktrees/add-user-auth\nBRANCH_NAME: orbit/add-user-auth",
 				CostUSD:    0.01,
-				TokensUsed: 100,
+				TokensIn: 50, TokensOut: 50,
 			},
 		}
 
@@ -63,7 +63,7 @@ func TestSetupPhase(t *testing.T) {
 			ExecuteResult: &ExecutionResult{
 				Output:     "WORKTREE_PATH: .orbit/worktrees/test-feature\nBRANCH_NAME: orbit/test-feature",
 				CostUSD:    0.01,
-				TokensUsed: 100,
+				TokensIn: 50, TokensOut: 50,
 			},
 		}
 
@@ -146,7 +146,7 @@ func TestSetupPhase(t *testing.T) {
 			ExecuteResult: &ExecutionResult{
 				Output:     "WORKTREE_PATH: .orbit/worktrees/my-custom-name\nBRANCH_NAME: orbit/my-custom-name",
 				CostUSD:    0.01,
-				TokensUsed: 100,
+				TokensIn: 50, TokensOut: 50,
 			},
 		}
 
@@ -174,9 +174,10 @@ func TestSetupPhase(t *testing.T) {
 	t.Run("captures cost and tokens from execution", func(t *testing.T) {
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:     "WORKTREE_PATH: .orbit/worktrees/test\nBRANCH_NAME: orbit/test",
-				CostUSD:    0.05,
-				TokensUsed: 500,
+				Output:    "WORKTREE_PATH: .orbit/worktrees/test\nBRANCH_NAME: orbit/test",
+				CostUSD:   0.05,
+				TokensIn:  200,
+				TokensOut: 300,
 			},
 		}
 
@@ -190,8 +191,12 @@ func TestSetupPhase(t *testing.T) {
 			t.Errorf("CostUSD = %v; want 0.05", result.CostUSD)
 		}
 
-		if result.TokensUsed != 500 {
-			t.Errorf("TokensUsed = %d; want 500", result.TokensUsed)
+		if result.TokensIn != 200 {
+			t.Errorf("TokensIn = %d; want 200", result.TokensIn)
+		}
+
+		if result.TokensOut != 300 {
+			t.Errorf("TokensOut = %d; want 300", result.TokensOut)
 		}
 	})
 }
