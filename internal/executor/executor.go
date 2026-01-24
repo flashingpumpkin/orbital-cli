@@ -1,0 +1,256 @@
+// Package executor provides functionality to execute Claude CLI commands.
+package executor
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os/exec"
+	"strings"
+	"time"
+
+	"github.com/flashingpumpkin/orbit-cli/internal/config"
+	"github.com/flashingpumpkin/orbit-cli/internal/output"
+)
+
+// ExecutionResult contains the result of a Claude CLI execution.
+type ExecutionResult struct {
+	// Output is the captured stdout from the Claude process.
+	Output string
+
+	// ExitCode is the exit code of the Claude process.
+	ExitCode int
+
+	// Duration is how long the execution took.
+	Duration time.Duration
+
+	// TokensUsed is the number of tokens used during execution.
+	TokensUsed int
+
+	// CostUSD is the estimated cost in USD for the execution.
+	CostUSD float64
+
+	// Completed indicates whether the execution completed successfully.
+	Completed bool
+
+	// Error contains any error that occurred during execution.
+	Error error
+}
+
+// Executor manages the execution of Claude CLI commands.
+type Executor struct {
+	config       *config.Config
+	claudeCmd    string
+	streamWriter io.Writer
+	verbose      bool
+}
+
+// New creates a new Executor with the given configuration.
+func New(cfg *config.Config) *Executor {
+	return &Executor{
+		config:    cfg,
+		claudeCmd: "claude",
+		verbose:   cfg.Verbose,
+	}
+}
+
+// SetStreamWriter sets the writer for streaming output.
+func (e *Executor) SetStreamWriter(w io.Writer) {
+	e.streamWriter = w
+}
+
+// GetCommand returns the full command string that would be executed.
+func (e *Executor) GetCommand(prompt string) string {
+	args := e.BuildArgs(prompt)
+	// Quote args that contain spaces
+	quotedArgs := make([]string, len(args))
+	for i, arg := range args {
+		if strings.Contains(arg, " ") || strings.Contains(arg, "\n") {
+			quotedArgs[i] = fmt.Sprintf("%q", arg)
+		} else {
+			quotedArgs[i] = arg
+		}
+	}
+	return e.claudeCmd + " " + strings.Join(quotedArgs, " ")
+}
+
+// BuildArgs constructs the command-line arguments for the Claude CLI.
+func (e *Executor) BuildArgs(prompt string) []string {
+	args := []string{
+		"-p",
+		"--output-format", "stream-json",
+		"--verbose",
+		"--dangerously-skip-permissions",
+		"--model", e.config.Model,
+		"--max-budget-usd", fmt.Sprintf("%.2f", e.config.MaxBudget),
+	}
+
+	if e.config.SessionID != "" {
+		args = append(args, "--resume", e.config.SessionID)
+	}
+
+	if e.config.SystemPrompt != "" {
+		args = append(args, "--append-system-prompt", e.config.SystemPrompt)
+	}
+
+	if e.config.MaxTurns > 0 {
+		args = append(args, "--max-turns", fmt.Sprintf("%d", e.config.MaxTurns))
+	}
+
+	if e.config.Agents != "" {
+		args = append(args, "--agents", e.config.Agents)
+	}
+
+	args = append(args, prompt)
+
+	return args
+}
+
+// extractStats parses the raw output and extracts token count and cost.
+func extractStats(rawOutput string) (int, float64) {
+	parser := output.NewParser()
+	for _, line := range strings.Split(rawOutput, "\n") {
+		parser.ParseLine([]byte(line))
+	}
+	stats := parser.GetStats()
+	return stats.TokensIn + stats.TokensOut, stats.CostUSD
+}
+
+// Execute runs the Claude CLI with the given prompt.
+// It respects context cancellation and returns an error if Claude is not in PATH.
+// If a stream writer is set, output is streamed line-by-line as it arrives.
+func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult, error) {
+	// Check if the command exists in PATH
+	cmdPath, err := exec.LookPath(e.claudeCmd)
+	if err != nil {
+		return nil, fmt.Errorf("claude not found in PATH: %w", err)
+	}
+
+	args := e.BuildArgs(prompt)
+	cmd := exec.CommandContext(ctx, cmdPath, args...)
+
+	// Use pipe for streaming if writer is set, otherwise buffer
+	var stdout bytes.Buffer
+
+	if e.streamWriter != nil {
+		stdoutPipe, err := cmd.StdoutPipe()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+		}
+
+		startTime := time.Now()
+		if err := cmd.Start(); err != nil {
+			return nil, fmt.Errorf("failed to start command: %w", err)
+		}
+
+		// Read and stream output line by line
+		scanner := bufio.NewScanner(stdoutPipe)
+		// Increase buffer size for long lines
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 1024*1024)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			stdout.WriteString(line)
+			stdout.WriteString("\n")
+			// Write to stream writer
+			_, _ = fmt.Fprintln(e.streamWriter, line)
+		}
+
+		runErr := cmd.Wait()
+		duration := time.Since(startTime)
+
+		// Handle context cancellation
+		if ctx.Err() != nil {
+			tokens, cost := extractStats(stdout.String())
+			return &ExecutionResult{
+				Output:     stdout.String(),
+				Duration:   duration,
+				TokensUsed: tokens,
+				CostUSD:    cost,
+				Completed:  false,
+				Error:      ctx.Err(),
+			}, ctx.Err()
+		}
+
+		// Handle command execution error
+		if runErr != nil {
+			exitCode := 1
+			if exitErr, ok := runErr.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			}
+			tokens, cost := extractStats(stdout.String())
+			return &ExecutionResult{
+				Output:     stdout.String(),
+				ExitCode:   exitCode,
+				Duration:   duration,
+				TokensUsed: tokens,
+				CostUSD:    cost,
+				Completed:  false,
+				Error:      runErr,
+			}, nil
+		}
+
+		tokens, cost := extractStats(stdout.String())
+		return &ExecutionResult{
+			Output:     stdout.String(),
+			ExitCode:   0,
+			Duration:   duration,
+			TokensUsed: tokens,
+			CostUSD:    cost,
+			Completed:  true,
+			Error:      nil,
+		}, nil
+	}
+
+	// Non-streaming path (original behavior)
+	cmd.Stdout = &stdout
+
+	startTime := time.Now()
+	runErr := cmd.Run()
+	duration := time.Since(startTime)
+
+	// Handle context cancellation - check this first as it takes priority
+	if ctx.Err() != nil {
+		tokens, cost := extractStats(stdout.String())
+		return &ExecutionResult{
+			Output:     stdout.String(),
+			Duration:   duration,
+			TokensUsed: tokens,
+			CostUSD:    cost,
+			Completed:  false,
+			Error:      ctx.Err(),
+		}, ctx.Err()
+	}
+
+	// Handle command execution error
+	if runErr != nil {
+		exitCode := 1
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+		tokens, cost := extractStats(stdout.String())
+		return &ExecutionResult{
+			Output:     stdout.String(),
+			ExitCode:   exitCode,
+			Duration:   duration,
+			TokensUsed: tokens,
+			CostUSD:    cost,
+			Completed:  false,
+			Error:      runErr,
+		}, nil
+	}
+
+	tokens, cost := extractStats(stdout.String())
+	return &ExecutionResult{
+		Output:     stdout.String(),
+		ExitCode:   0,
+		Duration:   duration,
+		TokensUsed: tokens,
+		CostUSD:    cost,
+		Completed:  true,
+		Error:      nil,
+	}, nil
+}

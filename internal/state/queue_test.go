@@ -1,0 +1,373 @@
+package state
+
+import (
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+)
+
+func TestQueue_NewQueueReturnsEmptyQueue(t *testing.T) {
+	q := NewQueue()
+
+	if !q.IsEmpty() {
+		t.Error("NewQueue() should return empty queue")
+	}
+	if len(q.QueuedFiles) != 0 {
+		t.Errorf("QueuedFiles length = %d; want 0", len(q.QueuedFiles))
+	}
+	if len(q.AddedAt) != 0 {
+		t.Errorf("AddedAt length = %d; want 0", len(q.AddedAt))
+	}
+}
+
+func TestQueue_LoadQueue_ReturnsEmptyQueueWhenNoFile(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+
+	// Create state directory but no queue file
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+
+	if !q.IsEmpty() {
+		t.Error("LoadQueue() should return empty queue when no file exists")
+	}
+}
+
+func TestQueue_SaveAndLoad_RoundTrip(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	// Create queue with files
+	original := NewQueue()
+	original.stateDir = stateDir
+	original.QueuedFiles = []string{"/path/to/spec1.md", "/path/to/spec2.md"}
+	original.AddedAt = map[string]time.Time{
+		"/path/to/spec1.md": time.Now().Add(-10 * time.Minute),
+		"/path/to/spec2.md": time.Now().Add(-5 * time.Minute),
+	}
+
+	err := original.save()
+	if err != nil {
+		t.Fatalf("save() error = %v", err)
+	}
+
+	// Load queue
+	loaded, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+
+	if len(loaded.QueuedFiles) != 2 {
+		t.Errorf("QueuedFiles length = %d; want 2", len(loaded.QueuedFiles))
+	}
+	if loaded.QueuedFiles[0] != "/path/to/spec1.md" {
+		t.Errorf("QueuedFiles[0] = %q; want %q", loaded.QueuedFiles[0], "/path/to/spec1.md")
+	}
+}
+
+func TestQueue_Add_AddsFileToQueue(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+
+	err := q.Add("/path/to/spec.md")
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	if q.IsEmpty() {
+		t.Error("queue should not be empty after Add()")
+	}
+	if len(q.QueuedFiles) != 1 {
+		t.Errorf("QueuedFiles length = %d; want 1", len(q.QueuedFiles))
+	}
+	if q.QueuedFiles[0] != "/path/to/spec.md" {
+		t.Errorf("QueuedFiles[0] = %q; want %q", q.QueuedFiles[0], "/path/to/spec.md")
+	}
+	if _, ok := q.AddedAt["/path/to/spec.md"]; !ok {
+		t.Error("AddedAt should contain the added file")
+	}
+}
+
+func TestQueue_Add_DuplicateSilentlyIgnored(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+
+	// Add same file twice
+	err := q.Add("/path/to/spec.md")
+	if err != nil {
+		t.Fatalf("first Add() error = %v", err)
+	}
+
+	err = q.Add("/path/to/spec.md")
+	if err != nil {
+		t.Fatalf("second Add() error = %v", err)
+	}
+
+	// Should still have only one entry
+	if len(q.QueuedFiles) != 1 {
+		t.Errorf("QueuedFiles length = %d; want 1 (duplicates should be ignored)", len(q.QueuedFiles))
+	}
+}
+
+func TestQueue_Remove_RemovesFileFromQueue(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+	_ = q.Add("/path/to/spec.md")
+
+	err := q.Remove("/path/to/spec.md")
+	if err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+
+	if !q.IsEmpty() {
+		t.Error("queue should be empty after removing only file")
+	}
+	if _, ok := q.AddedAt["/path/to/spec.md"]; ok {
+		t.Error("AddedAt should not contain removed file")
+	}
+}
+
+func TestQueue_Remove_ReturnsErrorWhenFileNotFound(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+
+	err := q.Remove("/nonexistent.md")
+	if err == nil {
+		t.Error("Remove() should return error for nonexistent file")
+	}
+}
+
+func TestQueue_Pop_ReturnsAndClearsAllFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+	_ = q.Add("/path/to/spec1.md")
+	_ = q.Add("/path/to/spec2.md")
+
+	files := q.Pop()
+
+	if len(files) != 2 {
+		t.Errorf("Pop() returned %d files; want 2", len(files))
+	}
+	if !q.IsEmpty() {
+		t.Error("queue should be empty after Pop()")
+	}
+	if len(q.AddedAt) != 0 {
+		t.Error("AddedAt should be empty after Pop()")
+	}
+}
+
+func TestQueue_Pop_ReturnsEmptySliceWhenEmpty(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+
+	files := q.Pop()
+
+	if files == nil {
+		t.Error("Pop() should return empty slice, not nil")
+	}
+	if len(files) != 0 {
+		t.Errorf("Pop() returned %d files; want 0", len(files))
+	}
+}
+
+func TestQueue_Contains_ReturnsTrueForQueuedFile(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+	_ = q.Add("/path/to/spec.md")
+
+	if !q.Contains("/path/to/spec.md") {
+		t.Error("Contains() = false; want true for queued file")
+	}
+}
+
+func TestQueue_Contains_ReturnsFalseForNonQueuedFile(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+
+	if q.Contains("/nonexistent.md") {
+		t.Error("Contains() = true; want false for non-queued file")
+	}
+}
+
+func TestQueue_IsEmpty_ReturnsTrueWhenEmpty(t *testing.T) {
+	q := NewQueue()
+
+	if !q.IsEmpty() {
+		t.Error("IsEmpty() = false; want true for empty queue")
+	}
+}
+
+func TestQueue_IsEmpty_ReturnsFalseWhenNotEmpty(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+	_ = q.Add("/path/to/spec.md")
+
+	if q.IsEmpty() {
+		t.Error("IsEmpty() = true; want false for non-empty queue")
+	}
+}
+
+func TestQueue_ConcurrentAdd_DoesNotCorrupt(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	// Run multiple concurrent adds
+	const numGoroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			// Each goroutine loads its own queue instance
+			q, err := LoadQueue(stateDir)
+			if err != nil {
+				t.Errorf("LoadQueue() error = %v", err)
+				return
+			}
+			err = q.Add("/path/to/spec" + string(rune('A'+idx)) + ".md")
+			if err != nil {
+				t.Errorf("Add() error = %v", err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Load final queue and verify integrity
+	finalQ, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+
+	// Should have exactly numGoroutines entries
+	if len(finalQ.QueuedFiles) != numGoroutines {
+		t.Errorf("QueuedFiles length = %d; want %d (concurrent adds may have corrupted)", len(finalQ.QueuedFiles), numGoroutines)
+	}
+
+	// Verify AddedAt entries match QueuedFiles
+	if len(finalQ.AddedAt) != len(finalQ.QueuedFiles) {
+		t.Errorf("AddedAt length = %d; QueuedFiles length = %d; should match", len(finalQ.AddedAt), len(finalQ.QueuedFiles))
+	}
+
+	for _, f := range finalQ.QueuedFiles {
+		if _, ok := finalQ.AddedAt[f]; !ok {
+			t.Errorf("AddedAt missing entry for %q", f)
+		}
+	}
+}
+
+func TestQueue_Add_PersistsToFile(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q1, _ := LoadQueue(stateDir)
+	_ = q1.Add("/path/to/spec.md")
+
+	// Load from a new queue instance
+	q2, _ := LoadQueue(stateDir)
+
+	if !q2.Contains("/path/to/spec.md") {
+		t.Error("Add() should persist to file, but new queue instance doesn't contain added file")
+	}
+}
+
+func TestQueue_Remove_PersistsToFile(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q1, _ := LoadQueue(stateDir)
+	_ = q1.Add("/path/to/spec.md")
+	_ = q1.Remove("/path/to/spec.md")
+
+	// Load from a new queue instance
+	q2, _ := LoadQueue(stateDir)
+
+	if q2.Contains("/path/to/spec.md") {
+		t.Error("Remove() should persist to file, but new queue instance still contains removed file")
+	}
+}
+
+func TestQueue_Pop_PersistsToFile(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbit", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q1, _ := LoadQueue(stateDir)
+	_ = q1.Add("/path/to/spec.md")
+	_ = q1.Pop()
+
+	// Load from a new queue instance
+	q2, _ := LoadQueue(stateDir)
+
+	if !q2.IsEmpty() {
+		t.Error("Pop() should persist to file, but new queue instance is not empty")
+	}
+}

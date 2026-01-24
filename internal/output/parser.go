@@ -1,0 +1,339 @@
+// Package output provides parsing utilities for Claude CLI stream-json output.
+package output
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+// StreamEvent represents a parsed event from the Claude CLI output stream.
+type StreamEvent struct {
+	Type      string
+	Content   string
+	Timestamp time.Time
+	// Tool-related fields
+	ToolName  string
+	ToolID    string
+	ToolInput string
+}
+
+// OutputStats contains accumulated statistics from parsing Claude CLI output.
+type OutputStats struct {
+	TokensIn  int
+	TokensOut int
+	CostUSD   float64
+	Duration  time.Duration
+}
+
+// Parser accumulates statistics while parsing Claude CLI stream-json output.
+type Parser struct {
+	stats OutputStats
+}
+
+// NewParser creates a new Parser instance.
+func NewParser() *Parser {
+	return &Parser{}
+}
+
+type messageContent struct {
+	Content []contentBlock `json:"content"`
+	Usage   *usageStats    `json:"usage,omitempty"`
+}
+
+type usageStats struct {
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+}
+
+type contentBlock struct {
+	Type      string `json:"type"`
+	Text      string `json:"text"`
+	ID        string `json:"id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Input     any    `json:"input,omitempty"`
+	ToolUseID string `json:"tool_use_id,omitempty"`
+	Content   string `json:"content,omitempty"`
+}
+
+type toolUseResult struct {
+	Filenames  []string `json:"filenames,omitempty"`
+	DurationMs int      `json:"durationMs,omitempty"`
+	NumFiles   int      `json:"numFiles,omitempty"`
+	Truncated  bool     `json:"truncated,omitempty"`
+}
+
+type errorContent struct {
+	Message string `json:"message"`
+}
+
+type deltaContent struct {
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	PartialJSON string `json:"partial_json,omitempty"`
+}
+
+type toolBlock struct {
+	Type  string `json:"type"`
+	ID    string `json:"id,omitempty"`
+	Name  string `json:"name,omitempty"`
+	Input any    `json:"input,omitempty"`
+}
+
+// ParseLine parses a single JSON line from Claude CLI stream-json output.
+// Returns nil event (not error) for malformed JSON or empty lines.
+func (p *Parser) ParseLine(line []byte) (*StreamEvent, error) {
+	// Handle empty or whitespace-only lines
+	trimmed := bytes.TrimSpace(line)
+	if len(trimmed) == 0 {
+		return nil, nil
+	}
+
+	// Parse JSON - return nil for malformed JSON (not an error per requirements)
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &raw); err != nil {
+		return nil, nil
+	}
+
+	// Extract type
+	var eventType string
+	if typeRaw, ok := raw["type"]; ok {
+		if err := json.Unmarshal(typeRaw, &eventType); err != nil {
+			return nil, nil
+		}
+	}
+
+	event := &StreamEvent{
+		Type:      eventType,
+		Timestamp: time.Now(),
+	}
+
+	// Extract content based on type
+	switch eventType {
+	case "assistant":
+		p.parseAssistantMessage(raw, event)
+
+	case "user":
+		p.parseUserMessage(raw, event)
+
+	case "result":
+		p.parseResultStats(raw)
+		event.Content = p.parseResultSubtype(raw)
+
+	case "error":
+		event.Content = p.parseErrorContent(raw)
+
+	case "content_block_delta":
+		event.Content = p.parseDeltaContent(raw)
+
+	case "content_block_start":
+		p.parseContentBlockStart(raw, event)
+
+	case "content_block_stop":
+		// Just mark the event type, no additional parsing needed
+
+	case "system":
+		event.Content = p.parseSystemContent(raw)
+	}
+
+	return event, nil
+}
+
+// parseAssistantMessage extracts content and usage stats from assistant message.
+func (p *Parser) parseAssistantMessage(raw map[string]json.RawMessage, event *StreamEvent) {
+	msgRaw, ok := raw["message"]
+	if !ok {
+		return
+	}
+
+	var msg messageContent
+	if err := json.Unmarshal(msgRaw, &msg); err != nil {
+		return
+	}
+
+	for _, block := range msg.Content {
+		switch block.Type {
+		case "text":
+			event.Content += block.Text
+		case "tool_use":
+			event.ToolName = block.Name
+			event.ToolID = block.ID
+			if block.Input != nil {
+				if inputBytes, err := json.Marshal(block.Input); err == nil {
+					event.ToolInput = string(inputBytes)
+				}
+			}
+		}
+	}
+
+	// Extract usage stats if present
+	if msg.Usage != nil {
+		p.stats.TokensIn = msg.Usage.InputTokens + msg.Usage.CacheCreationInputTokens + msg.Usage.CacheReadInputTokens
+		p.stats.TokensOut = msg.Usage.OutputTokens
+	}
+}
+
+// parseUserMessage extracts tool result info from user message.
+func (p *Parser) parseUserMessage(raw map[string]json.RawMessage, event *StreamEvent) {
+	// Parse tool_use_result if present
+	if resultRaw, ok := raw["tool_use_result"]; ok {
+		var result toolUseResult
+		if err := json.Unmarshal(resultRaw, &result); err == nil {
+			if len(result.Filenames) > 0 {
+				event.Content = result.Filenames[0]
+				if len(result.Filenames) > 1 {
+					event.Content = fmt.Sprintf("%d files", len(result.Filenames))
+				}
+			}
+		}
+	}
+
+	// Parse message content for tool_result type
+	msgRaw, ok := raw["message"]
+	if !ok {
+		return
+	}
+
+	var msg messageContent
+	if err := json.Unmarshal(msgRaw, &msg); err != nil {
+		return
+	}
+
+	for _, block := range msg.Content {
+		if block.Type == "tool_result" {
+			event.ToolID = block.ToolUseID
+			if event.Content == "" && block.Content != "" {
+				// Truncate long content
+				content := block.Content
+				if len(content) > 100 {
+					content = content[:100] + "..."
+				}
+				event.Content = content
+			}
+		}
+	}
+}
+
+// parseResultStats extracts and accumulates statistics from result message.
+// The result event format from Claude Code CLI is:
+//
+//	{"type":"result","total_cost_usd":0.07,"duration_ms":2638,"usage":{"input_tokens":3,"cache_creation_input_tokens":10507,"cache_read_input_tokens":14155,"output_tokens":12}}
+func (p *Parser) parseResultStats(raw map[string]json.RawMessage) {
+	// Extract total_cost_usd (note: field is "total_cost_usd" not "cost_usd")
+	if costRaw, ok := raw["total_cost_usd"]; ok {
+		var cost float64
+		if err := json.Unmarshal(costRaw, &cost); err == nil {
+			p.stats.CostUSD += cost
+		}
+	}
+
+	// Extract duration_ms and convert to time.Duration (note: field is "duration_ms" not "duration_seconds")
+	if durationRaw, ok := raw["duration_ms"]; ok {
+		var durationMs int64
+		if err := json.Unmarshal(durationRaw, &durationMs); err == nil {
+			p.stats.Duration += time.Duration(durationMs) * time.Millisecond
+		}
+	}
+
+	// Extract token stats from nested usage object
+	if usageRaw, ok := raw["usage"]; ok {
+		var usage usageStats
+		if err := json.Unmarshal(usageRaw, &usage); err == nil {
+			p.stats.TokensIn += usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+			p.stats.TokensOut += usage.OutputTokens
+		}
+	}
+}
+
+// parseErrorContent extracts error message.
+func (p *Parser) parseErrorContent(raw map[string]json.RawMessage) string {
+	errRaw, ok := raw["error"]
+	if !ok {
+		return ""
+	}
+
+	var errContent errorContent
+	if err := json.Unmarshal(errRaw, &errContent); err != nil {
+		return ""
+	}
+	return errContent.Message
+}
+
+// parseDeltaContent extracts text from content_block_delta.
+func (p *Parser) parseDeltaContent(raw map[string]json.RawMessage) string {
+	deltaRaw, ok := raw["delta"]
+	if !ok {
+		return ""
+	}
+
+	var delta deltaContent
+	if err := json.Unmarshal(deltaRaw, &delta); err != nil {
+		return ""
+	}
+	return delta.Text
+}
+
+// parseSystemContent extracts message from system event.
+func (p *Parser) parseSystemContent(raw map[string]json.RawMessage) string {
+	msgRaw, ok := raw["message"]
+	if !ok {
+		return ""
+	}
+
+	var msg string
+	if err := json.Unmarshal(msgRaw, &msg); err != nil {
+		return ""
+	}
+	return msg
+}
+
+// parseContentBlockStart extracts tool information from content_block_start.
+func (p *Parser) parseContentBlockStart(raw map[string]json.RawMessage, event *StreamEvent) {
+	cbRaw, ok := raw["content_block"]
+	if !ok {
+		return
+	}
+
+	var cb toolBlock
+	if err := json.Unmarshal(cbRaw, &cb); err != nil {
+		return
+	}
+
+	event.Content = cb.Type
+	if cb.Type == "tool_use" {
+		event.ToolName = cb.Name
+		event.ToolID = cb.ID
+		if cb.Input != nil {
+			if inputBytes, err := json.Marshal(cb.Input); err == nil {
+				event.ToolInput = string(inputBytes)
+			}
+		}
+	}
+}
+
+// parseResultSubtype extracts the subtype from result events.
+func (p *Parser) parseResultSubtype(raw map[string]json.RawMessage) string {
+	subtypeRaw, ok := raw["subtype"]
+	if !ok {
+		return ""
+	}
+
+	var subtype string
+	if err := json.Unmarshal(subtypeRaw, &subtype); err != nil {
+		return ""
+	}
+	return subtype
+}
+
+// GetStats returns the accumulated statistics from parsed output.
+func (p *Parser) GetStats() *OutputStats {
+	return &OutputStats{
+		TokensIn:  p.stats.TokensIn,
+		TokensOut: p.stats.TokensOut,
+		CostUSD:   p.stats.CostUSD,
+		Duration:  p.stats.Duration,
+	}
+}
