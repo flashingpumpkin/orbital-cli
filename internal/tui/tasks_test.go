@@ -4,6 +4,10 @@ import (
 	"testing"
 )
 
+// Tests for the TUI's TaskTracker wrapper.
+// The actual task tracking logic is tested in internal/tasks/tracker_test.go.
+// These tests verify that the TUI wrapper works correctly.
+
 func TestNewTaskTracker(t *testing.T) {
 	tracker := NewTaskTracker()
 

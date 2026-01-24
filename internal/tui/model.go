@@ -5,15 +5,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
 )
 
-// Task represents a single task item in the task panel.
-type Task struct {
-	ID         string
-	Content    string
-	Status     string // "pending", "in_progress", "completed"
-	ActiveForm string
-}
+// Task is an alias to the shared tasks.Task type for TUI use.
+type Task = tasks.Task
 
 // SessionInfo contains the file paths for the current session.
 type SessionInfo struct {

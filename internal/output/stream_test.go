@@ -109,3 +109,103 @@ func TestStreamProcessor_GetStats(t *testing.T) {
 		t.Errorf("GetStats().TokensOut = %v, want 90", stats.TokensOut)
 	}
 }
+
+func TestStreamProcessor_TaskTracking(t *testing.T) {
+	var buf bytes.Buffer
+	sp := NewStreamProcessor(&buf)
+
+	// Simulate assistant message with TodoWrite tool
+	todoWriteEvent := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[{"content":"Task 1","status":"pending","activeForm":"Working on task 1"},{"content":"Task 2","status":"in_progress","activeForm":"Working on task 2"}]}}]}}`
+	sp.ProcessLine(todoWriteEvent)
+
+	// Check that tasks were tracked
+	tracker := sp.GetTracker()
+	tasks := tracker.GetTasks()
+
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(tasks))
+	}
+
+	if tasks[0].Content != "Task 1" {
+		t.Errorf("expected first task 'Task 1', got %q", tasks[0].Content)
+	}
+	if tasks[0].Status != "pending" {
+		t.Errorf("expected first task status 'pending', got %q", tasks[0].Status)
+	}
+
+	if tasks[1].Content != "Task 2" {
+		t.Errorf("expected second task 'Task 2', got %q", tasks[1].Content)
+	}
+	if tasks[1].Status != "in_progress" {
+		t.Errorf("expected second task status 'in_progress', got %q", tasks[1].Status)
+	}
+
+	// Verify output contains task indicators
+	output := buf.String()
+	if !strings.Contains(output, "[Task]") {
+		t.Errorf("output should contain [Task] indicator, got: %q", output)
+	}
+}
+
+func TestStreamProcessor_TodosOnlyMode(t *testing.T) {
+	var buf bytes.Buffer
+	sp := NewStreamProcessor(&buf)
+	sp.SetTodosOnly(true)
+
+	// Simulate non-task tool (should be suppressed)
+	readEvent := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/some/file"}}]}}`
+	sp.ProcessLine(readEvent)
+
+	// Simulate task tool (should be shown)
+	todoWriteEvent := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[{"content":"Task 1","status":"pending"}]}}]}}`
+	sp.ProcessLine(todoWriteEvent)
+
+	output := buf.String()
+
+	// Read tool should not appear
+	if strings.Contains(output, "Read") {
+		t.Errorf("todos-only mode should suppress Read tool, got: %q", output)
+	}
+
+	// Task should appear
+	if !strings.Contains(output, "[Task]") {
+		t.Errorf("todos-only mode should show task, got: %q", output)
+	}
+}
+
+func TestStreamProcessor_PrintTaskSummary(t *testing.T) {
+	var buf bytes.Buffer
+	sp := NewStreamProcessor(&buf)
+
+	// Add some tasks via tracker
+	tracker := sp.GetTracker()
+	tracker.ProcessToolUse("TodoWrite", `{"todos":[
+		{"content":"Completed task","status":"completed"},
+		{"content":"In progress task","status":"in_progress"},
+		{"content":"Pending task","status":"pending"}
+	]}`)
+
+	// Clear buffer before summary
+	buf.Reset()
+
+	// Print summary
+	sp.PrintTaskSummary()
+
+	output := buf.String()
+
+	// Should show counts
+	if !strings.Contains(output, "1/3 completed") {
+		t.Errorf("summary should show '1/3 completed', got: %q", output)
+	}
+
+	// Should show tasks with status indicators
+	if !strings.Contains(output, "✓") {
+		t.Errorf("summary should contain completed indicator '✓', got: %q", output)
+	}
+	if !strings.Contains(output, "→") {
+		t.Errorf("summary should contain in_progress indicator '→', got: %q", output)
+	}
+	if !strings.Contains(output, "○") {
+		t.Errorf("summary should contain pending indicator '○', got: %q", output)
+	}
+}

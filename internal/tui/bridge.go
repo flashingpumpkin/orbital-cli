@@ -6,20 +6,21 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/flashingpumpkin/orbit-cli/internal/output"
+	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
 )
 
 // Bridge connects the Claude CLI stream output to the bubbletea TUI.
 // It implements io.Writer and sends messages to the tea.Program.
 type Bridge struct {
 	program *tea.Program
-	tracker *TaskTracker
+	tracker *tasks.Tracker
 	parser  *output.Parser
 
 	mu sync.Mutex
 }
 
 // NewBridge creates a new Bridge with the given program and tracker.
-func NewBridge(program *tea.Program, tracker *TaskTracker) *Bridge {
+func NewBridge(program *tea.Program, tracker *tasks.Tracker) *Bridge {
 	return &Bridge{
 		program: program,
 		tracker: tracker,
@@ -238,6 +239,6 @@ func (b *Bridge) GetParser() *output.Parser {
 }
 
 // GetTracker returns the task tracker.
-func (b *Bridge) GetTracker() *TaskTracker {
+func (b *Bridge) GetTracker() *tasks.Tracker {
 	return b.tracker
 }

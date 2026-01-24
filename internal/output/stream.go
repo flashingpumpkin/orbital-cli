@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
 )
 
 // StreamProcessor processes Claude CLI stream-json output and formats it for display.
@@ -19,14 +20,26 @@ type StreamProcessor struct {
 	currentTool   string
 	showUnhandled bool
 	todosOnly     bool
+	tracker       *tasks.Tracker
 }
 
 // NewStreamProcessor creates a new StreamProcessor.
 func NewStreamProcessor(w io.Writer) *StreamProcessor {
 	return &StreamProcessor{
-		writer: w,
-		parser: NewParser(),
+		writer:  w,
+		parser:  NewParser(),
+		tracker: tasks.NewTracker(),
 	}
+}
+
+// SetTracker sets a custom task tracker (for sharing across iterations).
+func (sp *StreamProcessor) SetTracker(tracker *tasks.Tracker) {
+	sp.tracker = tracker
+}
+
+// GetTracker returns the task tracker for external access.
+func (sp *StreamProcessor) GetTracker() *tasks.Tracker {
+	return sp.tracker
 }
 
 // SetShowUnhandled enables output of raw JSON for unhandled event types.
@@ -158,8 +171,19 @@ func (sp *StreamProcessor) printAssistant(event *StreamEvent) {
 	if event.ToolName != "" {
 		sp.currentTool = event.ToolName
 
-		// If todosOnly mode, skip non-TodoWrite tools
-		if sp.todosOnly && event.ToolName != "TodoWrite" {
+		// Process task-related tools through the tracker
+		if tasks.IsTaskTool(event.ToolName) {
+			if taskList := sp.tracker.ProcessToolUse(event.ToolName, event.ToolInput); taskList != nil {
+				sp.printTaskUpdate(taskList)
+			}
+			// In todosOnly mode, we've printed the task update, nothing more to do
+			if sp.todosOnly {
+				return
+			}
+		}
+
+		// If todosOnly mode, skip non-task tools entirely
+		if sp.todosOnly {
 			return
 		}
 
@@ -179,6 +203,33 @@ func (sp *StreamProcessor) printAssistant(event *StreamEvent) {
 	// Show text content if present and no streaming has occurred (skip in todosOnly mode)
 	if event.Content != "" && event.ToolName == "" && !sp.todosOnly {
 		sp.printText(event.Content)
+	}
+}
+
+// printTaskUpdate prints task changes in a compact format.
+func (sp *StreamProcessor) printTaskUpdate(taskList []tasks.Task) {
+	for _, task := range taskList {
+		var icon string
+		var col *color.Color
+
+		switch task.Status {
+		case "completed":
+			icon = "✓"
+			col = color.New(color.FgGreen)
+		case "in_progress":
+			icon = "→"
+			col = color.New(color.FgYellow)
+		default:
+			icon = "○"
+			col = color.New(color.Faint)
+		}
+
+		content := task.Content
+		if len(content) > 60 {
+			content = content[:60] + "..."
+		}
+
+		_, _ = col.Fprintf(sp.writer, "  [Task] %s %s\n", icon, content)
 	}
 }
 
@@ -415,4 +466,55 @@ func (sp *StreamProcessor) Write(p []byte) (n int, err error) {
 		}
 	}
 	return len(p), nil
+}
+
+// PrintTaskSummary prints a summary of all tasks at the end of execution.
+func (sp *StreamProcessor) PrintTaskSummary() {
+	summary := sp.tracker.GetSummary()
+	if summary.Total == 0 {
+		return
+	}
+
+	_, _ = fmt.Fprintln(sp.writer)
+	dim := color.New(color.Faint)
+	_, _ = dim.Fprintln(sp.writer, "────────────────────────────────────────────")
+	_, _ = dim.Fprintf(sp.writer, "Tasks: %d/%d completed", summary.Completed, summary.Total)
+	if summary.InProgress > 0 {
+		_, _ = dim.Fprintf(sp.writer, " (%d in progress)", summary.InProgress)
+	}
+	_, _ = fmt.Fprintln(sp.writer)
+
+	// Group tasks by status
+	green := color.New(color.FgGreen)
+	yellow := color.New(color.FgYellow)
+	grey := color.New(color.Faint)
+
+	// Print in-progress first (most important)
+	for _, task := range summary.Tasks {
+		if task.Status == "in_progress" {
+			_, _ = yellow.Fprintf(sp.writer, "  → %s\n", truncateContent(task.Content, 60))
+		}
+	}
+
+	// Print pending
+	for _, task := range summary.Tasks {
+		if task.Status == "pending" {
+			_, _ = grey.Fprintf(sp.writer, "  ○ %s\n", truncateContent(task.Content, 60))
+		}
+	}
+
+	// Print completed
+	for _, task := range summary.Tasks {
+		if task.Status == "completed" {
+			_, _ = green.Fprintf(sp.writer, "  ✓ %s\n", truncateContent(task.Content, 60))
+		}
+	}
+}
+
+// truncateContent truncates content to maxLen characters.
+func truncateContent(content string, maxLen int) string {
+	if len(content) > maxLen {
+		return content[:maxLen] + "..."
+	}
+	return content
 }
