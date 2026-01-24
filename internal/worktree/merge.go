@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
+
+	"github.com/flashingpumpkin/orbit-cli/internal/output"
 )
 
 // Merge handles the worktree merge phase.
@@ -51,19 +54,11 @@ func (m *Merge) Run(ctx context.Context, opts MergeOptions) (*MergeResult, error
 }
 
 // containsSuccessMarker checks if the output indicates successful merge.
-func containsSuccessMarker(output string) bool {
+// It parses stream-json to get actual text content before searching for markers.
+func containsSuccessMarker(rawOutput string) bool {
+	text := output.ExtractText(rawOutput)
 	const marker = "MERGE_SUCCESS: true"
-	return len(output) > 0 && (output == marker || len(output) >= len(marker) && output[:len(marker)] == marker || containsMarker(output, marker))
-}
-
-// containsMarker is a simple string contains check.
-func containsMarker(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(text, marker)
 }
 
 // buildMergePrompt creates the prompt for the merge phase.
@@ -123,7 +118,7 @@ func (c *Cleanup) Run(worktreePath, branchName string) error {
 		// Branch deletion might fail if it wasn't fully merged, try force delete
 		forceBranchCmd := exec.Command("git", "-C", c.workingDir, "branch", "-D", branchName)
 		if forceErr := forceBranchCmd.Run(); forceErr != nil {
-			return fmt.Errorf("failed to delete branch: %w", err)
+			return fmt.Errorf("failed to delete branch: %w", forceErr)
 		}
 	}
 

@@ -21,12 +21,24 @@ func (m *MockExecutor) Execute(ctx context.Context, prompt string) (*ExecutionRe
 	return m.ExecuteResult, m.ExecuteError
 }
 
+// streamJSON creates a stream-json formatted output line for a text delta.
+func streamJSON(text string) string {
+	// Escape quotes and newlines in text for JSON
+	escaped := strings.ReplaceAll(text, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	escaped = strings.ReplaceAll(escaped, "\n", `\n`)
+	return `{"type":"content_block_delta","delta":{"text":"` + escaped + `"}}`
+}
+
 func TestSetupPhase(t *testing.T) {
 	t.Run("invokes executor with spec content", func(t *testing.T) {
+		// Use stream-json format for output
+		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/add-user-auth\n") + "\n" +
+			streamJSON("BRANCH_NAME: orbit/add-user-auth")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:     "WORKTREE_PATH: .orbit/worktrees/add-user-auth\nBRANCH_NAME: orbit/add-user-auth",
-				CostUSD:    0.01,
+				Output:   output,
+				CostUSD:  0.01,
 				TokensIn: 50, TokensOut: 50,
 			},
 		}
@@ -59,10 +71,12 @@ func TestSetupPhase(t *testing.T) {
 	})
 
 	t.Run("prompt instructs Claude to create worktree", func(t *testing.T) {
+		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/test-feature\n") + "\n" +
+			streamJSON("BRANCH_NAME: orbit/test-feature")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:     "WORKTREE_PATH: .orbit/worktrees/test-feature\nBRANCH_NAME: orbit/test-feature",
-				CostUSD:    0.01,
+				Output:   output,
+				CostUSD:  0.01,
 				TokensIn: 50, TokensOut: 50,
 			},
 		}
@@ -108,9 +122,11 @@ func TestSetupPhase(t *testing.T) {
 	})
 
 	t.Run("returns error when path marker not found", func(t *testing.T) {
+		// Use stream-json format but without the path marker
+		output := streamJSON("I created a worktree but forgot to output the path marker.")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output: "I created a worktree but forgot to output the path marker.",
+				Output: output,
 			},
 		}
 
@@ -123,9 +139,12 @@ func TestSetupPhase(t *testing.T) {
 	})
 
 	t.Run("returns error when branch marker not found", func(t *testing.T) {
+		// Use stream-json format with path but no branch marker
+		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/test\n") + "\n" +
+			streamJSON("No branch marker here.")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output: "WORKTREE_PATH: .orbit/worktrees/test\nNo branch marker here.",
+				Output: output,
 			},
 		}
 
@@ -142,10 +161,12 @@ func TestSetupPhase(t *testing.T) {
 	})
 
 	t.Run("uses provided worktree name when specified", func(t *testing.T) {
+		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/my-custom-name\n") + "\n" +
+			streamJSON("BRANCH_NAME: orbit/my-custom-name")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:     "WORKTREE_PATH: .orbit/worktrees/my-custom-name\nBRANCH_NAME: orbit/my-custom-name",
-				CostUSD:    0.01,
+				Output:   output,
+				CostUSD:  0.01,
 				TokensIn: 50, TokensOut: 50,
 			},
 		}
@@ -172,9 +193,11 @@ func TestSetupPhase(t *testing.T) {
 	})
 
 	t.Run("captures cost and tokens from execution", func(t *testing.T) {
+		output := streamJSON("WORKTREE_PATH: .orbit/worktrees/test\n") + "\n" +
+			streamJSON("BRANCH_NAME: orbit/test")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:    "WORKTREE_PATH: .orbit/worktrees/test\nBRANCH_NAME: orbit/test",
+				Output:    output,
 				CostUSD:   0.05,
 				TokensIn:  200,
 				TokensOut: 300,
@@ -211,26 +234,29 @@ func TestExtractMarker(t *testing.T) {
 		errContains string
 	}{
 		{
-			name:   "extracts value from middle of output",
-			output: "Some text\nWORKTREE_PATH: .orbit/worktrees/test\nMore text",
+			name: "extracts value from middle of output",
+			output: streamJSON("Some text\n") + "\n" +
+				streamJSON("WORKTREE_PATH: .orbit/worktrees/test\n") + "\n" +
+				streamJSON("More text"),
 			marker: "WORKTREE_PATH: ",
 			want:   ".orbit/worktrees/test",
 		},
 		{
-			name:   "extracts value at end of output",
-			output: "Some text\nWORKTREE_PATH: .orbit/worktrees/test",
+			name: "extracts value at end of output",
+			output: streamJSON("Some text\n") + "\n" +
+				streamJSON("WORKTREE_PATH: .orbit/worktrees/test"),
 			marker: "WORKTREE_PATH: ",
 			want:   ".orbit/worktrees/test",
 		},
 		{
 			name:   "trims whitespace from value",
-			output: "WORKTREE_PATH:   .orbit/worktrees/test  \n",
+			output: streamJSON("WORKTREE_PATH:   .orbit/worktrees/test  \n"),
 			marker: "WORKTREE_PATH: ",
 			want:   ".orbit/worktrees/test",
 		},
 		{
 			name:        "returns error when marker not found",
-			output:      "No marker here",
+			output:      streamJSON("No marker here"),
 			marker:      "WORKTREE_PATH: ",
 			wantErr:     true,
 			errContains: "not found",

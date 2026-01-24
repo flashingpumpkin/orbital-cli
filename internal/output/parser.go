@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -336,4 +337,20 @@ func (p *Parser) GetStats() *OutputStats {
 		CostUSD:   p.stats.CostUSD,
 		Duration:  p.stats.Duration,
 	}
+}
+
+// ExtractText extracts all text content from raw stream-json output.
+// It parses each line as JSON and concatenates text from content_block_delta
+// and assistant message events. This is useful for searching for markers in
+// output without being affected by JSON encoding.
+func ExtractText(rawOutput string) string {
+	parser := NewParser()
+	var text strings.Builder
+	for _, line := range strings.Split(rawOutput, "\n") {
+		event, _ := parser.ParseLine([]byte(line))
+		if event != nil && event.Content != "" {
+			text.WriteString(event.Content)
+		}
+	}
+	return text.String()
 }

@@ -411,3 +411,62 @@ func TestParseLine_ResultMessageActualFormat(t *testing.T) {
 		t.Errorf("expected Duration %v, got %v", expectedDuration, stats.Duration)
 	}
 }
+
+func TestExtractText(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty input",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "plain text (non-JSON)",
+			input:    "Hello world",
+			expected: "",
+		},
+		{
+			name:     "single content_block_delta",
+			input:    `{"type":"content_block_delta","delta":{"text":"Hello"}}`,
+			expected: "Hello",
+		},
+		{
+			name: "multiple content_block_delta lines",
+			input: `{"type":"content_block_delta","delta":{"text":"Hello "}}
+{"type":"content_block_delta","delta":{"text":"World"}}`,
+			expected: "Hello World",
+		},
+		{
+			name:     "assistant message with text content",
+			input:    `{"type":"assistant","message":{"content":[{"type":"text","text":"Assistant says hello"}]}}`,
+			expected: "Assistant says hello",
+		},
+		{
+			name: "mixed event types extracts only text",
+			input: `{"type":"system","message":"Initializing..."}
+{"type":"content_block_delta","delta":{"text":"WORKTREE_PATH: .orbit/worktrees/test"}}
+{"type":"content_block_delta","delta":{"text":"\nBRANCH_NAME: orbit/test"}}
+{"type":"result","total_cost_usd":0.05}`,
+			expected: "Initializing...WORKTREE_PATH: .orbit/worktrees/test\nBRANCH_NAME: orbit/test",
+		},
+		{
+			name: "stream-json with markers embedded in JSON",
+			input: `{"type":"content_block_delta","delta":{"text":"Setting up worktree...\n"}}
+{"type":"content_block_delta","delta":{"text":"WORKTREE_PATH: .orbit/worktrees/fix-bug\n"}}
+{"type":"content_block_delta","delta":{"text":"BRANCH_NAME: orbit/fix-bug"}}`,
+			expected: "Setting up worktree...\nWORKTREE_PATH: .orbit/worktrees/fix-bug\nBRANCH_NAME: orbit/fix-bug",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractText(tt.input)
+			if got != tt.expected {
+				t.Errorf("ExtractText() = %q; want %q", got, tt.expected)
+			}
+		})
+	}
+}

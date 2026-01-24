@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/flashingpumpkin/orbit-cli/internal/output"
 )
 
 // ErrNotGitRepository is returned when the working directory is not a git repository.
@@ -121,15 +123,19 @@ func extractBranchName(output string) (string, error) {
 }
 
 // extractMarker extracts a value from a marker line in the output.
-func extractMarker(output, marker, description string) (string, error) {
-	idx := strings.Index(output, marker)
+// It first parses stream-json to get actual text content, then searches for markers.
+func extractMarker(rawOutput, marker, description string) (string, error) {
+	// Parse stream-json to get actual text content
+	text := output.ExtractText(rawOutput)
+
+	idx := strings.Index(text, marker)
 	if idx == -1 {
 		return "", fmt.Errorf("%s not found in output", description)
 	}
 
 	// Extract value from after the marker to end of line
 	start := idx + len(marker)
-	rest := output[start:]
+	rest := text[start:]
 
 	// Find end of line or end of string
 	end := strings.Index(rest, "\n")

@@ -7,11 +7,19 @@ import (
 	"testing"
 )
 
+// streamJSONMerge creates a stream-json formatted output line for a text delta.
+func streamJSONMerge(text string) string {
+	escaped := strings.ReplaceAll(text, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	escaped = strings.ReplaceAll(escaped, "\n", `\n`)
+	return `{"type":"content_block_delta","delta":{"text":"` + escaped + `"}}`
+}
+
 func TestMergePhase(t *testing.T) {
 	t.Run("invokes executor with merge prompt", func(t *testing.T) {
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:    "MERGE_SUCCESS: true",
+				Output:    streamJSONMerge("MERGE_SUCCESS: true"),
 				CostUSD:   0.02,
 				TokensIn:  100,
 				TokensOut: 100,
@@ -63,8 +71,8 @@ func TestMergePhase(t *testing.T) {
 	t.Run("returns false success when marker missing", func(t *testing.T) {
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:     "Some output without success marker",
-				CostUSD:    0.01,
+				Output:   streamJSONMerge("Some output without success marker"),
+				CostUSD:  0.01,
 				TokensIn: 50, TokensOut: 50,
 			},
 		}
@@ -88,8 +96,8 @@ func TestMergePhase(t *testing.T) {
 	t.Run("returns false success when marker explicitly false", func(t *testing.T) {
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:     "MERGE_SUCCESS: false",
-				CostUSD:    0.01,
+				Output:   streamJSONMerge("MERGE_SUCCESS: false"),
+				CostUSD:  0.01,
 				TokensIn: 50, TokensOut: 50,
 			},
 		}
@@ -129,16 +137,13 @@ func TestMergePhase(t *testing.T) {
 	})
 
 	t.Run("detects success marker in multi-line output", func(t *testing.T) {
+		output := streamJSONMerge("Rebasing branch onto main...\n") + "\n" +
+			streamJSONMerge("Successfully rebased.\n") + "\n" +
+			streamJSONMerge("MERGE_SUCCESS: true\n") + "\n" +
+			streamJSONMerge("Done.")
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output: `Rebasing branch onto main...
-Successfully rebased.
-Checking out main...
-Fast-forward merge complete.
-
-MERGE_SUCCESS: true
-
-Done.`,
+				Output:    output,
 				CostUSD:   0.03,
 				TokensIn:  150,
 				TokensOut: 150,
@@ -170,22 +175,25 @@ func TestContainsSuccessMarker(t *testing.T) {
 	}{
 		{
 			name:   "exact marker",
-			output: "MERGE_SUCCESS: true",
+			output: streamJSONMerge("MERGE_SUCCESS: true"),
 			want:   true,
 		},
 		{
-			name:   "marker with surrounding text",
-			output: "Done rebasing.\nMERGE_SUCCESS: true\nCleanup complete.",
-			want:   true,
+			name: "marker with surrounding text",
+			output: streamJSONMerge("Done rebasing.\n") + "\n" +
+				streamJSONMerge("MERGE_SUCCESS: true\n") + "\n" +
+				streamJSONMerge("Cleanup complete."),
+			want: true,
 		},
 		{
-			name:   "marker at end",
-			output: "Merge completed successfully.\nMERGE_SUCCESS: true",
-			want:   true,
+			name: "marker at end",
+			output: streamJSONMerge("Merge completed successfully.\n") + "\n" +
+				streamJSONMerge("MERGE_SUCCESS: true"),
+			want: true,
 		},
 		{
 			name:   "no marker",
-			output: "Merge failed with conflicts.",
+			output: streamJSONMerge("Merge failed with conflicts."),
 			want:   false,
 		},
 		{
@@ -195,12 +203,12 @@ func TestContainsSuccessMarker(t *testing.T) {
 		},
 		{
 			name:   "false marker",
-			output: "MERGE_SUCCESS: false",
+			output: streamJSONMerge("MERGE_SUCCESS: false"),
 			want:   false,
 		},
 		{
 			name:   "partial marker",
-			output: "MERGE_SUCCESS:",
+			output: streamJSONMerge("MERGE_SUCCESS:"),
 			want:   false,
 		},
 	}
@@ -209,7 +217,7 @@ func TestContainsSuccessMarker(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := containsSuccessMarker(tt.output)
 			if got != tt.want {
-				t.Errorf("containsSuccessMarker(%q) = %v; want %v", tt.output, got, tt.want)
+				t.Errorf("containsSuccessMarker() = %v; want %v", got, tt.want)
 			}
 		})
 	}
