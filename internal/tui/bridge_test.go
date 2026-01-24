@@ -41,6 +41,49 @@ func TestExtractJSONField(t *testing.T) {
 			field:    "status",
 			expected: "completed",
 		},
+		// Unicode escape sequence tests
+		{
+			name:     "shell redirect 2>&1",
+			jsonStr:  `{"command":"ls 2\u003e\u00261"}`,
+			field:    "command",
+			expected: "ls 2>&1",
+		},
+		{
+			name:     "ampersand &&",
+			jsonStr:  `{"command":"cmd1 \u0026\u0026 cmd2"}`,
+			field:    "command",
+			expected: "cmd1 && cmd2",
+		},
+		{
+			name:     "less-than <",
+			jsonStr:  `{"command":"cat \u003c file"}`,
+			field:    "command",
+			expected: "cat < file",
+		},
+		{
+			name:     "mixed unicode escapes",
+			jsonStr:  `{"command":"cmd1 \u0026\u0026 cmd2 2\u003e\u00261 \u003c input"}`,
+			field:    "command",
+			expected: "cmd1 && cmd2 2>&1 < input",
+		},
+		{
+			name:     "invalid json",
+			jsonStr:  `not valid json`,
+			field:    "command",
+			expected: "",
+		},
+		{
+			name:     "non-string field value",
+			jsonStr:  `{"count": 42}`,
+			field:    "count",
+			expected: "",
+		},
+		{
+			name:     "null field value",
+			jsonStr:  `{"value": null}`,
+			field:    "value",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {

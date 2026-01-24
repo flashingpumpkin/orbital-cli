@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/flashingpumpkin/orbital/internal/tasks"
 )
 
@@ -224,20 +225,22 @@ func (m Model) renderScrollArea() string {
 	height := m.layout.ScrollAreaHeight
 	width := m.layout.ContentWidth()
 
-	// Get visible lines
+	// First, wrap all output lines to fit within width
+	var wrappedLines []string
+	for _, line := range m.outputLines {
+		wrapped := wrapLine(line, width)
+		wrappedLines = append(wrappedLines, wrapped...)
+	}
+
+	// Get visible lines (show most recent)
 	startIdx := 0
-	if len(m.outputLines) > height {
-		startIdx = len(m.outputLines) - height
+	if len(wrappedLines) > height {
+		startIdx = len(wrappedLines) - height
 	}
 
 	var lines []string
-	for i := startIdx; i < len(m.outputLines) && len(lines) < height; i++ {
-		line := m.outputLines[i]
-		// Truncate long lines
-		if len(line) > width {
-			line = line[:width-3] + "..."
-		}
-		lines = append(lines, line)
+	for i := startIdx; i < len(wrappedLines) && len(lines) < height; i++ {
+		lines = append(lines, wrappedLines[i])
 	}
 
 	// Pad with empty lines if needed
@@ -525,6 +528,136 @@ func padLeft(s string, length int, pad rune) string {
 		s = string(pad) + s
 	}
 	return s
+}
+
+// wrapLine wraps a single line to fit within the given width, preserving ANSI codes.
+// Returns a slice of wrapped lines. Continuation lines are indented with 4 spaces.
+func wrapLine(line string, width int) []string {
+	if width <= 0 {
+		return []string{line}
+	}
+
+	// Use ansi.StringWidth to measure visible width (excludes ANSI escape sequences)
+	visibleWidth := ansi.StringWidth(line)
+	if visibleWidth <= width {
+		return []string{line}
+	}
+
+	const continuationIndent = "    " // 4 spaces for continuation lines
+	continuationWidth := width - len(continuationIndent)
+	if continuationWidth <= 10 {
+		// Terminal too narrow for meaningful wrapping
+		continuationWidth = width
+	}
+
+	var result []string
+	remaining := line
+	isFirst := true
+
+	for len(remaining) > 0 {
+		targetWidth := width
+		if !isFirst {
+			targetWidth = continuationWidth
+		}
+
+		if ansi.StringWidth(remaining) <= targetWidth {
+			if isFirst {
+				result = append(result, remaining)
+			} else {
+				result = append(result, continuationIndent+remaining)
+			}
+			break
+		}
+
+		// Find a good break point
+		breakIdx := findBreakPoint(remaining, targetWidth)
+		if breakIdx <= 0 {
+			// No good break point, force break at width
+			breakIdx = truncateToWidth(remaining, targetWidth)
+			if breakIdx <= 0 {
+				breakIdx = len(remaining)
+			}
+		}
+
+		chunk := remaining[:breakIdx]
+		if isFirst {
+			result = append(result, chunk)
+		} else {
+			result = append(result, continuationIndent+chunk)
+		}
+
+		remaining = strings.TrimLeft(remaining[breakIdx:], " ")
+		isFirst = false
+	}
+
+	return result
+}
+
+// findBreakPoint finds the best position to break a line at or before targetWidth.
+// Returns the index after the last space that fits, or 0 if no good break point.
+func findBreakPoint(s string, targetWidth int) int {
+	lastSpace := -1
+	currentWidth := 0
+	inEscape := false
+
+	for i, r := range s {
+		// Track ANSI escape sequences
+		if r == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			// ANSI sequences end with a letter
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+
+		// Measure visible character width
+		charWidth := ansi.StringWidth(string(r))
+		if currentWidth+charWidth > targetWidth {
+			// We've exceeded the target width
+			if lastSpace >= 0 {
+				return lastSpace + 1 // Include the space, then trim later
+			}
+			return i // Force break at current position
+		}
+
+		currentWidth += charWidth
+		if r == ' ' {
+			lastSpace = i
+		}
+	}
+
+	return 0 // Line fits, no break needed
+}
+
+// truncateToWidth returns the byte index where the visible width reaches targetWidth.
+func truncateToWidth(s string, targetWidth int) int {
+	currentWidth := 0
+	inEscape := false
+
+	for i, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+
+		charWidth := ansi.StringWidth(string(r))
+		if currentWidth+charWidth > targetWidth {
+			return i
+		}
+		currentWidth += charWidth
+	}
+
+	return len(s)
 }
 
 // SetProgress updates the progress information.

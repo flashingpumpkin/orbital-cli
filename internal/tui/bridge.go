@@ -334,30 +334,26 @@ func formatTodoWriteInput(input string) string {
 	return "\n" + strings.Join(lines, "\n")
 }
 
-// extractJSONField extracts a string field from JSON without full parsing.
-// This is a simple approach for performance; returns empty string on any error.
+// extractJSONField extracts a string field from JSON using proper unmarshalling.
+// This ensures Unicode escape sequences (like \u003e for >) are decoded correctly.
+// Returns empty string on any error (invalid JSON, missing field, non-string field).
 func extractJSONField(jsonStr, field string) string {
-	// Look for "field":"value" pattern
-	key := `"` + field + `":`
-	idx := strings.Index(jsonStr, key)
-	if idx == -1 {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
 		return ""
 	}
 
-	rest := jsonStr[idx+len(key):]
-	rest = strings.TrimSpace(rest)
-
-	if len(rest) == 0 || rest[0] != '"' {
+	value, ok := data[field]
+	if !ok {
 		return ""
 	}
 
-	rest = rest[1:] // Skip opening quote
-	endIdx := strings.Index(rest, `"`)
-	if endIdx == -1 {
+	str, ok := value.(string)
+	if !ok {
 		return ""
 	}
 
-	return rest[:endIdx]
+	return str
 }
 
 // shortenPath returns the last 2 path components.

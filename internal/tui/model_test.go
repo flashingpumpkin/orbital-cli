@@ -302,3 +302,130 @@ func TestModelRenderProgressWarningColour(t *testing.T) {
 		t.Error("expected non-empty view")
 	}
 }
+
+func TestWrapLine(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		width    int
+		wantLen  int
+		wantFull bool // whether full content should be preserved
+	}{
+		{
+			name:     "short line no wrap",
+			line:     "Hello world",
+			width:    50,
+			wantLen:  1,
+			wantFull: true,
+		},
+		{
+			name:     "long line wraps",
+			line:     "This is a longer line that should wrap to multiple lines when the width is narrow",
+			width:    30,
+			wantLen:  3, // approximate
+			wantFull: true,
+		},
+		{
+			name:     "very long word breaks at char boundary",
+			line:     "/Users/test/Projects/some-project/internal/very/deep/nested/path/file.go",
+			width:    40,
+			wantLen:  2,
+			wantFull: true,
+		},
+		{
+			name:     "zero width returns original",
+			line:     "Test line",
+			width:    0,
+			wantLen:  1,
+			wantFull: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := wrapLine(tt.line, tt.width)
+
+			if len(result) < tt.wantLen {
+				t.Errorf("wrapLine() returned %d lines, want at least %d", len(result), tt.wantLen)
+			}
+
+			if tt.wantFull {
+				// Check that all content is preserved (excluding indent spaces)
+				combined := strings.Join(result, "")
+				combined = strings.ReplaceAll(combined, "    ", "") // remove continuation indents
+				// The combined result should contain all the original non-space characters
+				originalNoSpace := strings.ReplaceAll(tt.line, " ", "")
+				combinedNoSpace := strings.ReplaceAll(combined, " ", "")
+				if combinedNoSpace != originalNoSpace {
+					t.Errorf("content not preserved: got %q, want %q", combinedNoSpace, originalNoSpace)
+				}
+			}
+		})
+	}
+}
+
+func TestWrapLineWithANSI(t *testing.T) {
+	// Test that ANSI codes are preserved across wrapping
+	ansiYellow := "\x1b[33m"
+	ansiReset := "\x1b[0m"
+	line := ansiYellow + "This is coloured text that should wrap but preserve ANSI codes" + ansiReset
+
+	result := wrapLine(line, 30)
+
+	if len(result) < 2 {
+		t.Errorf("expected wrapped lines, got %d lines", len(result))
+	}
+
+	// Check first line contains the ANSI start code
+	if !strings.Contains(result[0], ansiYellow) {
+		t.Error("first line should contain ANSI colour code")
+	}
+
+	// Verify content is preserved
+	combined := strings.Join(result, "")
+	if !strings.Contains(combined, "coloured text") {
+		t.Error("wrapped content should preserve text")
+	}
+}
+
+func TestWrapLineContinuationIndent(t *testing.T) {
+	// Test that continuation lines are indented
+	line := "This is a long line that will definitely wrap to multiple lines"
+
+	result := wrapLine(line, 25)
+
+	if len(result) < 2 {
+		t.Fatalf("expected at least 2 lines, got %d", len(result))
+	}
+
+	// First line should not have continuation indent
+	if strings.HasPrefix(result[0], "    ") {
+		t.Error("first line should not have continuation indent")
+	}
+
+	// Second line should have continuation indent
+	if !strings.HasPrefix(result[1], "    ") {
+		t.Errorf("continuation line should start with 4 spaces, got %q", result[1])
+	}
+}
+
+func TestRenderScrollAreaWrap(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions with narrow width
+	msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Add a very long line
+	longLine := "This is a very long output line that should wrap instead of being truncated with ellipsis like before"
+	model.AppendOutput(longLine)
+
+	view := model.View()
+
+	// The full content should be visible (after wrapping)
+	// Check for key parts of the content that would have been truncated before
+	if !strings.Contains(view, "truncated") {
+		t.Errorf("full content should be preserved after wrapping, got: %s", view)
+	}
+}
