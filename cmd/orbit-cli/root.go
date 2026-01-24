@@ -49,6 +49,7 @@ var (
 	contextFiles  []string
 	workflowFlag  string
 	minimal       bool
+	worktree      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -107,6 +108,7 @@ func init() {
 	rootCmd.PersistentFlags().StringArrayVar(&contextFiles, "context", []string{}, "Additional context file (can be repeated)")
 	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: fast, spec-driven (default), reviewed, tdd")
 	rootCmd.PersistentFlags().BoolVar(&minimal, "minimal", false, "Use minimal output mode (no TUI)")
+	rootCmd.PersistentFlags().BoolVar(&worktree, "worktree", false, "Enable worktree isolation mode")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {
