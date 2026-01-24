@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/flashingpumpkin/orbital/internal/daemon"
 	"github.com/flashingpumpkin/orbital/internal/state"
+	"github.com/spf13/cobra"
 )
 
 var statusJSON bool

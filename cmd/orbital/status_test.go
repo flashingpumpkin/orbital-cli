@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/flashingpumpkin/orbital/internal/state"
+	"github.com/spf13/cobra"
 )
 
 // createTestStatusCmd creates a fresh status command for testing.
@@ -145,7 +145,7 @@ func TestStatusCmd_ShowsRunningInstanceStatus(t *testing.T) {
 	checks := []string{
 		"Orbital Status",
 		"session-abc123",
-		"5", // Iteration
+		"5",     // Iteration
 		"$1.23", // Cost
 		"/path/spec1.md",
 		"/path/spec2.md",

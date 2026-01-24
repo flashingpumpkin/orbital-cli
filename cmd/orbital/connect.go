@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"github.com/flashingpumpkin/orbital/internal/daemon"
 	"github.com/flashingpumpkin/orbital/internal/dtui"
+	"github.com/spf13/cobra"
 )
 
 var connectCmd = &cobra.Command{

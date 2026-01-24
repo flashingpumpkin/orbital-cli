@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/flashingpumpkin/orbital/internal/completion"
 	"github.com/flashingpumpkin/orbital/internal/config"
 	"github.com/flashingpumpkin/orbital/internal/daemon"
@@ -27,6 +26,7 @@ import (
 	"github.com/flashingpumpkin/orbital/internal/tui"
 	"github.com/flashingpumpkin/orbital/internal/workflow"
 	"github.com/flashingpumpkin/orbital/internal/worktree"
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
@@ -60,8 +60,8 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "orbital <spec-file>",
-	Short:   "Autonomous Claude Code iteration loop",
+	Use:   "orbital <spec-file>",
+	Short: "Autonomous Claude Code iteration loop",
 	Long: `Orbital implements the "Ralph Wiggum" method for autonomous Claude Code execution.
 
 It runs Claude Code in a loop, monitoring output for a completion promise string.

@@ -4,11 +4,11 @@ import "testing"
 
 func TestCalculateLayout(t *testing.T) {
 	tests := []struct {
-		name       string
-		width      int
-		height     int
-		taskCount  int
-		wantTooSmall bool
+		name             string
+		width            int
+		height           int
+		taskCount        int
+		wantTooSmall     bool
 		wantScrollHeight int
 		wantTaskHeight   int
 	}{
@@ -49,18 +49,18 @@ func TestCalculateLayout(t *testing.T) {
 			wantTaskHeight:   7,  // max 6 + 1 header
 		},
 		{
-			name:           "too narrow",
-			width:          60,
-			height:         40,
-			taskCount:      0,
-			wantTooSmall:   true,
+			name:         "too narrow",
+			width:        60,
+			height:       40,
+			taskCount:    0,
+			wantTooSmall: true,
 		},
 		{
-			name:           "too short",
-			width:          120,
-			height:         20,
-			taskCount:      0,
-			wantTooSmall:   true,
+			name:         "too short",
+			width:        120,
+			height:       20,
+			taskCount:    0,
+			wantTooSmall: true,
 		},
 		{
 			name:             "minimum viable size no tasks",

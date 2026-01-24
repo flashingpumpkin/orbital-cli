@@ -321,38 +321,38 @@ func TestFormatTodoWriteInput(t *testing.T) {
 		contains []string
 	}{
 		{
-			name: "single pending task",
-			input: `{"todos":[{"content":"Run tests","status":"pending"}]}`,
+			name:     "single pending task",
+			input:    `{"todos":[{"content":"Run tests","status":"pending"}]}`,
 			contains: []string{"○", "Run tests"},
 		},
 		{
-			name: "single in_progress task",
-			input: `{"todos":[{"content":"Fix bug","status":"in_progress"}]}`,
+			name:     "single in_progress task",
+			input:    `{"todos":[{"content":"Fix bug","status":"in_progress"}]}`,
 			contains: []string{"▶", "Fix bug"},
 		},
 		{
-			name: "single completed task",
-			input: `{"todos":[{"content":"Write code","status":"completed"}]}`,
+			name:     "single completed task",
+			input:    `{"todos":[{"content":"Write code","status":"completed"}]}`,
 			contains: []string{"✓", "Write code"},
 		},
 		{
-			name: "multiple tasks",
-			input: `{"todos":[{"content":"Task 1","status":"completed"},{"content":"Task 2","status":"in_progress"},{"content":"Task 3","status":"pending"}]}`,
+			name:     "multiple tasks",
+			input:    `{"todos":[{"content":"Task 1","status":"completed"},{"content":"Task 2","status":"in_progress"},{"content":"Task 3","status":"pending"}]}`,
 			contains: []string{"✓", "Task 1", "▶", "Task 2", "○", "Task 3"},
 		},
 		{
-			name: "long content truncation",
-			input: `{"todos":[{"content":"This is a very long task content that should be truncated at sixty characters","status":"pending"}]}`,
+			name:     "long content truncation",
+			input:    `{"todos":[{"content":"This is a very long task content that should be truncated at sixty characters","status":"pending"}]}`,
 			contains: []string{"...", "This is a very long task content that should be truncated at"},
 		},
 		{
-			name: "empty todos",
-			input: `{"todos":[]}`,
+			name:     "empty todos",
+			input:    `{"todos":[]}`,
 			contains: nil, // expects empty result
 		},
 		{
-			name: "invalid json",
-			input: `not json`,
+			name:     "invalid json",
+			input:    `not json`,
 			contains: nil,
 		},
 	}

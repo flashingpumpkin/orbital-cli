@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/flashingpumpkin/orbital/internal/workflow"
+	"github.com/spf13/cobra"
 )
 
 // DefaultConfigTemplate is the commented template written by orbit init.
