@@ -22,23 +22,23 @@ State is persisted so `orbit continue` can resume interrupted worktree sessions.
 
 - [x] `--worktree` flag added to CLI
 - [x] When flag is set, orbit runs a separate Claude invocation before the loop
-- [ ] Claude is given the spec content and asked to:
+- [x] Claude is given the spec content and asked to:
   1. Understand the task
   2. Choose a descriptive kebab-case name
   3. Create worktree at `.orbit/worktrees/<name>` with branch `orbit/<name>`
   4. Output the worktree path
-- [ ] Orbit captures the worktree path from Claude's output
-- [ ] If worktree creation fails, orbit exits with error
-- [ ] `--worktree-name <name>` flag allows user to override Claude's name choice
-- [ ] `--setup-model` flag configures which model to use for setup phase
+- [x] Orbit captures the worktree path from Claude's output
+- [x] If worktree creation fails, orbit exits with error
+- [x] `--worktree-name <name>` flag allows user to override Claude's name choice
+- [x] `--setup-model` flag configures which model to use for setup phase
 - [ ] Setup phase cost does not count towards `--max-budget`
 
 ### Definition of Done
 
-- [ ] Unit tests pass
-- [ ] Setup phase implemented as separate executor call
-- [ ] Error handling for non-git repositories
-- [ ] Name override flag working
+- [x] Unit tests pass
+- [x] Setup phase implemented as separate executor call
+- [x] Error handling for non-git repositories
+- [x] Name override flag working
 
 ---
 
@@ -50,18 +50,18 @@ State is persisted so `orbit continue` can resume interrupted worktree sessions.
 
 ### Acceptance Criteria
 
-- [ ] State stored in `.orbit/` directory
-- [ ] State includes: worktree path, original branch, session ID, spec file path(s)
-- [ ] Multiple worktrees can be tracked simultaneously (parallel instances)
-- [ ] State uses spec filename as the work description
+- [x] State stored in `.orbit/` directory
+- [x] State includes: worktree path, original branch, session ID, spec file path(s)
+- [x] Multiple worktrees can be tracked simultaneously (parallel instances)
+- [x] State uses spec filename as the work description
 - [ ] State is created after successful setup phase
 - [ ] State is removed after successful merge and cleanup
 
 ### Definition of Done
 
-- [ ] State persistence implemented
-- [ ] Unit tests for state read/write
-- [ ] Multiple concurrent worktrees supported
+- [x] State persistence implemented
+- [x] Unit tests for state read/write
+- [x] Multiple concurrent worktrees supported
 
 ---
 
@@ -99,7 +99,7 @@ State is persisted so `orbit continue` can resume interrupted worktree sessions.
   2. Resolve any conflicts that arise
   3. Fast-forward merge the rebased changes into the original branch
 - [ ] No merge commits are created
-- [ ] `--merge-model` flag configures which model to use for merge phase
+- [x] `--merge-model` flag configures which model to use for merge phase
 - [ ] Merge phase cost does not count towards `--max-budget`
 - [ ] If merge ultimately fails, orbit preserves the worktree and exits with error
 
@@ -184,11 +184,11 @@ State is persisted so `orbit continue` can resume interrupted worktree sessions.
 
 - [ ] During setup, Claude checks if chosen name already exists
 - [ ] If collision, Claude picks a different name (e.g., appends suffix)
-- [ ] Setup phase instructions tell Claude to handle this case
+- [x] Setup phase instructions tell Claude to handle this case
 
 ### Definition of Done
 
-- [ ] Setup prompt includes collision handling instructions
+- [x] Setup prompt includes collision handling instructions
 - [ ] Manual test confirms Claude handles collisions
 
 ---

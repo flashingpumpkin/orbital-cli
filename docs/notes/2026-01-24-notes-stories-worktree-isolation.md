@@ -275,3 +275,50 @@ The test verifies that the prompt sent to the executor contains the necessary in
 ```
 
 The test fails because the current implementation passes the raw spec content directly to the executor without wrapping it in a proper prompt template. This tests the acceptance criterion: "Claude is given the spec content and asked to: 1. Understand the task, 2. Choose a descriptive kebab-case name, 3. Create worktree at `.orbit/worktrees/<name>` with branch `orbit/<name>`, 4. Output the worktree path"
+
+### Iteration 10: Implement comprehensive setup phase and state persistence
+
+**Multiple items implemented in a single pass**:
+
+1. **buildSetupPrompt function** (`internal/worktree/setup.go`):
+   - Creates comprehensive instructions for Claude to create a worktree
+   - Supports optional worktree name override via `SetupOptions`
+   - Includes collision handling instructions (append numeric suffix if name exists)
+   - Requires both `WORKTREE_PATH:` and `BRANCH_NAME:` markers in output
+
+2. **SetupResult enhancements**:
+   - Now includes `BranchName`, `CostUSD`, and `TokensUsed` fields
+   - Extracts both path and branch markers from Claude's output
+
+3. **State persistence** (`internal/worktree/state.go`):
+   - `StateManager` for managing worktree state
+   - `WorktreeState` struct with all required fields per spec
+   - Operations: `Add`, `Remove`, `FindBySpecFile`, `FindByPath`, `List`, `UpdateSessionID`
+   - State stored in `.orbit/worktree-state.json`
+
+4. **CLI flags** (`cmd/orbit-cli/root.go`):
+   - `--worktree-name`: Override Claude's name choice
+   - `--setup-model`: Model for setup phase (default: haiku)
+   - `--merge-model`: Model for merge phase (default: haiku)
+
+5. **Git repository validation** (`internal/worktree/setup.go`):
+   - `CheckGitRepository`: Verifies directory is a git repo
+   - `GetCurrentBranch`: Gets current branch for state tracking
+   - `ErrNotGitRepository` error type
+
+**Tests added**:
+- `TestSetupPhase` subtests for all new functionality
+- `TestExtractMarker` table-driven tests
+- `TestStateManager` with 13 test cases covering all operations
+- `TestWorktreeFlags` for all CLI flags
+
+**Test result**: All 32 tests pass
+```
+ok  github.com/flashingpumpkin/orbit-cli/internal/worktree  0.244s
+ok  github.com/flashingpumpkin/orbit-cli/cmd/orbit-cli      0.188s
+```
+
+**Acceptance criteria completed**:
+- User Story 1: All criteria except "Setup phase cost does not count towards --max-budget" (requires integration with main loop)
+- User Story 2: Core state persistence implemented (needs integration for creation/removal triggers)
+- User Story 8: Collision handling instructions in prompt

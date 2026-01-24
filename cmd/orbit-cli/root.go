@@ -50,6 +50,9 @@ var (
 	workflowFlag  string
 	minimal       bool
 	worktree      bool
+	worktreeName  string
+	setupModel    string
+	mergeModel    string
 )
 
 var rootCmd = &cobra.Command{
@@ -109,6 +112,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: fast, spec-driven (default), reviewed, tdd")
 	rootCmd.PersistentFlags().BoolVar(&minimal, "minimal", false, "Use minimal output mode (no TUI)")
 	rootCmd.PersistentFlags().BoolVar(&worktree, "worktree", false, "Enable worktree isolation mode")
+	rootCmd.PersistentFlags().StringVar(&worktreeName, "worktree-name", "", "Override Claude's worktree name choice")
+	rootCmd.PersistentFlags().StringVar(&setupModel, "setup-model", "haiku", "Model for worktree setup phase")
+	rootCmd.PersistentFlags().StringVar(&mergeModel, "merge-model", "haiku", "Model for worktree merge phase")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {

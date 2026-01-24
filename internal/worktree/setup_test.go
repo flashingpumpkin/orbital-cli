@@ -25,7 +25,7 @@ func TestSetupPhase(t *testing.T) {
 	t.Run("invokes executor with spec content", func(t *testing.T) {
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:     "WORKTREE_PATH: .orbit/worktrees/add-user-auth",
+				Output:     "WORKTREE_PATH: .orbit/worktrees/add-user-auth\nBRANCH_NAME: orbit/add-user-auth",
 				CostUSD:    0.01,
 				TokensUsed: 100,
 			},
@@ -52,12 +52,16 @@ func TestSetupPhase(t *testing.T) {
 		if result.WorktreePath != ".orbit/worktrees/add-user-auth" {
 			t.Errorf("WorktreePath = %q; want %q", result.WorktreePath, ".orbit/worktrees/add-user-auth")
 		}
+
+		if result.BranchName != "orbit/add-user-auth" {
+			t.Errorf("BranchName = %q; want %q", result.BranchName, "orbit/add-user-auth")
+		}
 	})
 
 	t.Run("prompt instructs Claude to create worktree", func(t *testing.T) {
 		mockExec := &MockExecutor{
 			ExecuteResult: &ExecutionResult{
-				Output:     "WORKTREE_PATH: .orbit/worktrees/test-feature",
+				Output:     "WORKTREE_PATH: .orbit/worktrees/test-feature\nBRANCH_NAME: orbit/test-feature",
 				CostUSD:    0.01,
 				TokensUsed: 100,
 			},
@@ -80,6 +84,7 @@ func TestSetupPhase(t *testing.T) {
 			"orbit/",
 			"git worktree",
 			"WORKTREE_PATH:",
+			"BRANCH_NAME:",
 		}
 
 		for _, instruction := range requiredInstructions {
@@ -116,4 +121,138 @@ func TestSetupPhase(t *testing.T) {
 			t.Fatal("Run() error = nil; want error for missing path")
 		}
 	})
+
+	t.Run("returns error when branch marker not found", func(t *testing.T) {
+		mockExec := &MockExecutor{
+			ExecuteResult: &ExecutionResult{
+				Output: "WORKTREE_PATH: .orbit/worktrees/test\nNo branch marker here.",
+			},
+		}
+
+		setup := NewSetup(mockExec)
+		_, err := setup.Run(context.Background(), "spec content")
+
+		if err == nil {
+			t.Fatal("Run() error = nil; want error for missing branch")
+		}
+
+		if !strings.Contains(err.Error(), "branch name") {
+			t.Errorf("error = %v; want error mentioning branch name", err)
+		}
+	})
+
+	t.Run("uses provided worktree name when specified", func(t *testing.T) {
+		mockExec := &MockExecutor{
+			ExecuteResult: &ExecutionResult{
+				Output:     "WORKTREE_PATH: .orbit/worktrees/my-custom-name\nBRANCH_NAME: orbit/my-custom-name",
+				CostUSD:    0.01,
+				TokensUsed: 100,
+			},
+		}
+
+		setup := NewSetup(mockExec)
+		_, err := setup.RunWithOptions(context.Background(), "spec content", SetupOptions{
+			WorktreeName: "my-custom-name",
+		})
+		if err != nil {
+			t.Fatalf("RunWithOptions() error = %v; want nil", err)
+		}
+
+		prompt := mockExec.ExecuteCalls[0].Prompt
+
+		// Should contain the custom name instruction
+		if !strings.Contains(prompt, "my-custom-name") {
+			t.Errorf("prompt does not contain custom name")
+		}
+
+		// Should NOT contain the instruction to choose a name
+		if strings.Contains(prompt, "Choose a descriptive") {
+			t.Errorf("prompt should not ask Claude to choose a name when one is provided")
+		}
+	})
+
+	t.Run("captures cost and tokens from execution", func(t *testing.T) {
+		mockExec := &MockExecutor{
+			ExecuteResult: &ExecutionResult{
+				Output:     "WORKTREE_PATH: .orbit/worktrees/test\nBRANCH_NAME: orbit/test",
+				CostUSD:    0.05,
+				TokensUsed: 500,
+			},
+		}
+
+		setup := NewSetup(mockExec)
+		result, err := setup.Run(context.Background(), "spec content")
+		if err != nil {
+			t.Fatalf("Run() error = %v; want nil", err)
+		}
+
+		if result.CostUSD != 0.05 {
+			t.Errorf("CostUSD = %v; want 0.05", result.CostUSD)
+		}
+
+		if result.TokensUsed != 500 {
+			t.Errorf("TokensUsed = %d; want 500", result.TokensUsed)
+		}
+	})
+}
+
+func TestExtractMarker(t *testing.T) {
+	tests := []struct {
+		name        string
+		output      string
+		marker      string
+		want        string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:   "extracts value from middle of output",
+			output: "Some text\nWORKTREE_PATH: .orbit/worktrees/test\nMore text",
+			marker: "WORKTREE_PATH: ",
+			want:   ".orbit/worktrees/test",
+		},
+		{
+			name:   "extracts value at end of output",
+			output: "Some text\nWORKTREE_PATH: .orbit/worktrees/test",
+			marker: "WORKTREE_PATH: ",
+			want:   ".orbit/worktrees/test",
+		},
+		{
+			name:   "trims whitespace from value",
+			output: "WORKTREE_PATH:   .orbit/worktrees/test  \n",
+			marker: "WORKTREE_PATH: ",
+			want:   ".orbit/worktrees/test",
+		},
+		{
+			name:        "returns error when marker not found",
+			output:      "No marker here",
+			marker:      "WORKTREE_PATH: ",
+			wantErr:     true,
+			errContains: "not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractMarker(tt.output, tt.marker, "test value")
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("extractMarker() error = nil; want error")
+				}
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error = %v; want error containing %q", err, tt.errContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("extractMarker() error = %v; want nil", err)
+			}
+
+			if got != tt.want {
+				t.Errorf("extractMarker() = %q; want %q", got, tt.want)
+			}
+		})
+	}
 }
