@@ -142,3 +142,25 @@ This tests the acceptance criterion: "When flag is set, orbit runs a separate Cl
 ```
 
 All tests pass. The setup phase now has its core structure in place. The implementation is minimal: it simply passes the spec content to the executor and parses the path from the output. The actual prompt template and Claude integration will be added in subsequent stories.
+
+### Iteration 7: Refactor setup phase tests
+
+**Refactoring performed**:
+- Replaced custom `containsString` and `findSubstring` helpers with `strings.Contains` from the standard library
+- Consolidated three separate test functions (`TestSetupPhase_InvokesClaude`, `TestSetupPhase_ReturnsErrorOnExecutionFailure`, `TestSetupPhase_ReturnsErrorWhenPathNotFound`) into a single `TestSetupPhase` function with subtests
+- Subtests now use descriptive names: "invokes executor with spec content", "returns error on execution failure", "returns error when path marker not found"
+- Changed `context.DeadlineExceeded` to `errors.New("execution failed")` in the error test for clarity (we're testing that errors propagate, not a specific error type)
+
+**Before**: 3 separate test functions with 14 lines of custom string helper code
+**After**: 1 function with 3 subtests, using standard library
+
+**Test result**: PASS
+```
+=== RUN   TestSetupPhase
+=== RUN   TestSetupPhase/invokes_executor_with_spec_content
+=== RUN   TestSetupPhase/returns_error_on_execution_failure
+=== RUN   TestSetupPhase/returns_error_when_path_marker_not_found
+--- PASS: TestSetupPhase (0.00s)
+```
+
+All tests continue to pass. The refactoring improves readability and eliminates unnecessary custom code.
