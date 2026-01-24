@@ -52,6 +52,7 @@ type Model struct {
 	tasks       []Task
 	progress    ProgressInfo
 	session     SessionInfo
+	worktree    WorktreeInfo
 
 	// Styles
 	styles Styles
@@ -74,6 +75,8 @@ type Styles struct {
 	TaskComplete    lipgloss.Style
 	ScrollArea      lipgloss.Style
 	TooSmallMessage lipgloss.Style
+	WorktreeLabel   lipgloss.Style
+	WorktreeValue   lipgloss.Style
 }
 
 // NewModel creates a new TUI model.
@@ -104,6 +107,8 @@ func defaultStyles() Styles {
 		TaskComplete:    lipgloss.NewStyle().Foreground(lipgloss.Color("82")),
 		ScrollArea:      lipgloss.NewStyle(),
 		TooSmallMessage: lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
+		WorktreeLabel:   lipgloss.NewStyle().Foreground(lipgloss.Color("141")).Bold(true),
+		WorktreeValue:   lipgloss.NewStyle().Foreground(lipgloss.Color("183")),
 	}
 }
 
@@ -116,7 +121,7 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks))
+		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks), m.worktree.Path != "")
 		m.ready = true
 		return m, nil
 
@@ -133,7 +138,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TasksMsg:
 		m.tasks = msg
 		if m.ready {
-			m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks))
+			m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks), m.worktree.Path != "")
 		}
 		return m, nil
 
@@ -143,6 +148,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SessionMsg:
 		m.session = SessionInfo(msg)
+		return m, nil
+
+	case WorktreeMsg:
+		m.worktree = WorktreeInfo(msg)
+		if m.ready {
+			m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks), m.worktree.Path != "")
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -197,6 +209,12 @@ func (m Model) renderFull() string {
 
 	// Session info panel
 	sections = append(sections, m.renderSessionPanel())
+
+	// Worktree panel (if worktree mode is active)
+	if m.layout.WorktreePanelHeight > 0 {
+		sections = append(sections, m.renderSeparator())
+		sections = append(sections, m.renderWorktreePanel())
+	}
 
 	return strings.Join(sections, "\n")
 }
@@ -394,6 +412,29 @@ func (m Model) renderSessionPanel() string {
 	return line1 + "\n" + line2
 }
 
+// renderWorktreePanel renders the worktree info panel.
+func (m Model) renderWorktreePanel() string {
+	w := m.worktree
+
+	// Icon and label
+	icon := m.styles.WorktreeLabel.Render("⎇")
+	label := m.styles.WorktreeLabel.Render(" Worktree: ")
+
+	// Path (truncate if too long)
+	path := w.Path
+	maxPathLen := 40
+	if len(path) > maxPathLen {
+		path = "..." + path[len(path)-maxPathLen+3:]
+	}
+	pathStr := m.styles.WorktreeValue.Render(path)
+
+	// Branch
+	branchLabel := m.styles.Label.Render(" │ Branch: ")
+	branchStr := m.styles.WorktreeValue.Render(w.Branch)
+
+	return "  " + icon + label + pathStr + branchLabel + branchStr
+}
+
 // formatPath formats a single file path with truncation.
 func (m Model) formatPath(label, path string) string {
 	labelStr := m.styles.Label.Render(label + ": ")
@@ -496,7 +537,16 @@ func (m *Model) SetTasks(tasks []Task) {
 	m.tasks = tasks
 	// Recalculate layout with new task count
 	if m.ready {
-		m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(tasks))
+		m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(tasks), m.worktree.Path != "")
+	}
+}
+
+// SetWorktree updates the worktree information.
+func (m *Model) SetWorktree(w WorktreeInfo) {
+	m.worktree = w
+	// Recalculate layout when worktree info changes
+	if m.ready {
+		m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks), w.Path != "")
 	}
 }
 

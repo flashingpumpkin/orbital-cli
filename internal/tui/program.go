@@ -79,6 +79,11 @@ func (p *Program) SendSession(session SessionInfo) {
 	p.program.Send(SessionMsg(session))
 }
 
+// SendWorktree sends worktree info to the program.
+func (p *Program) SendWorktree(worktree WorktreeInfo) {
+	p.program.Send(WorktreeMsg(worktree))
+}
+
 // Kill forcefully terminates the program.
 func (p *Program) Kill() {
 	p.program.Kill()

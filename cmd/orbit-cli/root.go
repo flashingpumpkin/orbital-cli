@@ -328,6 +328,15 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			Budget:       cfg.MaxBudget,
 		}
 		tuiProgram = tui.New(session, progress)
+
+		// Send worktree info to TUI if worktree mode is active
+		if worktreeMode && wtState != nil {
+			tuiProgram.SendWorktree(tui.WorktreeInfo{
+				Path:   wtState.Path,
+				Branch: wtState.Branch,
+			})
+		}
+
 		exec.SetStreamWriter(tuiProgram.Bridge())
 	} else if cfg.Verbose || cfg.ShowUnhandled || todosOnly {
 		// Minimal/verbose mode: formatted output

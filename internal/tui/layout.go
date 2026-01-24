@@ -18,6 +18,9 @@ const (
 	// TaskPanelMaxHeight is the maximum height for the task list panel.
 	TaskPanelMaxHeight = 6
 
+	// WorktreePanelHeight is the height of the worktree info panel (path, branch).
+	WorktreePanelHeight = 1
+
 	// BorderHeight is the total height used by horizontal borders between panels.
 	BorderHeight = 4
 )
@@ -40,6 +43,9 @@ type Layout struct {
 	// SessionPanel is the file paths region
 	SessionPanelHeight int
 
+	// WorktreePanel is the worktree info region (shown when worktree mode active)
+	WorktreePanelHeight int
+
 	// TooSmall indicates the terminal is below minimum size
 	TooSmall bool
 
@@ -47,13 +53,18 @@ type Layout struct {
 	TooSmallMessage string
 }
 
-// CalculateLayout computes the layout based on terminal dimensions and task count.
-func CalculateLayout(width, height, taskCount int) Layout {
+// CalculateLayout computes the layout based on terminal dimensions, task count, and worktree mode.
+func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 	layout := Layout{
 		Width:               width,
 		Height:              height,
 		ProgressPanelHeight: ProgressPanelHeight,
 		SessionPanelHeight:  SessionPanelHeight,
+	}
+
+	// Set worktree panel height if worktree mode is active
+	if hasWorktree {
+		layout.WorktreePanelHeight = WorktreePanelHeight
 	}
 
 	// Check minimum width
@@ -79,8 +90,12 @@ func CalculateLayout(width, height, taskCount int) Layout {
 		layout.TaskPanelHeight = TaskPanelMaxHeight + 1 // +1 for header with scroll indicator
 	}
 
-	// Calculate fixed panel total
-	fixedHeight := layout.TaskPanelHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + BorderHeight
+	// Calculate fixed panel total (add extra border for worktree panel if present)
+	borderCount := BorderHeight
+	if hasWorktree {
+		borderCount++ // Extra separator before worktree panel
+	}
+	fixedHeight := layout.TaskPanelHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + borderCount
 
 	// Remaining space goes to scroll area
 	layout.ScrollAreaHeight = height - fixedHeight
@@ -88,7 +103,7 @@ func CalculateLayout(width, height, taskCount int) Layout {
 	// If scroll area would be too small, collapse task panel
 	if layout.ScrollAreaHeight < 4 && layout.TaskPanelHeight > 0 {
 		layout.TaskPanelHeight = 0
-		fixedHeight = layout.ProgressPanelHeight + layout.SessionPanelHeight + BorderHeight
+		fixedHeight = layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + borderCount
 		layout.ScrollAreaHeight = height - fixedHeight
 	}
 
