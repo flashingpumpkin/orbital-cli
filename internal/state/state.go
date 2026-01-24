@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/flashingpumpkin/orbital/internal/workflow"
@@ -122,10 +121,8 @@ func Exists(workingDir string) bool {
 
 // IsStale returns true if the process with the stored PID is no longer running.
 func (s *State) IsStale() bool {
-	// Send signal 0 to check if process exists
-	err := syscall.Kill(s.PID, 0)
-	// If no error, process exists; if error, it's stale
-	return err != nil
+	// Check if process exists
+	return !isProcessRunning(s.PID)
 }
 
 // Cleanup removes the state directory and its contents.
