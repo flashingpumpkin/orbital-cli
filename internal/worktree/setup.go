@@ -105,9 +105,15 @@ func SetupDirect(workingDir string, opts SetupOptions) (*SetupResult, error) {
 	}
 
 	// Convert worktree path to absolute to ensure it works regardless of
-	// how spec file paths are provided (relative or absolute)
-	absWorktreePath, err := filepath.Abs(WorktreePath(name))
+	// how spec file paths are provided (relative or absolute).
+	// CRITICAL: Must join with workingDir first, since WorktreePath returns
+	// a relative path and filepath.Abs would resolve relative to the current
+	// working directory (which may differ from workingDir).
+	relPath := WorktreePath(name)
+	absWorktreePath, err := filepath.Abs(filepath.Join(workingDir, relPath))
 	if err != nil {
+		// Clean up the worktree we just created since we can't use it
+		_ = RemoveWorktree(workingDir, relPath)
 		return nil, fmt.Errorf("failed to get absolute worktree path: %w", err)
 	}
 

@@ -279,6 +279,11 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// Persist worktree state
 		// Extract the name from the worktree path (last segment after .orbital/worktrees/)
 		worktreeName := filepath.Base(setupResult.WorktreePath)
+		if worktreeName == "" || worktreeName == "." {
+			// Safety check: if filepath.Base returns unexpected value, clean up and fail
+			_ = worktree.RemoveWorktree(workingDir, setupResult.WorktreePath)
+			return fmt.Errorf("invalid worktree path: %s", setupResult.WorktreePath)
+		}
 		wtStateManager = worktree.NewStateManager(workingDir)
 		wtState = &worktree.WorktreeState{
 			Name:           worktreeName,
@@ -288,7 +293,12 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			SpecFiles:      absFilePaths,
 		}
 		if err := wtStateManager.Add(*wtState); err != nil {
-			return fmt.Errorf("failed to persist worktree state: %w", err)
+			// CRITICAL: Clean up the worktree we just created to avoid orphans
+			cleanupErr := worktree.RemoveWorktree(workingDir, setupResult.WorktreePath)
+			if cleanupErr != nil {
+				return fmt.Errorf("failed to persist worktree state: %w (cleanup also failed: %v)", err, cleanupErr)
+			}
+			return fmt.Errorf("failed to persist worktree state: %w (worktree cleaned up)", err)
 		}
 
 		// Update working directory to worktree

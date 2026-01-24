@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"syscall"
 	"time"
 )
 
@@ -37,6 +41,15 @@ const (
 	lockTimeout  = 5 * time.Second
 	staleLockAge = 30 * time.Second
 )
+
+// pathsEqual compares two file paths for equality.
+// On Windows, comparison is case-insensitive. On Unix, it's case-sensitive.
+func pathsEqual(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
 
 // NewStateManager creates a new StateManager.
 func NewStateManager(workingDir string) *StateManager {
@@ -86,13 +99,10 @@ func (m *StateManager) acquireLock() (func(), error) {
 			}, nil
 		}
 
-		// Check if lock is stale
-		if info, statErr := os.Stat(lockFile); statErr == nil {
-			if time.Since(info.ModTime()) > staleLockAge {
-				// Lock is stale, remove it and retry
-				os.Remove(lockFile)
-				continue
-			}
+		// Lock file exists - check if it's stale
+		if m.isLockStale(lockFile) {
+			os.Remove(lockFile)
+			continue
 		}
 
 		// Wait a bit before retrying
@@ -100,6 +110,52 @@ func (m *StateManager) acquireLock() (func(), error) {
 	}
 
 	return nil, fmt.Errorf("failed to acquire state lock after %v (lock file: %s)", lockTimeout, lockFile)
+}
+
+// isLockStale checks if a lock file is stale.
+// A lock is considered stale if:
+// 1. It's older than staleLockAge, OR
+// 2. The PID in the lock file is no longer running (Unix only)
+func (m *StateManager) isLockStale(lockFile string) bool {
+	info, err := os.Stat(lockFile)
+	if err != nil {
+		return true // Can't stat, assume stale
+	}
+
+	// Age-based staleness: definitely stale if old
+	if time.Since(info.ModTime()) > staleLockAge {
+		return true
+	}
+
+	// PID-based staleness: check if owning process is dead
+	// This is only done on Unix and only if we can read the lock file
+	if runtime.GOOS != "windows" {
+		data, err := os.ReadFile(lockFile)
+		if err == nil {
+			pidStr := strings.TrimSpace(string(data))
+			if pid, err := strconv.Atoi(pidStr); err == nil {
+				if !isProcessRunning(pid) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// isProcessRunning checks if a process with the given PID is running.
+// Uses signal 0 on Unix to check process existence.
+func isProcessRunning(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+
+	// On Unix, sending signal 0 checks if we can send signals to the process.
+	// This returns an error if the process doesn't exist or we lack permission.
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
 }
 
 // Load loads the worktree state from disk.
@@ -124,7 +180,10 @@ func (m *StateManager) Load() (*StateFile, error) {
 	}
 
 	// Migrate any relative paths to absolute paths
-	m.migratePaths(&state)
+	// If paths were migrated, persist the changes (best-effort, don't fail load)
+	if m.migratePaths(&state) {
+		_ = m.atomicWrite(&state)
+	}
 
 	return &state, nil
 }
@@ -150,15 +209,19 @@ func (m *StateManager) recoverFromBackup() (*StateFile, error) {
 }
 
 // migratePaths converts any relative paths to absolute paths for backwards compatibility.
-func (m *StateManager) migratePaths(state *StateFile) {
+// Returns true if any paths were migrated.
+func (m *StateManager) migratePaths(state *StateFile) bool {
+	migrated := false
 	for i := range state.Worktrees {
 		if state.Worktrees[i].Path != "" && !filepath.IsAbs(state.Worktrees[i].Path) {
 			absPath, err := filepath.Abs(filepath.Join(m.workingDir, state.Worktrees[i].Path))
 			if err == nil {
 				state.Worktrees[i].Path = absPath
+				migrated = true
 			}
 		}
 	}
+	return migrated
 }
 
 // Save persists the worktree state to disk atomically.
@@ -179,16 +242,21 @@ func (m *StateManager) atomicWrite(state *StateFile) error {
 	}
 
 	// Create backup of existing file if it exists
+	var backupFailed bool
 	if _, err := os.Stat(m.StatePath()); err == nil {
-		// Copy current to backup (ignore errors - backup is best effort)
 		if existingData, readErr := os.ReadFile(m.StatePath()); readErr == nil {
-			_ = os.WriteFile(m.backupPath(), existingData, 0644)
+			if writeErr := os.WriteFile(m.backupPath(), existingData, 0644); writeErr != nil {
+				backupFailed = true
+			}
 		}
 	}
 
 	// Write to temp file in same directory (same filesystem for atomic rename)
 	tmpFile, err := os.CreateTemp(m.stateDir, "worktree-state-*.tmp")
 	if err != nil {
+		if backupFailed {
+			return fmt.Errorf("failed to create temp file: %w (backup also failed - data may be at risk)", err)
+		}
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
@@ -203,18 +271,27 @@ func (m *StateManager) atomicWrite(state *StateFile) error {
 
 	if _, err := tmpFile.Write(data); err != nil {
 		tmpFile.Close()
+		if backupFailed {
+			return fmt.Errorf("failed to write temp file: %w (backup also failed - data may be at risk)", err)
+		}
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 
 	// Sync to disk before rename to ensure durability
 	if err := tmpFile.Sync(); err != nil {
 		tmpFile.Close()
+		if backupFailed {
+			return fmt.Errorf("failed to sync temp file: %w (backup also failed - data may be at risk)", err)
+		}
 		return fmt.Errorf("failed to sync temp file: %w", err)
 	}
 	tmpFile.Close()
 
 	// Atomic rename (POSIX guarantees atomicity on same filesystem)
 	if err := os.Rename(tmpPath, m.StatePath()); err != nil {
+		if backupFailed {
+			return fmt.Errorf("failed to rename temp file: %w (backup also failed - data may be at risk)", err)
+		}
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
@@ -266,7 +343,7 @@ func (m *StateManager) Remove(path string) error {
 
 	var filtered []WorktreeState
 	for _, wt := range state.Worktrees {
-		if wt.Path != path {
+		if !pathsEqual(wt.Path, path) {
 			filtered = append(filtered, wt)
 		}
 	}
@@ -305,6 +382,7 @@ func (m *StateManager) List() ([]WorktreeState, error) {
 }
 
 // FindByPath finds a worktree by its path.
+// Path comparison is case-insensitive on Windows.
 func (m *StateManager) FindByPath(path string) (*WorktreeState, error) {
 	state, err := m.Load()
 	if err != nil {
@@ -312,7 +390,7 @@ func (m *StateManager) FindByPath(path string) (*WorktreeState, error) {
 	}
 
 	for _, wt := range state.Worktrees {
-		if wt.Path == path {
+		if pathsEqual(wt.Path, path) {
 			return &wt, nil
 		}
 	}
@@ -351,7 +429,7 @@ func (m *StateManager) UpdateSessionID(path, sessionID string) error {
 	}
 
 	for i := range state.Worktrees {
-		if state.Worktrees[i].Path == path {
+		if pathsEqual(state.Worktrees[i].Path, path) {
 			state.Worktrees[i].SessionID = sessionID
 			return m.Save(state)
 		}
@@ -365,7 +443,7 @@ func ValidateWorktree(wt *WorktreeState) error {
 	// Check path exists
 	info, err := os.Stat(wt.Path)
 	if os.IsNotExist(err) {
-		return fmt.Errorf("worktree directory not found: %s\nRun 'orbital worktree cleanup' to remove stale entries", wt.Path)
+		return fmt.Errorf("worktree directory not found: %s\nThe worktree may have been manually deleted. Remove the stale state entry from .orbital/worktree-state.json", wt.Path)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to check worktree path: %w", err)
@@ -388,5 +466,53 @@ func ValidateWorktree(wt *WorktreeState) error {
 		return fmt.Errorf("path is a git repository, not a worktree (.git is directory): %s", wt.Path)
 	}
 
+	return nil
+}
+
+// CleanupStaleFiles removes stale temporary and backup files from the state directory.
+// Files older than maxAge are considered stale and removed.
+func (m *StateManager) CleanupStaleFiles(maxAge time.Duration) error {
+	entries, err := os.ReadDir(m.stateDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // Nothing to clean up
+		}
+		return fmt.Errorf("failed to read state directory: %w", err)
+	}
+
+	cutoff := time.Now().Add(-maxAge)
+	var errs []string
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		// Clean up temp files and old backups
+		isTemp := strings.HasPrefix(name, "worktree-state-") && strings.HasSuffix(name, ".tmp")
+		isBackup := strings.HasSuffix(name, ".bak")
+		isLock := strings.HasSuffix(name, ".lock")
+
+		if !isTemp && !isBackup && !isLock {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		if info.ModTime().Before(cutoff) {
+			path := filepath.Join(m.stateDir, name)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				errs = append(errs, fmt.Sprintf("%s: %v", name, err))
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to remove some stale files: %s", strings.Join(errs, "; "))
+	}
 	return nil
 }
