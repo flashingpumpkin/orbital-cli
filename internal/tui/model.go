@@ -159,15 +159,41 @@ type FileContentMsg struct {
 	Error   error
 }
 
+// maxFileSize is the maximum file size to load (1MB).
+const maxFileSize = 1024 * 1024
+
 // loadFileCmd creates a command to load file content.
 func loadFileCmd(path string) tea.Cmd {
 	return func() tea.Msg {
+		// Check file size first
+		info, err := os.Stat(path)
+		if err != nil {
+			return FileContentMsg{Path: path, Error: err}
+		}
+		if info.Size() > maxFileSize {
+			return FileContentMsg{
+				Path:    path,
+				Content: "(File too large to display: " + formatFileSize(info.Size()) + ")",
+			}
+		}
+
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return FileContentMsg{Path: path, Error: err}
 		}
 		return FileContentMsg{Path: path, Content: string(content)}
 	}
+}
+
+// formatFileSize formats a file size in human-readable form.
+func formatFileSize(size int64) string {
+	if size < 1024 {
+		return intToString(int(size)) + " B"
+	}
+	if size < 1024*1024 {
+		return intToString(int(size/1024)) + " KB"
+	}
+	return intToString(int(size/(1024*1024))) + " MB"
 }
 
 // Update implements tea.Model.
@@ -286,9 +312,10 @@ func (m Model) buildTabs() []Tab {
 		})
 	}
 
-	// Add context files
+	// Add context files (handle both ", " and "," separators)
 	if m.session.ContextFile != "" {
-		for _, path := range strings.Split(m.session.ContextFile, ", ") {
+		// Split on comma, then trim spaces from each part
+		for _, path := range strings.Split(m.session.ContextFile, ",") {
 			path = strings.TrimSpace(path)
 			if path != "" {
 				tabs = append(tabs, Tab{
@@ -341,19 +368,39 @@ func (m Model) switchToTab(idx int) (tea.Model, tea.Cmd) {
 // handleTabClick handles a mouse click on the tab bar.
 func (m Model) handleTabClick(x int) (tea.Model, tea.Cmd) {
 	// Calculate tab positions based on rendered width (must match renderTabBar)
+	width := m.layout.Width
+	sepWidth := 1 // separator "│" width
 	currentX := 0
+
 	for i, tab := range m.tabs {
 		// Tab name with number prefix (must match renderTabBar logic)
 		name := tab.Name
 		if i < 9 {
 			name = intToString(i+1) + ":" + name
 		}
-		// Tab width is name length + 2 (for padding from style) + 1 (for separator)
-		tabWidth := ansi.StringWidth(name) + 3
-		if x >= currentX && x < currentX+tabWidth {
+		// Tab width is name length + 2 (for padding from style)
+		tabWidth := ansi.StringWidth(name) + 2
+
+		// Check if this tab would overflow (match renderTabBar logic)
+		neededWidth := tabWidth
+		if i > 0 {
+			neededWidth += sepWidth
+		}
+		if currentX+neededWidth > width {
+			break // Tab is truncated, not clickable
+		}
+
+		// Add separator width for tabs after the first
+		clickStart := currentX
+		if i > 0 {
+			clickStart += sepWidth
+		}
+
+		if x >= clickStart && x < clickStart+tabWidth {
 			return m.switchToTab(i)
 		}
-		currentX += tabWidth
+
+		currentX += neededWidth
 	}
 	return m, nil
 }
@@ -514,9 +561,14 @@ func (m Model) renderFull() string {
 	return strings.Join(sections, "\n")
 }
 
-// renderTabBar renders the tab bar with all tabs.
+// renderTabBar renders the tab bar with all tabs, truncating if needed.
 func (m Model) renderTabBar() string {
+	width := m.layout.Width
+	separator := m.styles.TabBar.Render("│")
+	sepWidth := ansi.StringWidth(separator)
+
 	var tabs []string
+	currentWidth := 0
 
 	for i, tab := range m.tabs {
 		var style lipgloss.Style
@@ -532,10 +584,28 @@ func (m Model) renderTabBar() string {
 			name = intToString(i+1) + ":" + name
 		}
 
+		// Calculate tab width (name + padding from style)
+		tabWidth := ansi.StringWidth(name) + 2 // +2 for padding
+
+		// Check if this tab would overflow
+		neededWidth := tabWidth
+		if len(tabs) > 0 {
+			neededWidth += sepWidth
+		}
+
+		if currentWidth+neededWidth > width {
+			// Truncate: show "..." indicator and stop
+			if currentWidth+sepWidth+5 <= width { // 5 = "..." + minimal padding
+				tabs = append(tabs, m.styles.TabInactive.Render("..."))
+			}
+			break
+		}
+
 		tabs = append(tabs, style.Render(name))
+		currentWidth += neededWidth
 	}
 
-	return strings.Join(tabs, m.styles.TabBar.Render("│"))
+	return strings.Join(tabs, separator)
 }
 
 // renderMainContent renders either the output stream or file content based on active tab.
