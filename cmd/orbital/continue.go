@@ -61,8 +61,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 
 	// Check for worktree state first
 	var wtState *worktree.WorktreeState
-	var wtStateManager *worktree.StateManager
-	wtStateManager = worktree.NewStateManager(wd)
+	wtStateManager := worktree.NewStateManager(wd)
 	worktrees, err := wtStateManager.List()
 	if err == nil && len(worktrees) > 0 {
 		// For now, use the first worktree (could add TUI picker later)

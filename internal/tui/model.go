@@ -49,7 +49,6 @@ type Model struct {
 
 	// Content
 	outputLines []string
-	scrollPos   int
 	tasks       []Task
 	progress    ProgressInfo
 	session     SessionInfo
