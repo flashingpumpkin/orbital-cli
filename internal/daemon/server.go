@@ -10,21 +10,25 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 )
 
 // Server is the orbital daemon HTTP server.
 type Server struct {
-	projectDir string
-	socketPath string
-	pidFile    string
-	registry   *Registry
-	config     *DaemonConfig
-	httpServer *http.Server
-	listener   net.Listener
-	runner     *SessionRunner
-	startedAt  time.Time
+	projectDir  string
+	socketPath  string
+	pidFile     string
+	registry    *Registry
+	config      *DaemonConfig
+	httpServer  *http.Server
+	listener    net.Listener
+	runner      *SessionRunner
+	startedAt   time.Time
+	shutdownCh  chan struct{} // Closed to trigger shutdown
+	shutdownMu  sync.Mutex
+	shuttingDown bool
 }
 
 // NewServer creates a new daemon server.
@@ -40,6 +44,7 @@ func NewServer(projectDir string, cfg *DaemonConfig) *Server {
 		registry:   NewRegistry(projectDir),
 		config:     cfg,
 		startedAt:  time.Now(),
+		shutdownCh: make(chan struct{}),
 	}
 
 	s.runner = NewSessionRunner(s.registry, projectDir, cfg)
@@ -122,6 +127,8 @@ func (s *Server) Start(ctx context.Context) error {
 	case <-ctx.Done():
 	case sig := <-sigCh:
 		fmt.Printf("\nReceived signal %v, shutting down...\n", sig)
+	case <-s.shutdownCh:
+		fmt.Printf("\nShutdown requested via API, shutting down...\n")
 	case err := <-errCh:
 		return err
 	}
@@ -218,8 +225,14 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+// maxRequestBodySize is the maximum allowed request body size (1MB).
+const maxRequestBodySize = 1 << 20 // 1MB
+
 // startSession handles POST /sessions
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request) {
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+
 	var req StartSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("invalid request: %v", err), http.StatusBadRequest)
@@ -333,7 +346,7 @@ func (s *Server) streamOutput(w http.ResponseWriter, r *http.Request, sessionID 
 	}
 
 	// Subscribe to output
-	ch, history, err := s.registry.Subscribe(sessionID)
+	ch, history, done, err := s.registry.Subscribe(sessionID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -351,6 +364,9 @@ func (s *Server) streamOutput(w http.ResponseWriter, r *http.Request, sessionID 
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-done:
+			// Session completed, close connection
 			return
 		case msg, ok := <-ch:
 			if !ok {
@@ -390,6 +406,9 @@ func (s *Server) triggerMerge(w http.ResponseWriter, r *http.Request, sessionID 
 
 // sendChat handles POST /sessions/{id}/chat
 func (s *Server) sendChat(w http.ResponseWriter, r *http.Request, session *Session) {
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+
 	var req ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("invalid request: %v", err), http.StatusBadRequest)
@@ -463,11 +482,22 @@ func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "shutting down"})
 
-	// Trigger shutdown in background
+	// Trigger shutdown in background (platform-independent)
 	go func() {
 		time.Sleep(100 * time.Millisecond) // Allow response to be sent
-		syscall.Kill(os.Getpid(), syscall.SIGTERM)
+		s.triggerShutdown()
 	}()
+}
+
+// triggerShutdown signals the server to shut down.
+func (s *Server) triggerShutdown() {
+	s.shutdownMu.Lock()
+	defer s.shutdownMu.Unlock()
+
+	if !s.shuttingDown {
+		s.shuttingDown = true
+		close(s.shutdownCh)
+	}
 }
 
 // indexOf returns the index of the first occurrence of sep in s, or -1 if not found.

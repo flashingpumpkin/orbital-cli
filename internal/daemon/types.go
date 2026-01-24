@@ -60,11 +60,87 @@ type Session struct {
 	TokensIn       int            `json:"tokens_in"`
 	TokensOut      int            `json:"tokens_out"`
 
+	// Config fields (persisted for resume)
+	Model        string `json:"model,omitempty"`
+	CheckerModel string `json:"checker_model,omitempty"`
+	WorkflowName string `json:"workflow_name,omitempty"`
+	SystemPrompt string `json:"system_prompt,omitempty"`
+
 	// Runtime fields (not persisted)
 	mu           sync.RWMutex     `json:"-"`
 	cancelFunc   func()           `json:"-"`
 	outputBuffer *RingBuffer      `json:"-"`
 	subscribers  []chan OutputMsg `json:"-"`
+	done         chan struct{}    `json:"-"` // Closed when session completes
+}
+
+// Clone returns a thread-safe copy of the session for serialization.
+// This method acquires the session's read lock to ensure consistent data.
+func (s *Session) Clone() *Session {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	clone := &Session{
+		ID:            s.ID,
+		SpecFiles:     make([]string, len(s.SpecFiles)),
+		Status:        s.Status,
+		WorkingDir:    s.WorkingDir,
+		Iteration:     s.Iteration,
+		MaxIterations: s.MaxIterations,
+		TotalCost:     s.TotalCost,
+		MaxBudget:     s.MaxBudget,
+		StartedAt:     s.StartedAt,
+		ClaudeSession: s.ClaudeSession,
+		ChatSession:   s.ChatSession,
+		Error:         s.Error,
+		NotesFile:     s.NotesFile,
+		TokensIn:      s.TokensIn,
+		TokensOut:     s.TokensOut,
+		Model:         s.Model,
+		CheckerModel:  s.CheckerModel,
+		WorkflowName:  s.WorkflowName,
+		SystemPrompt:  s.SystemPrompt,
+	}
+
+	copy(clone.SpecFiles, s.SpecFiles)
+
+	if s.CompletedAt != nil {
+		t := *s.CompletedAt
+		clone.CompletedAt = &t
+	}
+
+	if s.Worktree != nil {
+		clone.Worktree = &WorktreeInfo{
+			Name:           s.Worktree.Name,
+			Path:           s.Worktree.Path,
+			Branch:         s.Worktree.Branch,
+			OriginalBranch: s.Worktree.OriginalBranch,
+		}
+	}
+
+	if s.ContextFiles != nil {
+		clone.ContextFiles = make([]string, len(s.ContextFiles))
+		copy(clone.ContextFiles, s.ContextFiles)
+	}
+
+	if s.Workflow != nil {
+		clone.Workflow = &WorkflowState{
+			PresetName:       s.Workflow.PresetName,
+			CurrentStepIndex: s.Workflow.CurrentStepIndex,
+		}
+		if s.Workflow.Steps != nil {
+			clone.Workflow.Steps = make([]workflow.Step, len(s.Workflow.Steps))
+			copy(clone.Workflow.Steps, s.Workflow.Steps)
+		}
+		if s.Workflow.GateRetries != nil {
+			clone.Workflow.GateRetries = make(map[string]int)
+			for k, v := range s.Workflow.GateRetries {
+				clone.Workflow.GateRetries[k] = v
+			}
+		}
+	}
+
+	return clone
 }
 
 // OutputMsg represents a message in the session output stream.

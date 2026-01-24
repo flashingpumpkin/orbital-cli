@@ -69,6 +69,9 @@ type Model struct {
 	loading bool
 	err     error
 	quitting bool
+
+	// Stream subscription
+	streamCancel context.CancelFunc
 }
 
 type chatMessage struct {
@@ -290,6 +293,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 		}
 
+	case streamStartedMsg:
+		// Cancel any previous stream
+		if m.streamCancel != nil {
+			m.streamCancel()
+		}
+		m.streamCancel = msg.cancel
+		// Start waiting for output
+		cmds = append(cmds, waitForOutput(msg.msgCh))
+
+	case streamOutputMsg:
+		m.outputBuffer = append(m.outputBuffer, msg.msg)
+		m.viewport.SetContent(m.renderOutputBuffer())
+		if m.following {
+			m.viewport.GotoBottom()
+		}
+		// Continue waiting for more output
+		cmds = append(cmds, waitForOutput(msg.msgCh))
+
+	case streamEndedMsg:
+		// Stream ended, no more output
+		m.streamCancel = nil
+
 	case chatResponseMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -412,10 +437,12 @@ func (m Model) updateManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Back):
+		m.cancelStream()
 		m.view = ViewManager
 		m.currentSession = nil
 
 	case key.Matches(msg, m.keys.Quit):
+		m.cancelStream()
 		m.view = ViewManager
 		m.currentSession = nil
 
@@ -567,6 +594,13 @@ func (m Model) getVisibleItems() []listItem {
 	return items
 }
 
+// streamSubscription tracks an active output stream subscription.
+type streamSubscription struct {
+	sessionID string
+	cancel    context.CancelFunc
+	msgCh     chan daemon.OutputMsg
+}
+
 // Command functions
 
 func (m Model) startOutputStream() tea.Cmd {
@@ -575,17 +609,60 @@ func (m Model) startOutputStream() tea.Cmd {
 			return nil
 		}
 
-		ctx := context.Background()
-		err := m.client.StreamOutput(ctx, m.currentSession.ID, func(msg daemon.OutputMsg) {
-			// This will be called for each message - we'd need a channel to send to the model
-			// For now, we'll rely on polling
-		})
-		if err != nil {
-			return outputMsg{msg: daemon.OutputMsg{Type: "error", Content: err.Error()}}
+		// Create a channel for streaming messages
+		msgCh := make(chan daemon.OutputMsg, 100)
+		ctx, cancel := context.WithCancel(context.Background())
+
+		// Start streaming in background
+		go func() {
+			defer close(msgCh)
+			defer cancel()
+
+			err := m.client.StreamOutput(ctx, m.currentSession.ID, func(msg daemon.OutputMsg) {
+				select {
+				case msgCh <- msg:
+				case <-ctx.Done():
+				}
+			})
+			if err != nil && ctx.Err() == nil {
+				msgCh <- daemon.OutputMsg{Type: "error", Content: err.Error()}
+			}
+		}()
+
+		return streamStartedMsg{
+			sessionID: m.currentSession.ID,
+			msgCh:     msgCh,
+			cancel:    cancel,
 		}
-		return nil
 	}
 }
+
+// streamStartedMsg indicates streaming has started.
+type streamStartedMsg struct {
+	sessionID string
+	msgCh     chan daemon.OutputMsg
+	cancel    context.CancelFunc
+}
+
+// waitForOutput returns a command that waits for the next output message.
+func waitForOutput(msgCh chan daemon.OutputMsg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-msgCh
+		if !ok {
+			return streamEndedMsg{}
+		}
+		return streamOutputMsg{msg: msg, msgCh: msgCh}
+	}
+}
+
+// streamOutputMsg contains output from the stream.
+type streamOutputMsg struct {
+	msg   daemon.OutputMsg
+	msgCh chan daemon.OutputMsg
+}
+
+// streamEndedMsg indicates the stream has ended.
+type streamEndedMsg struct{}
 
 func (m Model) stopSession(id string) tea.Cmd {
 	return func() tea.Msg {
@@ -646,4 +723,32 @@ func (m Model) startNewSession(specFile string) tea.Cmd {
 		}
 		return nil
 	}
+}
+
+// cancelStream cancels the current output stream subscription.
+func (m *Model) cancelStream() {
+	if m.streamCancel != nil {
+		m.streamCancel()
+		m.streamCancel = nil
+	}
+}
+
+// renderOutputBuffer renders the output buffer as a string for the viewport.
+func (m Model) renderOutputBuffer() string {
+	var lines []string
+	for _, msg := range m.outputBuffer {
+		prefix := ""
+		switch msg.Type {
+		case "error":
+			prefix = "[ERR] "
+		case "tool":
+			prefix = "[TOOL] "
+		case "status":
+			prefix = "[STATUS] "
+		case "stats":
+			prefix = "[STATS] "
+		}
+		lines = append(lines, prefix+msg.Content)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }

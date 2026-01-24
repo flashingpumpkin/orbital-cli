@@ -28,6 +28,7 @@ type SessionRunner struct {
 	config     *DaemonConfig
 	mu         sync.Mutex
 	cancels    map[string]context.CancelFunc
+	mergeLocks map[string]bool // Tracks sessions currently being merged
 }
 
 // NewSessionRunner creates a new session runner.
@@ -37,6 +38,7 @@ func NewSessionRunner(registry *Registry, projectDir string, cfg *DaemonConfig) 
 		projectDir: projectDir,
 		config:     cfg,
 		cancels:    make(map[string]context.CancelFunc),
+		mergeLocks: make(map[string]bool),
 	}
 }
 
@@ -68,6 +70,11 @@ func (r *SessionRunner) Start(ctx context.Context, req StartSessionRequest) (*Se
 		StartedAt:     time.Now(),
 		NotesFile:     req.NotesFile,
 		ContextFiles:  req.ContextFiles,
+		// Store config for resume
+		Model:        req.Model,
+		CheckerModel: req.CheckerModel,
+		WorkflowName: req.Workflow,
+		SystemPrompt: req.SystemPrompt,
 	}
 
 	// Handle worktree setup if requested
@@ -82,6 +89,11 @@ func (r *SessionRunner) Start(ctx context.Context, req StartSessionRequest) (*Se
 
 	// Add to registry
 	if err := r.registry.Add(session); err != nil {
+		// Cleanup worktree if we created one
+		if session.Worktree != nil {
+			cleanup := worktree.NewCleanup(r.projectDir)
+			cleanup.Run(session.Worktree.Path, session.Worktree.Branch)
+		}
 		return nil, fmt.Errorf("failed to add session: %w", err)
 	}
 
@@ -101,13 +113,17 @@ func (r *SessionRunner) Start(ctx context.Context, req StartSessionRequest) (*Se
 func (r *SessionRunner) Stop(sessionID string) error {
 	r.mu.Lock()
 	cancel, exists := r.cancels[sessionID]
+	if exists {
+		// Delete from map while holding lock to prevent race with run()'s defer
+		delete(r.cancels, sessionID)
+	}
 	r.mu.Unlock()
 
 	if !exists {
 		return fmt.Errorf("session %s not found or not running", sessionID)
 	}
 
-	// Cancel the context to stop execution
+	// Cancel the context to stop execution (safe to call after delete)
 	cancel()
 
 	// Update status
@@ -116,7 +132,7 @@ func (r *SessionRunner) Stop(sessionID string) error {
 
 // Resume resumes an interrupted or stopped session.
 func (r *SessionRunner) Resume(ctx context.Context, sessionID string) error {
-	session, exists := r.registry.Get(sessionID)
+	session, exists := r.registry.GetInternal(sessionID)
 	if !exists {
 		return fmt.Errorf("session %s not found", sessionID)
 	}
@@ -137,13 +153,17 @@ func (r *SessionRunner) Resume(ctx context.Context, sessionID string) error {
 	r.cancels[sessionID] = cancel
 	r.mu.Unlock()
 
-	// Build request from session state
+	// Build request from session state (restore all persisted config)
 	req := StartSessionRequest{
 		SpecFiles:     session.SpecFiles,
 		ContextFiles:  session.ContextFiles,
 		NotesFile:     session.NotesFile,
 		Budget:        session.MaxBudget,
 		MaxIterations: session.MaxIterations,
+		Model:         session.Model,
+		CheckerModel:  session.CheckerModel,
+		Workflow:      session.WorkflowName,
+		SystemPrompt:  session.SystemPrompt,
 	}
 
 	// Resume execution in background
@@ -154,7 +174,23 @@ func (r *SessionRunner) Resume(ctx context.Context, sessionID string) error {
 
 // Merge triggers a worktree merge for a completed session.
 func (r *SessionRunner) Merge(sessionID string) error {
-	session, exists := r.registry.Get(sessionID)
+	// Check and acquire merge lock
+	r.mu.Lock()
+	if r.mergeLocks[sessionID] {
+		r.mu.Unlock()
+		return fmt.Errorf("merge already in progress for session %s", sessionID)
+	}
+	r.mergeLocks[sessionID] = true
+	r.mu.Unlock()
+
+	// Ensure we release the lock when done
+	defer func() {
+		r.mu.Lock()
+		delete(r.mergeLocks, sessionID)
+		r.mu.Unlock()
+	}()
+
+	session, exists := r.registry.GetInternal(sessionID)
 	if !exists {
 		return fmt.Errorf("session %s not found", sessionID)
 	}
@@ -235,20 +271,26 @@ func (r *SessionRunner) Merge(sessionID string) error {
 
 // Chat sends a message to an interactive chat session.
 func (r *SessionRunner) Chat(ctx context.Context, session *Session, message string) (string, error) {
+	// Get the actual session from registry for updates
+	realSession, exists := r.registry.GetInternal(session.ID)
+	if !exists {
+		return "", fmt.Errorf("session %s not found", session.ID)
+	}
+
 	// Create chat executor
 	chatCfg := &config.Config{
 		Model:      r.config.ChatModel,
 		MaxBudget:  r.config.ChatBudget,
-		SessionID:  session.ChatSession, // Resume if exists
-		WorkingDir: session.WorkingDir,
+		SessionID:  realSession.ChatSession, // Resume if exists
+		WorkingDir: realSession.WorkingDir,
 	}
 
 	// Build context prompt
 	var contextParts []string
 	contextParts = append(contextParts, "You are helping iterate on specs for an Orbital session.")
-	contextParts = append(contextParts, fmt.Sprintf("The session is working on: %s", strings.Join(session.SpecFiles, ", ")))
-	if session.NotesFile != "" {
-		contextParts = append(contextParts, fmt.Sprintf("Notes file: %s", session.NotesFile))
+	contextParts = append(contextParts, fmt.Sprintf("The session is working on: %s", strings.Join(realSession.SpecFiles, ", ")))
+	if realSession.NotesFile != "" {
+		contextParts = append(contextParts, fmt.Sprintf("Notes file: %s", realSession.NotesFile))
 	}
 	chatCfg.SystemPrompt = strings.Join(contextParts, "\n")
 
@@ -275,7 +317,10 @@ func (r *SessionRunner) Chat(ctx context.Context, session *Session, message stri
 func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSessionRequest) {
 	defer func() {
 		r.mu.Lock()
-		delete(r.cancels, session.ID)
+		// Only delete if still present (Stop() may have already removed it)
+		if _, exists := r.cancels[session.ID]; exists {
+			delete(r.cancels, session.ID)
+		}
 		r.mu.Unlock()
 	}()
 

@@ -38,13 +38,27 @@ func (r *Registry) Add(session *Session) error {
 	// Initialize runtime fields
 	session.outputBuffer = NewRingBuffer(10000)
 	session.subscribers = make([]chan OutputMsg, 0)
+	session.done = make(chan struct{})
 
 	r.sessions[session.ID] = session
 	return r.saveLocked()
 }
 
 // Get retrieves a session by ID.
+// Returns a clone of the session for thread-safe access.
 func (r *Registry) Get(id string) (*Session, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	session, ok := r.sessions[id]
+	if !ok {
+		return nil, false
+	}
+	return session.Clone(), true
+}
+
+// GetInternal retrieves the actual session pointer for internal use.
+// Caller must ensure proper synchronization.
+func (r *Registry) GetInternal(id string) (*Session, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	session, ok := r.sessions[id]
@@ -60,19 +74,19 @@ func (r *Registry) Remove(id string) error {
 	return r.saveLocked()
 }
 
-// List returns all sessions.
+// List returns clones of all sessions for thread-safe access.
 func (r *Registry) List() []*Session {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	result := make([]*Session, 0, len(r.sessions))
 	for _, s := range r.sessions {
-		result = append(result, s)
+		result = append(result, s.Clone())
 	}
 	return result
 }
 
-// ListByStatus returns sessions filtered by status.
+// ListByStatus returns clones of sessions filtered by status.
 func (r *Registry) ListByStatus(status SessionStatus) []*Session {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -80,7 +94,7 @@ func (r *Registry) ListByStatus(status SessionStatus) []*Session {
 	var result []*Session
 	for _, s := range r.sessions {
 		if s.Status == status {
-			result = append(result, s)
+			result = append(result, s.Clone())
 		}
 	}
 	return result
@@ -148,11 +162,22 @@ func (r *Registry) UpdateStatus(id string, status SessionStatus, errMsg string) 
 		session.Error = errMsg
 	}
 
-	// Set completion time for terminal states
+	// Set completion time and close done channel for terminal states
 	switch status {
 	case StatusCompleted, StatusFailed, StatusStopped, StatusMerged, StatusConflict:
 		now := time.Now()
 		session.CompletedAt = &now
+		// Close done channel to notify SSE subscribers
+		session.mu.Lock()
+		if session.done != nil {
+			select {
+			case <-session.done:
+				// Already closed
+			default:
+				close(session.done)
+			}
+		}
+		session.mu.Unlock()
 	}
 
 	return r.saveLocked()
@@ -181,13 +206,32 @@ func (r *Registry) Load() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Check for temp file left over from interrupted write
+	tempPath := r.stateFile + ".tmp"
+	if _, err := os.Stat(tempPath); err == nil {
+		// Temp file exists - try to use it if main file is missing/corrupt
+		os.Remove(tempPath) // Clean up orphaned temp file
+	}
+
+	// Check for backup file and recover if main file is corrupt
+	backupPath := r.stateFile + ".bak"
+
 	data, err := os.ReadFile(r.stateFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// No state file yet, that's fine
-			return nil
+			// Try to recover from backup
+			data, err = os.ReadFile(backupPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					// No state file yet, that's fine
+					return nil
+				}
+				return fmt.Errorf("failed to read backup state file: %w", err)
+			}
+			// Recovered from backup
+		} else {
+			return fmt.Errorf("failed to read state file: %w", err)
 		}
-		return fmt.Errorf("failed to read state file: %w", err)
 	}
 
 	var state struct {
@@ -202,10 +246,17 @@ func (r *Registry) Load() error {
 	for id, session := range state.Sessions {
 		session.outputBuffer = NewRingBuffer(10000)
 		session.subscribers = make([]chan OutputMsg, 0)
+		session.done = make(chan struct{})
 
 		// Mark previously running sessions as interrupted
 		if session.Status == StatusRunning || session.Status == StatusMerging {
 			session.Status = StatusInterrupted
+		}
+
+		// Close done channel for already-terminal sessions
+		switch session.Status {
+		case StatusCompleted, StatusFailed, StatusStopped, StatusMerged, StatusConflict, StatusInterrupted:
+			close(session.done)
 		}
 
 		r.sessions[id] = session
@@ -233,6 +284,15 @@ func (r *Registry) saveLocked() error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
+	// Create backup of existing state file before writing
+	backupPath := r.stateFile + ".bak"
+	if _, err := os.Stat(r.stateFile); err == nil {
+		// Main file exists, create backup
+		if backupErr := copyFile(r.stateFile, backupPath); backupErr != nil {
+			// Log but don't fail - backup is best-effort
+		}
+	}
+
 	// Atomic write
 	tempPath := r.stateFile + ".tmp"
 	if err := os.WriteFile(tempPath, data, 0644); err != nil {
@@ -246,15 +306,29 @@ func (r *Registry) saveLocked() error {
 	return nil
 }
 
+// copyFile copies a file from src to dst.
+func copyFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0644)
+}
+
 // Subscribe adds a subscriber to a session's output stream.
-func (r *Registry) Subscribe(id string) (chan OutputMsg, []OutputMsg, error) {
+// Returns the message channel, output history, done channel (closed on session end), and error.
+func (r *Registry) Subscribe(id string) (chan OutputMsg, []OutputMsg, <-chan struct{}, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	session, exists := r.sessions[id]
 	if !exists {
-		return nil, nil, fmt.Errorf("session %s not found", id)
+		return nil, nil, nil, fmt.Errorf("session %s not found", id)
 	}
+
+	// Lock session for safe access to subscribers
+	session.mu.Lock()
+	defer session.mu.Unlock()
 
 	// Get existing output
 	history := session.outputBuffer.ReadAll()
@@ -263,18 +337,21 @@ func (r *Registry) Subscribe(id string) (chan OutputMsg, []OutputMsg, error) {
 	ch := make(chan OutputMsg, 100)
 	session.subscribers = append(session.subscribers, ch)
 
-	return ch, history, nil
+	return ch, history, session.done, nil
 }
 
 // Unsubscribe removes a subscriber from a session's output stream.
 func (r *Registry) Unsubscribe(id string, ch chan OutputMsg) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+	r.mu.RLock()
 	session, exists := r.sessions[id]
+	r.mu.RUnlock()
+
 	if !exists {
 		return
 	}
+
+	session.mu.Lock()
+	defer session.mu.Unlock()
 
 	for i, sub := range session.subscribers {
 		if sub == ch {
@@ -288,18 +365,24 @@ func (r *Registry) Unsubscribe(id string, ch chan OutputMsg) {
 // Broadcast sends a message to all subscribers of a session.
 func (r *Registry) Broadcast(id string, msg OutputMsg) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	session, exists := r.sessions[id]
+	r.mu.RUnlock()
+
 	if !exists {
 		return
 	}
 
-	// Add to buffer
+	// Add to buffer (RingBuffer has its own lock)
 	session.outputBuffer.Write(msg)
 
+	// Lock session for safe access to subscribers
+	session.mu.RLock()
+	subscribers := make([]chan OutputMsg, len(session.subscribers))
+	copy(subscribers, session.subscribers)
+	session.mu.RUnlock()
+
 	// Send to all subscribers (non-blocking)
-	for _, ch := range session.subscribers {
+	for _, ch := range subscribers {
 		select {
 		case ch <- msg:
 		default:
