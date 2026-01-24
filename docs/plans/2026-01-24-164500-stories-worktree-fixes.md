@@ -109,7 +109,7 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 
 ---
 
-### [ ] **Ticket 1.3: Integrate name generator into setup flow**
+### [x] **Ticket 1.3: Integrate name generator into setup flow**
 
 **As a** developer using worktree mode
 **I want** the setup phase to generate names locally and create worktrees directly
@@ -127,18 +127,18 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Update `SetupResult` to not require Claude execution results
 
 **Acceptance Criteria**:
-- [ ] Given `--worktree` flag is used, when setup runs, then a worktree is created with an adjective-animal name without invoking Claude
-- [ ] Given `--worktree-name my-feature` is specified, when setup runs, then the worktree is created with name `my-feature`
-- [ ] Given existing worktrees `["swift-falcon", "calm-otter"]` in state, when setup runs, then the generated name is not in the exclusion list
-- [ ] Given worktree creation succeeds, when setup completes, then state is persisted with the generated name
-- [ ] Given worktree creation fails, when setup runs, then the error is propagated with context
+- [x] Given `--worktree` flag is used, when setup runs, then a worktree is created with an adjective-animal name without invoking Claude
+- [x] Given `--worktree-name my-feature` is specified, when setup runs, then the worktree is created with name `my-feature`
+- [x] Given existing worktrees `["swift-falcon", "calm-otter"]` in state, when setup runs, then the generated name is not in the exclusion list
+- [x] Given worktree creation succeeds, when setup completes, then state is persisted with the generated name
+- [x] Given worktree creation fails, when setup runs, then the error is propagated with context
 
 **Definition of Done** (Single Commit):
-- [ ] `runWorktreeSetup()` modified to use local name generation
-- [ ] Claude invocation removed from setup phase
-- [ ] `--worktree-name` flag continues to work
-- [ ] Tests updated or added for new flow
-- [ ] All tests passing
+- [x] `runWorktreeSetup()` modified to use local name generation
+- [x] Claude invocation removed from setup phase
+- [x] `--worktree-name` flag continues to work
+- [x] Tests updated or added for new flow
+- [x] All tests passing
 
 **Dependencies**: Ticket 1.1, Ticket 1.2
 
@@ -150,7 +150,7 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 
 ---
 
-### [ ] **Ticket 1.4: Remove obsolete setup code**
+### [x] **Ticket 1.4: Remove obsolete setup code**
 
 **As a** maintainer of Orbital CLI
 **I want** unused setup phase code removed
@@ -169,16 +169,16 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Remove `worktreeExecutorAdapter` if no longer used
 
 **Acceptance Criteria**:
-- [ ] Given the codebase, when searching for `buildSetupPrompt`, then no results are found
-- [ ] Given the codebase, when searching for `extractMarker`, then no results are found
-- [ ] Given `go build ./...`, when executed, then it succeeds without errors
-- [ ] Given `go test ./...`, when executed, then all tests pass
+- [x] Given the codebase, when searching for `buildSetupPrompt`, then no results are found
+- [x] Given the codebase, when searching for `extractMarker`, then no results are found
+- [x] Given `go build ./...`, when executed, then it succeeds without errors
+- [x] Given `go test ./...`, when executed, then all tests pass
 
 **Definition of Done** (Single Commit):
-- [ ] Obsolete functions removed from `setup.go`
-- [ ] Tests removed or updated in `setup_test.go`
-- [ ] No compilation errors
-- [ ] All remaining tests pass
+- [x] Obsolete functions removed from `setup.go`
+- [x] Tests removed or updated in `setup_test.go`
+- [x] No compilation errors
+- [x] All remaining tests pass
 
 **Dependencies**: Ticket 1.3
 
@@ -229,7 +229,7 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 
 ---
 
-### [ ] **Ticket 2.2: Remove directory navigation from merge prompt**
+### [x] **Ticket 2.2: Remove directory navigation from merge prompt**
 
 **As a** developer using worktree mode
 **I want** the merge phase to rely on working directory, not prompt instructions
@@ -245,14 +245,14 @@ Animals: badger, bear, beaver, bison, bobcat, cheetah, condor, cougar, coyote, c
 - Ensure merge executor is configured with correct working directory (main repo for merge)
 
 **Acceptance Criteria**:
-- [ ] Given the merge prompt, when inspected, then it does not contain "Navigate to" instructions
-- [ ] Given merge phase runs, when Claude executes git commands, then they operate in the correct directory without explicit navigation
-- [ ] Given merge succeeds, when checking output, then `MERGE_SUCCESS: true` marker is present
+- [x] Given the merge prompt, when inspected, then it does not contain "Navigate to" instructions
+- [x] Given merge phase runs, when Claude executes git commands, then they operate in the correct directory without explicit navigation
+- [x] Given merge succeeds, when checking output, then `MERGE_SUCCESS: true` marker is present
 
 **Definition of Done** (Single Commit):
-- [ ] `buildMergePrompt()` simplified
-- [ ] Tests updated for new prompt format
-- [ ] All tests passing
+- [x] `buildMergePrompt()` simplified
+- [x] Tests updated for new prompt format
+- [x] All tests passing
 
 **Dependencies**: Ticket 2.1
 
