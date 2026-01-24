@@ -93,8 +93,15 @@ func SetupDirect(workingDir string, opts SetupOptions) (*SetupResult, error) {
 		return nil, fmt.Errorf("failed to create worktree: %w", err)
 	}
 
+	// Convert worktree path to absolute to ensure it works regardless of
+	// how spec file paths are provided (relative or absolute)
+	absWorktreePath, err := filepath.Abs(WorktreePath(name))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute worktree path: %w", err)
+	}
+
 	return &SetupResult{
-		WorktreePath: WorktreePath(name),
+		WorktreePath: absWorktreePath,
 		BranchName:   BranchName(name),
 		// No cost since we don't invoke Claude
 		CostUSD:   0,
