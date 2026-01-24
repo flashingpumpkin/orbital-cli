@@ -57,3 +57,61 @@ All tests pass. The flag is now registered but not yet wired to any functionalit
 === RUN   TestWorktreeFlag/defaults_to_false
 --- PASS: TestWorktreeFlag (0.00s)
 ```
+
+### Iteration 4: TDD Review Gate
+
+**Review scope**: Test quality, implementation correctness, refactoring quality
+
+**Test quality assessment**:
+- Tests are focused and test a single concern (the flag registration)
+- Subtest structure is well organised: parent test checks flag existence, subtests check properties
+- Using `t.Fatal` correctly for the prerequisite check (flag must exist before checking its properties)
+- Test assertions are clear and use descriptive error messages with actual vs expected format
+- No external dependencies or mocking needed for this simple flag test
+
+**Implementation correctness**:
+- Flag declared at package level with other flag variables (line 52: `worktree bool`)
+- Flag registered in `init()` using `BoolVar` with correct parameters (line 111)
+- Help text is clear: "Enable worktree isolation mode"
+- Default value of `false` is appropriate (opt-in behaviour)
+- Flag is currently unused in `runOrbit` but that's expected; subsequent stories will wire it up
+
+**Refactoring quality**:
+- Consolidation from 3 separate test functions to 1 with subtests reduces duplication
+- Single `Lookup` call at the top eliminates repeated flag lookups
+- Subtest names are lowercase and descriptive
+- Code is idiomatic Go testing style
+
+**Findings**: No issues found. The TDD cycle was executed correctly:
+1. Red: Test written first, failed as expected
+2. Green: Minimal implementation to pass tests
+3. Refactor: Tests consolidated without changing behaviour
+
+**Action items**: None required
+
+### Iteration 5: Add failing test for setup phase
+
+**Test added**: `internal/worktree/setup_test.go`
+
+**New package created**: `internal/worktree/`
+
+**What the tests verify**:
+- `TestSetupPhase_InvokesClaude`: Verifies that the setup phase invokes Claude with a prompt containing the spec content, and extracts the worktree path from Claude's output (expected format: `WORKTREE_PATH: <path>`)
+- `TestSetupPhase_ReturnsErrorOnExecutionFailure`: Verifies setup returns an error when the executor fails
+- `TestSetupPhase_ReturnsErrorWhenPathNotFound`: Verifies setup returns an error when Claude's output doesn't contain the `WORKTREE_PATH` marker
+
+**Types and functions expected** (not yet implemented):
+- `ExecutionResult` struct with `Output`, `CostUSD`, `TokensUsed` fields
+- `NewSetup(executor)` constructor
+- `Setup.Run(ctx, specContent)` method returning `(*SetupResult, error)`
+- `SetupResult` struct with `WorktreePath` field
+
+**Test result**: FAIL (as expected, build fails because types don't exist)
+```
+internal/worktree/setup_test.go:13:17: undefined: ExecutionResult
+internal/worktree/setup_test.go:36:11: undefined: NewSetup
+...
+FAIL	github.com/flashingpumpkin/orbit-cli/internal/worktree [build failed]
+```
+
+This tests the acceptance criterion: "When flag is set, orbit runs a separate Claude invocation before the loop"
