@@ -202,6 +202,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionMsg:
 		m.session = SessionInfo(msg)
 		m.tabs = m.buildTabs()
+		// Clamp activeTab to valid range if tabs changed
+		if m.activeTab >= len(m.tabs) {
+			m.activeTab = 0
+		}
 		return m, nil
 
 	case WorktreeMsg:
@@ -244,6 +248,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.scrollPageUp()
 		case "pgdown":
 			return m.scrollPageDown()
+		case "r":
+			return m.reloadCurrentFile()
 		}
 
 	case tea.MouseMsg:
@@ -334,11 +340,16 @@ func (m Model) switchToTab(idx int) (tea.Model, tea.Cmd) {
 
 // handleTabClick handles a mouse click on the tab bar.
 func (m Model) handleTabClick(x int) (tea.Model, tea.Cmd) {
-	// Calculate tab positions based on rendered width
+	// Calculate tab positions based on rendered width (must match renderTabBar)
 	currentX := 0
 	for i, tab := range m.tabs {
-		// Tab width is name length + 2 (for padding) + 1 (for separator)
-		tabWidth := ansi.StringWidth(tab.Name) + 3
+		// Tab name with number prefix (must match renderTabBar logic)
+		name := tab.Name
+		if i < 9 {
+			name = intToString(i+1) + ":" + name
+		}
+		// Tab width is name length + 2 (for padding from style) + 1 (for separator)
+		tabWidth := ansi.StringWidth(name) + 3
 		if x >= currentX && x < currentX+tabWidth {
 			return m.switchToTab(i)
 		}
@@ -428,6 +439,21 @@ func (m Model) scrollPageDown() (tea.Model, tea.Cmd) {
 			newOffset = maxOffset
 		}
 		m.fileScroll[tab.FilePath] = newOffset
+	}
+	return m, nil
+}
+
+// reloadCurrentFile reloads the content of the current file tab.
+func (m Model) reloadCurrentFile() (tea.Model, tea.Cmd) {
+	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+		return m, nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile && tab.FilePath != "" {
+		// Clear cached content to trigger reload
+		delete(m.fileContents, tab.FilePath)
+		return m, loadFileCmd(tab.FilePath)
 	}
 	return m, nil
 }
@@ -573,14 +599,10 @@ func (m Model) renderFileContent(path string) string {
 		}
 		numStr = m.styles.Label.Render(numStr + "│")
 
-		// Truncate long lines
+		// Truncate long lines (ANSI-aware)
 		visibleWidth := width - 6 // Account for line number column
 		if ansi.StringWidth(line) > visibleWidth {
-			// Simple truncation (could be improved with proper ANSI handling)
-			runes := []rune(line)
-			if len(runes) > visibleWidth-3 {
-				line = string(runes[:visibleWidth-3]) + "..."
-			}
+			line = ansi.Truncate(line, visibleWidth-3, "...")
 		}
 
 		lines = append(lines, numStr+line)
