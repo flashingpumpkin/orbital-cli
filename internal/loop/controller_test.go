@@ -878,7 +878,7 @@ func TestSetSpecFiles(t *testing.T) {
 func TestParseVerificationResponse_Verified(t *testing.T) {
 	output := "VERIFIED: 0 unchecked, 5 checked"
 
-	verified, unchecked, checked := parseVerificationResponse(output)
+	verified, unchecked, checked := ParseVerificationResponse(output)
 
 	if !verified {
 		t.Error("expected verified to be true")
@@ -894,7 +894,7 @@ func TestParseVerificationResponse_Verified(t *testing.T) {
 func TestParseVerificationResponse_Incomplete(t *testing.T) {
 	output := "INCOMPLETE: 3 unchecked, 7 checked"
 
-	verified, unchecked, checked := parseVerificationResponse(output)
+	verified, unchecked, checked := ParseVerificationResponse(output)
 
 	if verified {
 		t.Error("expected verified to be false")
@@ -910,7 +910,7 @@ func TestParseVerificationResponse_Incomplete(t *testing.T) {
 func TestParseVerificationResponse_UnparseableOutput(t *testing.T) {
 	output := "I don't understand the question"
 
-	verified, unchecked, checked := parseVerificationResponse(output)
+	verified, unchecked, checked := ParseVerificationResponse(output)
 
 	if verified {
 		t.Error("expected verified to be false for unparseable output")
@@ -931,7 +931,7 @@ VERIFIED: 0 unchecked, 10 checked
 
 All items are complete!`
 
-	verified, unchecked, checked := parseVerificationResponse(output)
+	verified, unchecked, checked := ParseVerificationResponse(output)
 
 	if !verified {
 		t.Error("expected verified to be true")
@@ -951,7 +951,7 @@ INCOMPLETE: 2 unchecked, 8 checked
 
 You still have work to do.`
 
-	verified, unchecked, checked := parseVerificationResponse(output)
+	verified, unchecked, checked := ParseVerificationResponse(output)
 
 	if verified {
 		t.Error("expected verified to be false")

@@ -92,3 +92,13 @@ func (w *Workflow) EffectiveMaxGateRetries() int {
 	}
 	return DefaultMaxGateRetries
 }
+
+// HasGates returns true if any step in the workflow is a gate.
+func (w *Workflow) HasGates() bool {
+	for _, step := range w.Steps {
+		if step.Gate {
+			return true
+		}
+	}
+	return false
+}

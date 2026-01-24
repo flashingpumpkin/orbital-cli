@@ -227,8 +227,14 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		return updateState(st, iteration, totalCost)
 	})
 
+	// Resolve workflow from flag or config
+	wf, err := resolveWorkflow(workflowFlag, fileConfig)
+	if err != nil {
+		return fmt.Errorf("failed to resolve workflow: %w", err)
+	}
+
 	// Print banner with config summary (use context files from state if available)
-	printBanner(cfg, sp, st.ContextFiles)
+	printBanner(cfg, sp, st.ContextFiles, wf)
 
 	// Build the prompt
 	prompt := sp.BuildPrompt()

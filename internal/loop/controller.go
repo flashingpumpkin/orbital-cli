@@ -157,7 +157,7 @@ func (c *Controller) verifyCompletion(ctx context.Context) (*VerificationResult,
 	}
 
 	// Parse the response
-	verified, unchecked, checked := parseVerificationResponse(result.Output)
+	verified, unchecked, checked := ParseVerificationResponse(result.Output)
 
 	return &VerificationResult{
 		Verified:  verified,
@@ -168,9 +168,9 @@ func (c *Controller) verifyCompletion(ctx context.Context) (*VerificationResult,
 	}, nil
 }
 
-// parseVerificationResponse parses the verification output for VERIFIED or INCOMPLETE.
+// ParseVerificationResponse parses the verification output for VERIFIED or INCOMPLETE.
 // Returns (verified, unchecked, checked).
-func parseVerificationResponse(output string) (bool, int, int) {
+func ParseVerificationResponse(output string) (bool, int, int) {
 	// Look for VERIFIED: 0 unchecked, N checked
 	verifiedRe := regexp.MustCompile(`VERIFIED:\s*0\s*unchecked,\s*(\d+)\s*checked`)
 	if matches := verifiedRe.FindStringSubmatch(output); len(matches) > 1 {

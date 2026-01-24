@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -298,12 +299,18 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		return nil
 	})
 
+	// Resolve workflow from flag or config
+	wf, err := resolveWorkflow(workflowFlag, fileConfig)
+	if err != nil {
+		return fmt.Errorf("failed to resolve workflow: %w", err)
+	}
+
 	// Build the prompt
 	prompt := sp.BuildPrompt()
 
 	// Print banner or start TUI
 	if !useTUI {
-		printBanner(cfg, sp, contextFiles)
+		printBanner(cfg, sp, contextFiles, wf)
 
 		// Print the command that will be executed
 		if cfg.Verbose {
@@ -326,15 +333,23 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			tuiDone <- tuiProgram.Run()
 		}()
 
-		// Run the loop
-		loopState, err = controller.Run(ctx, prompt)
+		// Check if workflow has gates (multi-step workflow)
+		if wf.HasGates() {
+			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, sm, st, tuiProgram)
+		} else {
+			loopState, err = controller.Run(ctx, prompt)
+		}
 
 		// Quit the TUI
 		tuiProgram.Quit()
 		<-tuiDone
 	} else {
-		// Run the loop without TUI
-		loopState, err = controller.Run(ctx, prompt)
+		// Check if workflow has gates (multi-step workflow)
+		if wf.HasGates() {
+			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, sm, st, nil)
+		} else {
+			loopState, err = controller.Run(ctx, prompt)
+		}
 	}
 
 	// Print summary (only in minimal mode)
@@ -371,7 +386,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printBanner(cfg *config.Config, sp *spec.Spec, ctxFiles []string) {
+func printBanner(cfg *config.Config, sp *spec.Spec, ctxFiles []string, wf *workflow.Workflow) {
 	fmt.Println("╔═══════════════════════════════════════════════════════════════╗")
 	fmt.Println("║                    Orbit - I'm learnding!                     ║")
 	fmt.Println("╚═══════════════════════════════════════════════════════════════╝")
@@ -382,6 +397,12 @@ func printBanner(cfg *config.Config, sp *spec.Spec, ctxFiles []string) {
 		for _, path := range ctxFiles {
 			fmt.Printf("               - %s\n", path)
 		}
+	}
+	fmt.Printf("  Workflow:    %s", wf.Name)
+	if wf.HasGates() {
+		fmt.Printf(" (%d steps, with gates)\n", len(wf.Steps))
+	} else {
+		fmt.Printf(" (%d step)\n", len(wf.Steps))
 	}
 	fmt.Printf("  Model:       %s\n", cfg.Model)
 	fmt.Printf("  Checker:     %s\n", cfg.CheckerModel)
@@ -621,4 +642,226 @@ func resolveWorkflow(flagValue string, fileConfig *config.FileConfig) (*workflow
 
 	// Default to spec-driven
 	return workflow.GetPreset(workflow.PresetSpecDriven)
+}
+
+// claudeStepExecutor adapts the executor.Executor to the workflow.StepExecutor interface.
+type claudeStepExecutor struct {
+	exec *executor.Executor
+}
+
+// ExecuteStep executes a single workflow step by invoking Claude with the step prompt.
+func (e *claudeStepExecutor) ExecuteStep(ctx context.Context, stepName string, prompt string) (*workflow.ExecutionResult, error) {
+	result, err := e.exec.Execute(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("step %q execution failed: %w", stepName, err)
+	}
+
+	return &workflow.ExecutionResult{
+		StepName:   stepName,
+		Output:     result.Output,
+		CostUSD:    result.CostUSD,
+		TokensUsed: result.TokensUsed,
+	}, nil
+}
+
+// runWorkflowLoop executes a multi-step workflow with gates.
+// It runs the workflow steps in sequence, handling gate pass/fail logic,
+// and iterates until verification passes or limits are reached.
+func runWorkflowLoop(
+	ctx context.Context,
+	cfg *config.Config,
+	exec *executor.Executor,
+	wf *workflow.Workflow,
+	specFiles []string,
+	sm *stateManagerAdapter,
+	st *state.State,
+	tuiProgram *tui.Program,
+) (*loop.LoopState, error) {
+	loopState := &loop.LoopState{
+		StartTime: time.Now(),
+	}
+
+	// Create step executor adapter
+	stepExec := &claudeStepExecutor{exec: exec}
+
+	// Create workflow runner
+	runner := workflow.NewRunner(wf, stepExec)
+	runner.SetFilePaths(specFiles)
+
+	// Set callback to track step execution
+	runner.SetCallback(func(stepName string, result *workflow.ExecutionResult, gateResult workflow.GateResult) error {
+		// Update totals
+		loopState.TotalCost += result.CostUSD
+		loopState.TotalTokens += result.TokensUsed
+		loopState.LastOutput = result.Output
+
+		// Send progress update to TUI if active
+		if tuiProgram != nil {
+			tuiProgram.SendProgress(tui.ProgressInfo{
+				Iteration:    loopState.Iteration,
+				MaxIteration: cfg.MaxIterations,
+				Cost:         loopState.TotalCost,
+				Budget:       cfg.MaxBudget,
+			})
+		}
+
+		// Log step completion (non-TUI mode)
+		if tuiProgram == nil {
+			if gateResult == workflow.GatePassed || gateResult == workflow.GateFailed {
+				fmt.Printf("\n[%s] Step completed: gate %s\n", stepName, gateResult)
+			} else {
+				fmt.Printf("\n[%s] Step completed\n", stepName)
+			}
+		}
+
+		return nil
+	})
+
+	// Outer loop: iterate until verification passes or limits reached
+	for iteration := 1; iteration <= cfg.MaxIterations; iteration++ {
+		loopState.Iteration = iteration
+
+		// Check context cancellation
+		if ctx.Err() != nil {
+			loopState.Error = ctx.Err()
+			return loopState, ctx.Err()
+		}
+
+		if tuiProgram == nil {
+			fmt.Printf("\n══════════════════════════════════════════════════════════════\n")
+			fmt.Printf("  Iteration %d - Workflow: %s\n", iteration, wf.Name)
+			fmt.Printf("══════════════════════════════════════════════════════════════\n\n")
+		}
+
+		// Run the workflow (all steps)
+		runResult, err := runner.Run(ctx)
+
+		// Update iteration callback
+		if err := updateState(st, iteration, loopState.TotalCost); err != nil {
+			loopState.Error = err
+			return loopState, err
+		}
+
+		if err != nil {
+			// Check for max gate retries exceeded
+			if errors.Is(err, workflow.ErrMaxGateRetriesExceeded) {
+				if tuiProgram == nil {
+					fmt.Printf("\nWorkflow gate failed too many times: %v\n", err)
+				}
+				// Continue to next iteration rather than failing completely
+				continue
+			}
+			loopState.Error = err
+			return loopState, err
+		}
+
+		// Check budget
+		if loopState.TotalCost >= cfg.MaxBudget {
+			loopState.Error = loop.ErrBudgetExceeded
+			return loopState, loop.ErrBudgetExceeded
+		}
+
+		// Workflow completed all steps (including gates passing)
+		if runResult.CompletedAllSteps {
+			if tuiProgram == nil {
+				fmt.Println("\nWorkflow completed. Running verification...")
+			}
+
+			// Run verification
+			verifyResult, verifyErr := runVerification(ctx, cfg, specFiles)
+
+			// Add verification cost
+			if verifyResult != nil {
+				loopState.TotalCost += verifyResult.Cost
+				loopState.TotalTokens += verifyResult.Tokens
+			}
+
+			if verifyErr != nil {
+				if tuiProgram == nil {
+					fmt.Printf("Verification error: %v. Continuing.\n", verifyErr)
+				}
+				continue
+			}
+
+			if !verifyResult.Verified {
+				if tuiProgram == nil {
+					if verifyResult.Unchecked >= 0 {
+						fmt.Printf("Verification: %d unchecked item(s) remain. Continuing.\n", verifyResult.Unchecked)
+					} else {
+						fmt.Println("Verification: could not parse response. Continuing.")
+					}
+				}
+				continue
+			}
+
+			// Verification passed
+			if tuiProgram == nil {
+				fmt.Printf("Verification: all items complete (%d checked).\n", verifyResult.Checked)
+			}
+
+			// Check queue for new files
+			if sm != nil {
+				queuedFiles, err := sm.PopQueue()
+				if err != nil {
+					loopState.Error = err
+					return loopState, err
+				}
+
+				if len(queuedFiles) > 0 {
+					if tuiProgram == nil {
+						fmt.Printf("Found %d queued file(s), continuing...\n", len(queuedFiles))
+						for _, f := range queuedFiles {
+							fmt.Printf("  + %s\n", f)
+						}
+					}
+
+					if err := sm.MergeFiles(queuedFiles); err != nil {
+						loopState.Error = err
+						return loopState, err
+					}
+
+					// Update runner's file paths
+					runner.SetFilePaths(append(specFiles, queuedFiles...))
+					continue
+				}
+			}
+
+			// Done
+			if tuiProgram == nil {
+				fmt.Println("No queued files. Work complete.")
+			}
+			loopState.Completed = true
+			return loopState, nil
+		}
+	}
+
+	// Max iterations reached
+	loopState.Error = loop.ErrMaxIterationsReached
+	return loopState, loop.ErrMaxIterationsReached
+}
+
+// runVerification executes verification using the checker model.
+func runVerification(ctx context.Context, cfg *config.Config, specFiles []string) (*loop.VerificationResult, error) {
+	verifyConfig := &config.Config{
+		Model:     cfg.CheckerModel,
+		MaxBudget: cfg.MaxBudget,
+	}
+
+	verifyExec := executor.New(verifyConfig)
+	prompt := spec.BuildVerificationPrompt(specFiles)
+
+	result, err := verifyExec.Execute(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("verification execution failed: %w", err)
+	}
+
+	verified, unchecked, checked := loop.ParseVerificationResponse(result.Output)
+
+	return &loop.VerificationResult{
+		Verified:  verified,
+		Unchecked: unchecked,
+		Checked:   checked,
+		Cost:      result.CostUSD,
+		Tokens:    result.TokensUsed,
+	}, nil
 }
