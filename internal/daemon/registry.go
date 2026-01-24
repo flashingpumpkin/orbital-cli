@@ -164,20 +164,11 @@ func (r *Registry) UpdateStatus(id string, status SessionStatus, errMsg string) 
 
 	// Set completion time and close done channel for terminal states
 	switch status {
-	case StatusCompleted, StatusFailed, StatusStopped, StatusMerged, StatusConflict:
+	case StatusCompleted, StatusFailed, StatusStopped, StatusMerged, StatusConflict, StatusInterrupted:
 		now := time.Now()
 		session.CompletedAt = &now
-		// Close done channel to notify SSE subscribers
-		session.mu.Lock()
-		if session.done != nil {
-			select {
-			case <-session.done:
-				// Already closed
-			default:
-				close(session.done)
-			}
-		}
-		session.mu.Unlock()
+		// Close done channel to notify SSE subscribers (safe to call multiple times)
+		session.CloseDone()
 	}
 
 	return r.saveLocked()
@@ -239,7 +230,15 @@ func (r *Registry) Load() error {
 	}
 
 	if err := json.Unmarshal(data, &state); err != nil {
-		return fmt.Errorf("failed to unmarshal state: %w", err)
+		// Main file is corrupt, try backup
+		backupData, backupErr := os.ReadFile(backupPath)
+		if backupErr != nil {
+			return fmt.Errorf("failed to unmarshal state (and backup not available): %w", err)
+		}
+		if unmarshalErr := json.Unmarshal(backupData, &state); unmarshalErr != nil {
+			return fmt.Errorf("failed to unmarshal state and backup: main=%v, backup=%v", err, unmarshalErr)
+		}
+		// Successfully recovered from backup
 	}
 
 	// Initialize runtime fields and mark running sessions as interrupted
@@ -256,7 +255,7 @@ func (r *Registry) Load() error {
 		// Close done channel for already-terminal sessions
 		switch session.Status {
 		case StatusCompleted, StatusFailed, StatusStopped, StatusMerged, StatusConflict, StatusInterrupted:
-			close(session.done)
+			session.CloseDone()
 		}
 
 		r.sessions[id] = session
@@ -273,10 +272,17 @@ func (r *Registry) saveLocked() error {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 
+	// Clone sessions to avoid data races during serialization
+	// (sessions may be modified by runners while we serialize)
+	clonedSessions := make(map[string]*Session, len(r.sessions))
+	for id, session := range r.sessions {
+		clonedSessions[id] = session.Clone()
+	}
+
 	state := struct {
 		Sessions map[string]*Session `json:"sessions"`
 	}{
-		Sessions: r.sessions,
+		Sessions: clonedSessions,
 	}
 
 	data, err := json.MarshalIndent(state, "", "  ")

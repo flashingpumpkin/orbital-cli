@@ -21,31 +21,52 @@ import (
 	"github.com/flashingpumpkin/orbital/internal/worktree"
 )
 
+// DefaultMaxConcurrentSessions is the default limit on concurrent sessions.
+const DefaultMaxConcurrentSessions = 10
+
 // SessionRunner manages session execution.
 type SessionRunner struct {
-	registry   *Registry
-	projectDir string
-	config     *DaemonConfig
-	mu         sync.Mutex
-	cancels    map[string]context.CancelFunc
-	mergeLocks map[string]bool // Tracks sessions currently being merged
+	registry              *Registry
+	projectDir            string
+	config                *DaemonConfig
+	mu                    sync.Mutex
+	cancels               map[string]context.CancelFunc
+	mergeLocks            map[string]bool // Tracks sessions currently being merged
+	maxConcurrentSessions int
 }
 
 // NewSessionRunner creates a new session runner.
 func NewSessionRunner(registry *Registry, projectDir string, cfg *DaemonConfig) *SessionRunner {
+	maxSessions := DefaultMaxConcurrentSessions
+	if cfg.MaxConcurrentSessions > 0 {
+		maxSessions = cfg.MaxConcurrentSessions
+	}
 	return &SessionRunner{
-		registry:   registry,
-		projectDir: projectDir,
-		config:     cfg,
-		cancels:    make(map[string]context.CancelFunc),
-		mergeLocks: make(map[string]bool),
+		registry:              registry,
+		projectDir:            projectDir,
+		config:                cfg,
+		cancels:               make(map[string]context.CancelFunc),
+		mergeLocks:            make(map[string]bool),
+		maxConcurrentSessions: maxSessions,
 	}
 }
 
 // Start starts a new session.
 func (r *SessionRunner) Start(ctx context.Context, req StartSessionRequest) (*Session, error) {
+	// Check concurrent session limit
+	r.mu.Lock()
+	runningCount := len(r.cancels)
+	r.mu.Unlock()
+
+	if runningCount >= r.maxConcurrentSessions {
+		return nil, fmt.Errorf("maximum concurrent sessions (%d) reached", r.maxConcurrentSessions)
+	}
+
 	// Generate session ID
-	sessionID := generateSessionID()
+	sessionID, err := generateSessionID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate session ID: %w", err)
+	}
 
 	// Resolve absolute paths for spec files
 	absSpecFiles := make([]string, len(req.SpecFiles))
@@ -137,13 +158,17 @@ func (r *SessionRunner) Resume(ctx context.Context, sessionID string) error {
 		return fmt.Errorf("session %s not found", sessionID)
 	}
 
-	if session.Status != StatusInterrupted && session.Status != StatusStopped {
+	// Check status with session lock
+	session.mu.RLock()
+	status := session.Status
+	session.mu.RUnlock()
+
+	if status != StatusInterrupted && status != StatusStopped {
 		return fmt.Errorf("session must be interrupted or stopped to resume")
 	}
 
-	// Update status to running
-	session.Status = StatusRunning
-	if err := r.registry.Update(session); err != nil {
+	// Update status to running via registry (thread-safe)
+	if err := r.registry.UpdateStatus(sessionID, StatusRunning, ""); err != nil {
 		return err
 	}
 
@@ -315,6 +340,13 @@ func (r *SessionRunner) Chat(ctx context.Context, session *Session, message stri
 
 // run executes the main session loop.
 func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSessionRequest) {
+	// Recover from panics to mark session as failed
+	defer func() {
+		if rec := recover(); rec != nil {
+			r.handleError(session.ID, fmt.Errorf("panic: %v", rec))
+		}
+	}()
+
 	defer func() {
 		r.mu.Lock()
 		// Only delete if still present (Stop() may have already removed it)
@@ -322,6 +354,16 @@ func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSess
 			delete(r.cancels, session.ID)
 		}
 		r.mu.Unlock()
+
+		// If session is still running (e.g., daemon shutdown), mark as interrupted
+		if sess, exists := r.registry.GetInternal(session.ID); exists {
+			sess.mu.RLock()
+			status := sess.Status
+			sess.mu.RUnlock()
+			if status == StatusRunning {
+				r.registry.UpdateStatus(session.ID, StatusInterrupted, "session interrupted")
+			}
+		}
 	}()
 
 	// Create output writer that broadcasts to subscribers
@@ -397,7 +439,17 @@ func (r *SessionRunner) run(ctx context.Context, session *Session, req StartSess
 	if err != nil {
 		switch err {
 		case context.Canceled:
-			// Already marked as stopped
+			// Check if it was stopped explicitly (status would be Stopped already)
+			// or interrupted by daemon shutdown (status would still be Running)
+			if sess, exists := r.registry.GetInternal(session.ID); exists {
+				sess.mu.RLock()
+				status := sess.Status
+				sess.mu.RUnlock()
+				if status == StatusRunning {
+					// Not stopped explicitly, must be daemon shutdown
+					r.registry.UpdateStatus(session.ID, StatusInterrupted, "session interrupted")
+				}
+			}
 			return
 		case loop.ErrMaxIterationsReached:
 			r.registry.UpdateStatus(session.ID, StatusFailed, "max iterations reached")
@@ -581,10 +633,12 @@ func (r *SessionRunner) handleError(sessionID string, err error) {
 }
 
 // generateSessionID generates a unique session ID.
-func generateSessionID() string {
+func generateSessionID() (string, error) {
 	bytes := make([]byte, 8)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 // broadcastWriter is an io.Writer that broadcasts to session subscribers.

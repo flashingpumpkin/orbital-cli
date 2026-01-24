@@ -274,6 +274,19 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(SessionResponse{Session: session})
 }
 
+// isValidSessionID checks if a session ID is valid (alphanumeric only).
+func isValidSessionID(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for _, c := range id {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+			return false
+		}
+	}
+	return true
+}
+
 // handleSession handles /sessions/{id}/*
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	// Parse session ID and action from path
@@ -286,6 +299,12 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	} else {
 		sessionID = path
 		action = ""
+	}
+
+	// Validate session ID to prevent path traversal
+	if !isValidSessionID(sessionID) {
+		http.Error(w, "invalid session ID", http.StatusBadRequest)
+		return
 	}
 
 	// Check session exists
@@ -397,11 +416,27 @@ func (s *Server) triggerMerge(w http.ResponseWriter, r *http.Request, sessionID 
 		return
 	}
 
-	// Start merge in background
-	go s.runner.Merge(sessionID)
+	// Start merge in background and wait briefly for initial errors
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.runner.Merge(sessionID)
+	}()
 
-	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(map[string]string{"status": "merging"})
+	// Wait up to 500ms for immediate errors (lock conflicts, validation)
+	select {
+	case err := <-errCh:
+		if err != nil {
+			http.Error(w, fmt.Sprintf("merge failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		// Merge completed successfully (fast merge)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "merged"})
+	case <-time.After(500 * time.Millisecond):
+		// Merge is running in background
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]string{"status": "merging"})
+	}
 }
 
 // sendChat handles POST /sessions/{id}/chat

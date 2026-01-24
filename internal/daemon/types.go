@@ -72,6 +72,7 @@ type Session struct {
 	outputBuffer *RingBuffer      `json:"-"`
 	subscribers  []chan OutputMsg `json:"-"`
 	done         chan struct{}    `json:"-"` // Closed when session completes
+	doneOnce     sync.Once        `json:"-"` // Ensures done is closed exactly once
 }
 
 // Clone returns a thread-safe copy of the session for serialization.
@@ -143,6 +144,15 @@ func (s *Session) Clone() *Session {
 	return clone
 }
 
+// CloseDone safely closes the done channel exactly once.
+func (s *Session) CloseDone() {
+	s.doneOnce.Do(func() {
+		if s.done != nil {
+			close(s.done)
+		}
+	})
+}
+
 // OutputMsg represents a message in the session output stream.
 type OutputMsg struct {
 	Type      string    `json:"type"` // "text", "tool", "stats", "error"
@@ -202,13 +212,14 @@ func (rb *RingBuffer) ReadAll() []OutputMsg {
 
 // DaemonConfig holds daemon configuration.
 type DaemonConfig struct {
-	NotificationsEnabled bool    `json:"notifications_enabled"`
-	NotificationSound    bool    `json:"notification_sound"`
-	DefaultBudget        float64 `json:"default_budget"`
-	DefaultWorkflow      string  `json:"default_workflow"`
-	DefaultWorktree      bool    `json:"default_worktree"`
-	ChatBudget           float64 `json:"chat_budget"`
-	ChatModel            string  `json:"chat_model"`
+	NotificationsEnabled  bool    `json:"notifications_enabled"`
+	NotificationSound     bool    `json:"notification_sound"`
+	DefaultBudget         float64 `json:"default_budget"`
+	DefaultWorkflow       string  `json:"default_workflow"`
+	DefaultWorktree       bool    `json:"default_worktree"`
+	ChatBudget            float64 `json:"chat_budget"`
+	ChatModel             string  `json:"chat_model"`
+	MaxConcurrentSessions int     `json:"max_concurrent_sessions"`
 }
 
 // DefaultDaemonConfig returns the default daemon configuration.

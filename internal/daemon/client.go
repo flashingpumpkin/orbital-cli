@@ -256,13 +256,17 @@ func (c *Client) StreamOutput(ctx context.Context, id string, handler func(Outpu
 	}
 	req.Header.Set("Accept", "text/event-stream")
 
-	// Use a client without timeout for streaming
-	streamClient := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return net.Dial("unix", c.socketPath)
-			},
+	// Use a client without timeout for streaming, with proper cleanup
+	dialer := &net.Dialer{}
+	transport := &http.Transport{
+		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+			return dialer.DialContext(dialCtx, "unix", c.socketPath)
 		},
+	}
+	defer transport.CloseIdleConnections()
+
+	streamClient := &http.Client{
+		Transport: transport,
 	}
 
 	resp, err := streamClient.Do(req)
@@ -276,20 +280,47 @@ func (c *Client) StreamOutput(ctx context.Context, id string, handler func(Outpu
 		return fmt.Errorf("failed to stream output: %s", string(bodyBytes))
 	}
 
-	// Read SSE events
+	// Read SSE events with context cancellation
 	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
-			var msg OutputMsg
-			if err := json.Unmarshal([]byte(data), &msg); err == nil {
-				handler(msg)
+	lineCh := make(chan string)
+	errCh := make(chan error, 1)
+
+	go func() {
+		defer close(lineCh)
+		for scanner.Scan() {
+			select {
+			case lineCh <- scanner.Text():
+			case <-ctx.Done():
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			select {
+			case errCh <- err:
+			default:
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-errCh:
+			return err
+		case line, ok := <-lineCh:
+			if !ok {
+				return nil // Stream ended
+			}
+			if strings.HasPrefix(line, "data: ") {
+				data := strings.TrimPrefix(line, "data: ")
+				var msg OutputMsg
+				if err := json.Unmarshal([]byte(data), &msg); err == nil {
+					handler(msg)
+				}
 			}
 		}
 	}
-
-	return scanner.Err()
 }
 
 // SendChat sends a chat message.
