@@ -20,7 +20,9 @@ import (
 	"github.com/flashingpumpkin/orbit-cli/internal/output"
 	"github.com/flashingpumpkin/orbit-cli/internal/spec"
 	"github.com/flashingpumpkin/orbit-cli/internal/state"
+	"github.com/flashingpumpkin/orbit-cli/internal/tui"
 	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
+	"golang.org/x/term"
 )
 
 var (
@@ -45,6 +47,7 @@ var (
 	notesFile     string
 	contextFiles  []string
 	workflowFlag  string
+	minimal       bool
 )
 
 var rootCmd = &cobra.Command{
@@ -102,6 +105,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&notesFile, "notes", "", "Path to notes file (default: auto-generated in docs/notes/)")
 	rootCmd.PersistentFlags().StringArrayVar(&contextFiles, "context", []string{}, "Additional context file (can be repeated)")
 	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: fast, spec-driven (default), reviewed, tdd")
+	rootCmd.PersistentFlags().BoolVar(&minimal, "minimal", false, "Use minimal output mode (no TUI)")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {
@@ -215,12 +219,33 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	// Create executor
 	exec := executor.New(cfg)
 
+	// Determine if we should use TUI mode
+	useTUI := shouldUseTUI()
+
+	// TUI program (only set if useTUI is true)
+	var tuiProgram *tui.Program
+
 	// Enable streaming output
 	if cfg.Debug {
-		// Debug mode: stream raw JSON
+		// Debug mode: stream raw JSON (no TUI)
 		exec.SetStreamWriter(os.Stdout)
+	} else if useTUI {
+		// TUI mode: create program and bridge
+		session := tui.SessionInfo{
+			SpecFiles:   absFilePaths,
+			NotesFile:   spec.NotesFile,
+			StateFile:   state.StateDir(workingDir) + "/state.json",
+			ContextFile: strings.Join(contextFiles, ", "),
+		}
+		progress := tui.ProgressInfo{
+			Iteration:    1,
+			MaxIteration: cfg.MaxIterations,
+			Budget:       cfg.MaxBudget,
+		}
+		tuiProgram = tui.New(session, progress)
+		exec.SetStreamWriter(tuiProgram.Bridge())
 	} else if cfg.Verbose || cfg.ShowUnhandled || todosOnly {
-		// Verbose mode: formatted output
+		// Minimal/verbose mode: formatted output
 		streamProcessor := output.NewStreamProcessor(os.Stdout)
 		if cfg.ShowUnhandled {
 			streamProcessor.SetShowUnhandled(true)
@@ -255,31 +280,67 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 
 	// Set iteration callback to update state after each iteration
 	controller.SetIterationCallback(func(iteration int, totalCost float64) error {
-		return updateState(st, iteration, totalCost)
-	})
+		// Update state
+		if err := updateState(st, iteration, totalCost); err != nil {
+			return err
+		}
 
-	// Print banner with config summary
-	printBanner(cfg, sp, contextFiles)
+		// Send progress update to TUI if active
+		if tuiProgram != nil {
+			tuiProgram.SendProgress(tui.ProgressInfo{
+				Iteration:    iteration,
+				MaxIteration: cfg.MaxIterations,
+				Cost:         totalCost,
+				Budget:       cfg.MaxBudget,
+			})
+		}
+
+		return nil
+	})
 
 	// Build the prompt
 	prompt := sp.BuildPrompt()
 
-	// Print the command that will be executed
-	if cfg.Verbose {
-		fmt.Println("Command:")
-		fmt.Printf("  %s\n", exec.GetCommand(prompt))
-		fmt.Println()
+	// Print banner or start TUI
+	if !useTUI {
+		printBanner(cfg, sp, contextFiles)
+
+		// Print the command that will be executed
+		if cfg.Verbose {
+			fmt.Println("Command:")
+			fmt.Printf("  %s\n", exec.GetCommand(prompt))
+			fmt.Println()
+		}
 	}
 
 	// Create context with signal handling for graceful shutdown
 	ctx, cancel := setupSignalHandler()
 	defer cancel()
 
-	// Run the loop
-	loopState, err := controller.Run(ctx, prompt)
+	// Run the loop (with TUI in background if enabled)
+	var loopState *loop.LoopState
+	if tuiProgram != nil {
+		// Run TUI in a goroutine
+		tuiDone := make(chan error, 1)
+		go func() {
+			tuiDone <- tuiProgram.Run()
+		}()
 
-	// Print summary
-	printSummary(loopState)
+		// Run the loop
+		loopState, err = controller.Run(ctx, prompt)
+
+		// Quit the TUI
+		tuiProgram.Quit()
+		<-tuiDone
+	} else {
+		// Run the loop without TUI
+		loopState, err = controller.Run(ctx, prompt)
+	}
+
+	// Print summary (only in minimal mode)
+	if !useTUI {
+		printSummary(loopState)
+	}
 
 	// Handle state cleanup or preservation
 	if err != nil {
@@ -505,6 +566,36 @@ func toKebabCase(s string) string {
 	kebab = strings.Trim(kebab, "-")
 
 	return kebab
+}
+
+// shouldUseTUI determines whether to use the TUI based on flags and environment.
+func shouldUseTUI() bool {
+	// Explicit minimal flag disables TUI
+	if minimal {
+		return false
+	}
+
+	// Debug mode disables TUI (raw JSON output)
+	if debug {
+		return false
+	}
+
+	// Quiet mode disables TUI
+	if quiet {
+		return false
+	}
+
+	// CI environment disables TUI
+	if os.Getenv("CI") != "" {
+		return false
+	}
+
+	// Non-interactive terminal disables TUI
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return false
+	}
+
+	return true
 }
 
 // resolveWorkflow determines the workflow to use based on CLI flag and config file.

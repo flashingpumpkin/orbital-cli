@@ -38,6 +38,13 @@ type ProgressInfo struct {
 	Budget       float64
 }
 
+// StatsMsg is a message containing updated token and cost statistics.
+type StatsMsg struct {
+	TokensIn  int
+	TokensOut int
+	Cost      float64
+}
+
 // Model is the main bubbletea model for the orbit TUI.
 type Model struct {
 	// Layout
@@ -115,6 +122,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks))
 		m.ready = true
+		return m, nil
+
+	case StatsMsg:
+		m.progress.TokensIn = msg.TokensIn
+		m.progress.TokensOut = msg.TokensOut
+		m.progress.Cost = msg.Cost
+		return m, nil
+
+	case OutputLineMsg:
+		m.outputLines = append(m.outputLines, string(msg))
+		return m, nil
+
+	case TasksMsg:
+		m.tasks = msg
+		if m.ready {
+			m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks))
+		}
+		return m, nil
+
+	case ProgressMsg:
+		m.progress = ProgressInfo(msg)
+		return m, nil
+
+	case SessionMsg:
+		m.session = SessionInfo(msg)
 		return m, nil
 
 	case tea.KeyMsg:
