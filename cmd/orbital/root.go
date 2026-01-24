@@ -277,8 +277,11 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		})
 
 		// Persist worktree state
+		// Extract the name from the worktree path (last segment after .orbital/worktrees/)
+		worktreeName := filepath.Base(setupResult.WorktreePath)
 		wtStateManager = worktree.NewStateManager(workingDir)
 		wtState = &worktree.WorktreeState{
+			Name:           worktreeName,
 			Path:           setupResult.WorktreePath,
 			Branch:         setupResult.BranchName,
 			OriginalBranch: originalBranch,
@@ -1098,28 +1101,42 @@ func (a *worktreeExecutorAdapter) Execute(ctx context.Context, prompt string) (*
 	}, nil
 }
 
-// runWorktreeSetup runs the worktree setup phase.
+// runWorktreeSetup runs the worktree setup phase using local name generation.
+// This does NOT invoke Claude - it generates a name locally and creates the worktree directly.
 func runWorktreeSetup(ctx context.Context, specContent string, opts worktreeSetupOptions) (*worktree.SetupResult, error) {
 	// Check that we're in a git repository
 	if err := worktree.CheckGitRepository(opts.workingDir); err != nil {
 		return nil, fmt.Errorf("worktree mode requires a git repository: %w", err)
 	}
 
-	// Create executor for setup phase
-	setupCfg := &config.Config{
-		Model:     opts.model,
-		MaxBudget: 10.0, // Reasonable budget for setup
+	// Determine the worktree name
+	var name string
+	if opts.worktreeName != "" {
+		// Use the user-provided name
+		name = opts.worktreeName
+	} else {
+		// Generate a unique name locally
+		existingNames, err := worktree.ListWorktreeNames(opts.workingDir)
+		if err != nil {
+			// Non-fatal - just use an empty exclusion list
+			existingNames = nil
+		}
+		name = worktree.GenerateUniqueName(existingNames)
 	}
-	setupExec := executor.New(setupCfg)
-	adapter := &worktreeExecutorAdapter{exec: setupExec}
 
-	// Run setup
-	setup := worktree.NewSetup(adapter)
-	setupOpts := worktree.SetupOptions{
-		WorktreeName: opts.worktreeName,
+	// Create the worktree using direct git commands
+	if err := worktree.CreateWorktree(opts.workingDir, name); err != nil {
+		return nil, fmt.Errorf("failed to create worktree: %w", err)
 	}
 
-	return setup.RunWithOptions(ctx, specContent, setupOpts)
+	return &worktree.SetupResult{
+		WorktreePath: worktree.WorktreePath(name),
+		BranchName:   worktree.BranchName(name),
+		// No cost since we don't invoke Claude
+		CostUSD:   0,
+		TokensIn:  0,
+		TokensOut: 0,
+	}, nil
 }
 
 // worktreeSetupOptions contains options for worktree setup.

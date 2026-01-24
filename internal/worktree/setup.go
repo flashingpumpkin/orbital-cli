@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/flashingpumpkin/orbital/internal/output"
 )
 
 // ErrNotGitRepository is returned when the working directory is not a git repository.
@@ -44,6 +42,7 @@ func GetCurrentBranch(dir string) (string, error) {
 }
 
 // ExecutionResult contains the result of executing Claude.
+// This is used by the merge phase which still invokes Claude.
 type ExecutionResult struct {
 	Output    string
 	CostUSD   float64
@@ -52,13 +51,9 @@ type ExecutionResult struct {
 }
 
 // Executor runs Claude with a prompt and returns the result.
+// This is used by the merge phase which still invokes Claude.
 type Executor interface {
 	Execute(ctx context.Context, prompt string) (*ExecutionResult, error)
-}
-
-// Setup handles the worktree setup phase.
-type Setup struct {
-	executor Executor
 }
 
 // SetupResult contains the result of the setup phase.
@@ -70,113 +65,40 @@ type SetupResult struct {
 	TokensOut    int
 }
 
-// NewSetup creates a new Setup instance.
-func NewSetup(executor Executor) *Setup {
-	return &Setup{executor: executor}
-}
-
 // SetupOptions configures the setup phase.
 type SetupOptions struct {
-	WorktreeName string // If set, use this name instead of having Claude generate one
+	WorktreeName string // If set, use this name instead of generating one
 }
 
-// Run executes the setup phase, invoking Claude to create a worktree.
-func (s *Setup) Run(ctx context.Context, specContent string) (*SetupResult, error) {
-	return s.RunWithOptions(ctx, specContent, SetupOptions{})
-}
-
-// RunWithOptions executes the setup phase with options.
-func (s *Setup) RunWithOptions(ctx context.Context, specContent string, opts SetupOptions) (*SetupResult, error) {
-	prompt := buildSetupPrompt(specContent, opts)
-	result, err := s.executor.Execute(ctx, prompt)
-	if err != nil {
-		return nil, err
+// SetupDirect creates a worktree directly using local name generation.
+// This does not invoke Claude - it generates a name locally and runs git commands directly.
+func SetupDirect(workingDir string, opts SetupOptions) (*SetupResult, error) {
+	// Determine the worktree name
+	var name string
+	if opts.WorktreeName != "" {
+		// Use the user-provided name
+		name = opts.WorktreeName
+	} else {
+		// Generate a unique name locally
+		existingNames, err := ListWorktreeNames(workingDir)
+		if err != nil {
+			// Non-fatal - just use an empty exclusion list
+			existingNames = nil
+		}
+		name = GenerateUniqueName(existingNames)
 	}
 
-	path, err := extractWorktreePath(result.Output)
-	if err != nil {
-		return nil, err
-	}
-
-	branch, err := extractBranchName(result.Output)
-	if err != nil {
-		return nil, err
+	// Create the worktree using direct git commands
+	if err := CreateWorktree(workingDir, name); err != nil {
+		return nil, fmt.Errorf("failed to create worktree: %w", err)
 	}
 
 	return &SetupResult{
-		WorktreePath: path,
-		BranchName:   branch,
-		CostUSD:      result.CostUSD,
-		TokensIn:     result.TokensIn,
-		TokensOut:    result.TokensOut,
+		WorktreePath: WorktreePath(name),
+		BranchName:   BranchName(name),
+		// No cost since we don't invoke Claude
+		CostUSD:   0,
+		TokensIn:  0,
+		TokensOut: 0,
 	}, nil
-}
-
-// extractWorktreePath parses the WORKTREE_PATH marker from Claude's output.
-func extractWorktreePath(output string) (string, error) {
-	return extractMarker(output, "WORKTREE_PATH: ", "worktree path")
-}
-
-// extractBranchName parses the BRANCH_NAME marker from Claude's output.
-func extractBranchName(output string) (string, error) {
-	return extractMarker(output, "BRANCH_NAME: ", "branch name")
-}
-
-// extractMarker extracts a value from a marker line in the output.
-// It first parses stream-json to get actual text content, then searches for markers.
-func extractMarker(rawOutput, marker, description string) (string, error) {
-	// Parse stream-json to get actual text content
-	text := output.ExtractText(rawOutput)
-
-	idx := strings.Index(text, marker)
-	if idx == -1 {
-		return "", fmt.Errorf("%s not found in output", description)
-	}
-
-	// Extract value from after the marker to end of line
-	start := idx + len(marker)
-	rest := text[start:]
-
-	// Find end of line or end of string
-	end := strings.Index(rest, "\n")
-	if end == -1 {
-		end = len(rest)
-	}
-
-	return strings.TrimSpace(rest[:end]), nil
-}
-
-// buildSetupPrompt creates the prompt for the setup phase.
-func buildSetupPrompt(specContent string, opts SetupOptions) string {
-	var nameInstruction string
-	if opts.WorktreeName != "" {
-		nameInstruction = fmt.Sprintf("Use the name: %s", opts.WorktreeName)
-	} else {
-		nameInstruction = `Choose a descriptive kebab-case name based on the task (e.g., "add-user-auth", "fix-payment-bug").
-If a worktree with your chosen name already exists, append a numeric suffix (e.g., "add-user-auth-2").`
-	}
-
-	return fmt.Sprintf(`You are setting up an isolated worktree for development work.
-
-## Task Specification
-
-%s
-
-## Instructions
-
-1. Read and understand the task specification above.
-2. %s
-3. Create the worktree using: git worktree add -b orbit/<name> .orbital/worktrees/<name> HEAD
-4. Output the results in this exact format:
-
-WORKTREE_PATH: .orbital/worktrees/<name>
-BRANCH_NAME: orbit/<name>
-
-## Important
-
-- The worktree directory MUST be under .orbital/worktrees/
-- The branch name MUST start with orbit/
-- Output WORKTREE_PATH: and BRANCH_NAME: markers exactly as shown
-- If the branch already exists, pick a different name
-`, specContent, nameInstruction)
 }

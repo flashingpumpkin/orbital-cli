@@ -44,9 +44,7 @@ func TestMergePhase(t *testing.T) {
 		}
 
 		prompt := mockExec.ExecuteCalls[0].Prompt
-		if !strings.Contains(prompt, opts.WorktreePath) {
-			t.Errorf("prompt does not contain worktree path")
-		}
+		// Worktree path is no longer in the prompt - directory is set via cmd.Dir
 		if !strings.Contains(prompt, opts.BranchName) {
 			t.Errorf("prompt does not contain branch name")
 		}
@@ -233,9 +231,7 @@ func TestBuildMergePrompt(t *testing.T) {
 	prompt := buildMergePrompt(opts)
 
 	// Check that prompt contains all required elements
-	if !strings.Contains(prompt, opts.WorktreePath) {
-		t.Error("prompt missing worktree path")
-	}
+	// Note: WorktreePath is no longer in the prompt - directory is set via cmd.Dir
 	if !strings.Contains(prompt, opts.BranchName) {
 		t.Error("prompt missing branch name")
 	}
@@ -250,6 +246,11 @@ func TestBuildMergePrompt(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "MERGE_SUCCESS: true") {
 		t.Error("prompt missing success marker instruction")
+	}
+
+	// Verify that navigation instructions have been removed
+	if strings.Contains(prompt, "Navigate to") {
+		t.Error("prompt should not contain navigation instructions (working directory is set via cmd.Dir)")
 	}
 }
 

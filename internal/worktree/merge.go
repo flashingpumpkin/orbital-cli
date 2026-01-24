@@ -62,27 +62,26 @@ func containsSuccessMarker(rawOutput string) bool {
 }
 
 // buildMergePrompt creates the prompt for the merge phase.
+// The prompt no longer includes directory navigation instructions since the executor
+// sets the working directory correctly via cmd.Dir.
 func buildMergePrompt(opts MergeOptions) string {
 	return fmt.Sprintf(`You are merging changes from a worktree branch back to the original branch.
 
 ## Configuration
 
-- Worktree path: %s
 - Worktree branch: %s
 - Original branch: %s
 
 ## Instructions
 
-1. Navigate to the worktree directory
-2. Rebase the worktree branch onto the original branch:
+1. Rebase the worktree branch onto the original branch:
    git rebase %s
-3. If there are conflicts:
+2. If there are conflicts:
    - Resolve them appropriately
    - Continue the rebase: git rebase --continue
-4. Navigate to the main repository (parent of .orbitalal directory)
-5. Checkout the original branch: git checkout %s
-6. Fast-forward merge: git merge --ff-only %s
-7. Output the result:
+3. Checkout the original branch: git checkout %s
+4. Fast-forward merge: git merge --ff-only %s
+5. Output the result:
 
 MERGE_SUCCESS: true
 
@@ -91,7 +90,7 @@ MERGE_SUCCESS: true
 - Only use fast-forward merge (--ff-only) to avoid merge commits
 - If conflicts cannot be resolved, output: MERGE_SUCCESS: false
 - The rebase should apply commits cleanly when possible
-`, opts.WorktreePath, opts.BranchName, opts.OriginalBranch, opts.OriginalBranch, opts.OriginalBranch, opts.BranchName)
+`, opts.BranchName, opts.OriginalBranch, opts.OriginalBranch, opts.OriginalBranch, opts.BranchName)
 }
 
 // Cleanup handles worktree cleanup after successful merge.
