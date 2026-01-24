@@ -61,6 +61,10 @@ type ExecutorInterface interface {
 // Parameters: iteration, totalCost, totalTokensIn, totalTokensOut
 type IterationCallback func(iteration int, totalCost float64, totalTokensIn, totalTokensOut int) error
 
+// IterationStartCallback is called before each iteration starts.
+// Parameters: iteration, maxIterations
+type IterationStartCallback func(iteration, maxIterations int)
+
 // StateManager defines an interface for managing queue state.
 // This allows the loop to check for queued files after completion.
 type StateManager interface {
@@ -82,13 +86,14 @@ type Verifier interface {
 
 // Controller manages the execution loop for orbit.
 type Controller struct {
-	config            *config.Config
-	executor          ExecutorInterface
-	detector          *completion.Detector
-	iterationCallback IterationCallback
-	stateManager      StateManager
-	specFiles         []string
-	verifier          Verifier
+	config                 *config.Config
+	executor               ExecutorInterface
+	detector               *completion.Detector
+	iterationCallback      IterationCallback
+	iterationStartCallback IterationStartCallback
+	stateManager           StateManager
+	specFiles              []string
+	verifier               Verifier
 }
 
 // New creates a new Controller with the given configuration, executor, and detector.
@@ -103,6 +108,11 @@ func New(cfg *config.Config, exec ExecutorInterface, det *completion.Detector) *
 // SetIterationCallback sets a callback function to be called after each iteration.
 func (c *Controller) SetIterationCallback(cb IterationCallback) {
 	c.iterationCallback = cb
+}
+
+// SetIterationStartCallback sets a callback function to be called before each iteration.
+func (c *Controller) SetIterationStartCallback(cb IterationStartCallback) {
+	c.iterationStartCallback = cb
 }
 
 // SetStateManager sets the state manager for queue checking.
@@ -215,6 +225,11 @@ func (c *Controller) Run(ctx context.Context, prompt string) (*LoopState, error)
 		if ctx.Err() != nil {
 			state.Error = ctx.Err()
 			return state, ctx.Err()
+		}
+
+		// Call iteration start callback if set
+		if c.iterationStartCallback != nil {
+			c.iterationStartCallback(i, c.config.MaxIterations)
 		}
 
 		// Execute the prompt

@@ -20,6 +20,35 @@ type Formatter struct {
 	spinner *spinner.Spinner
 }
 
+// BannerConfig contains all configuration for the rich banner display.
+type BannerConfig struct {
+	SpecFile      string
+	ContextFiles  []string
+	WorkflowName  string
+	WorkflowSteps int
+	HasGates      bool
+	Model         string
+	CheckerModel  string
+	MaxIterations int
+	Budget        float64
+	Timeout       time.Duration
+	WorkingDir    string
+	NotesFile     string
+	SessionID     string
+	DryRun        bool
+	Debug         bool
+}
+
+// LoopSummary contains summary information for loop execution.
+type LoopSummary struct {
+	Iterations  int
+	TotalCost   float64
+	TotalTokens int
+	Duration    time.Duration
+	Completed   bool
+	Error       error
+}
+
 // NewFormatter creates a new Formatter with the specified options.
 // It checks the NO_COLOR environment variable to determine if colour output should be disabled.
 func NewFormatter(verbose, quiet bool, w io.Writer) *Formatter {
@@ -54,6 +83,101 @@ func (f *Formatter) PrintBanner(specPath, model string, maxIterations int, promi
 	_, _ = white.Fprintf(f.writer, "  Promise:    %s\n", promise)
 	_, _ = fmt.Fprintln(f.writer, "")
 	_, _ = fmt.Fprintln(f.writer, "---------------------------------------------------")
+	_, _ = fmt.Fprintln(f.writer, "")
+}
+
+// PrintRichBanner prints the orbit banner with full configuration details.
+func (f *Formatter) PrintRichBanner(cfg BannerConfig) {
+	if f.quiet {
+		return
+	}
+
+	cyan := color.New(color.FgCyan, color.Bold)
+	white := color.New(color.FgWhite)
+	dim := color.New(color.FgHiBlack)
+	yellow := color.New(color.FgYellow)
+
+	// Box header
+	_, _ = cyan.Fprintln(f.writer, "╔═══════════════════════════════════════════════════════════════╗")
+	_, _ = cyan.Fprintln(f.writer, "║                    Orbit - I'm learnding!                     ║")
+	_, _ = cyan.Fprintln(f.writer, "╚═══════════════════════════════════════════════════════════════╝")
+	_, _ = fmt.Fprintln(f.writer, "")
+
+	// Configuration section
+	_, _ = white.Fprintf(f.writer, "  Spec:        %s\n", cfg.SpecFile)
+
+	// Context files
+	if len(cfg.ContextFiles) > 0 {
+		_, _ = white.Fprintf(f.writer, "  Context:     %d file(s)\n", len(cfg.ContextFiles))
+		for _, path := range cfg.ContextFiles {
+			_, _ = dim.Fprintf(f.writer, "               - %s\n", path)
+		}
+	}
+
+	// Workflow info
+	_, _ = white.Fprintf(f.writer, "  Workflow:    %s", cfg.WorkflowName)
+	if cfg.HasGates {
+		_, _ = dim.Fprintf(f.writer, " (%d steps, with gates)\n", cfg.WorkflowSteps)
+	} else {
+		_, _ = dim.Fprintf(f.writer, " (%d step)\n", cfg.WorkflowSteps)
+	}
+
+	// Models
+	_, _ = white.Fprintf(f.writer, "  Model:       %s\n", cfg.Model)
+	_, _ = white.Fprintf(f.writer, "  Checker:     %s\n", cfg.CheckerModel)
+
+	// Limits
+	_, _ = white.Fprintf(f.writer, "  Iterations:  max %d\n", cfg.MaxIterations)
+	_, _ = white.Fprintf(f.writer, "  Budget:      $%.2f USD\n", cfg.Budget)
+	_, _ = white.Fprintf(f.writer, "  Timeout:     %v per iteration\n", cfg.Timeout)
+
+	// Paths
+	_, _ = white.Fprintf(f.writer, "  Working Dir: %s\n", cfg.WorkingDir)
+	_, _ = white.Fprintf(f.writer, "  Notes File:  %s\n", cfg.NotesFile)
+
+	// Session info
+	if cfg.SessionID != "" {
+		_, _ = white.Fprintf(f.writer, "  Resuming:    session %s\n", cfg.SessionID)
+	}
+
+	// Special modes
+	if cfg.DryRun {
+		_, _ = yellow.Fprintln(f.writer, "  Mode:        DRY RUN (no commands will be executed)")
+	}
+	if cfg.Debug {
+		_, _ = yellow.Fprintln(f.writer, "  Debug:       enabled (raw JSON output)")
+	}
+
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = cyan.Fprintln(f.writer, "Starting loop...")
+	_, _ = fmt.Fprintln(f.writer, "")
+}
+
+// PrintLoopSummary prints the final summary of loop execution.
+func (f *Formatter) PrintLoopSummary(summary LoopSummary) {
+	// Always print summary (even in quiet mode, it's important info)
+	cyan := color.New(color.FgCyan, color.Bold)
+	white := color.New(color.FgWhite)
+	green := color.New(color.FgGreen, color.Bold)
+	red := color.New(color.FgRed, color.Bold)
+
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = cyan.Fprintln(f.writer, "════════════════════════════════════════════════════════════════")
+	_, _ = cyan.Fprintln(f.writer, "                           Summary                              ")
+	_, _ = cyan.Fprintln(f.writer, "════════════════════════════════════════════════════════════════")
+	_, _ = white.Fprintf(f.writer, "  Iterations:  %d\n", summary.Iterations)
+	_, _ = white.Fprintf(f.writer, "  Total Cost:  $%.4f USD\n", summary.TotalCost)
+	_, _ = white.Fprintf(f.writer, "  Total Tokens: %d\n", summary.TotalTokens)
+	_, _ = white.Fprintf(f.writer, "  Duration:    %v\n", formatDuration(summary.Duration))
+
+	if summary.Completed {
+		_, _ = green.Fprintln(f.writer, "  Status:      COMPLETED (promise detected)")
+	} else if summary.Error != nil {
+		_, _ = red.Fprintf(f.writer, "  Status:      TERMINATED (%v)\n", summary.Error)
+	} else {
+		_, _ = red.Fprintln(f.writer, "  Status:      NOT COMPLETED")
+	}
+
 	_, _ = fmt.Fprintln(f.writer, "")
 }
 
@@ -261,4 +385,139 @@ func (f *Formatter) PrintWorkflowSummary(steps []StepSummary, totalCost float64,
 	// Print totals
 	_, _ = fmt.Fprintln(f.writer, "")
 	_, _ = white.Fprintf(f.writer, "  Total: $%.4f | %d tokens\n", totalCost, totalTokens)
+}
+
+// WorktreeSetupConfig contains configuration for worktree setup display.
+type WorktreeSetupConfig struct {
+	OriginalBranch string
+	Model          string
+	SpecFile       string
+}
+
+// PrintWorktreeSetupStart prints the worktree setup header.
+func (f *Formatter) PrintWorktreeSetupStart(cfg WorktreeSetupConfig) {
+	if f.quiet {
+		return
+	}
+
+	cyan := color.New(color.FgCyan, color.Bold)
+	white := color.New(color.FgWhite)
+	dim := color.New(color.FgHiBlack)
+
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = cyan.Fprintln(f.writer, "┌─────────────────────────────────────────────────────────────────┐")
+	_, _ = cyan.Fprintln(f.writer, "│                    Worktree Setup Phase                         │")
+	_, _ = cyan.Fprintln(f.writer, "└─────────────────────────────────────────────────────────────────┘")
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = white.Fprintf(f.writer, "  Branch:      %s\n", cfg.OriginalBranch)
+	_, _ = white.Fprintf(f.writer, "  Model:       %s\n", cfg.Model)
+	_, _ = dim.Fprintf(f.writer, "  Spec:        %s\n", cfg.SpecFile)
+	_, _ = fmt.Fprintln(f.writer, "")
+}
+
+// StartWorktreeSetupSpinner starts the worktree setup spinner.
+func (f *Formatter) StartWorktreeSetupSpinner() {
+	f.StartSpinner("Creating isolated worktree...")
+}
+
+// WorktreeSetupResult contains result of worktree setup.
+type WorktreeSetupResult struct {
+	WorktreePath string
+	BranchName   string
+	Cost         float64
+	TokensIn     int
+	TokensOut    int
+	Duration     time.Duration
+}
+
+// PrintWorktreeSetupComplete prints the worktree setup completion.
+func (f *Formatter) PrintWorktreeSetupComplete(result WorktreeSetupResult) {
+	f.StopSpinner()
+
+	if f.quiet {
+		return
+	}
+
+	green := color.New(color.FgGreen, color.Bold)
+	white := color.New(color.FgWhite)
+	dim := color.New(color.FgHiBlack)
+
+	_, _ = green.Fprintln(f.writer, "  ✓ Worktree created successfully")
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = white.Fprintf(f.writer, "  Path:        %s\n", result.WorktreePath)
+	_, _ = white.Fprintf(f.writer, "  Branch:      %s\n", result.BranchName)
+	_, _ = dim.Fprintf(f.writer, "  Duration:    %s\n", formatDuration(result.Duration))
+	_, _ = dim.Fprintf(f.writer, "  Cost:        $%.4f | %d tokens\n", result.Cost, result.TokensIn+result.TokensOut)
+	_, _ = fmt.Fprintln(f.writer, "")
+}
+
+// PrintWorktreeSetupError prints a worktree setup error.
+func (f *Formatter) PrintWorktreeSetupError(err error) {
+	f.StopSpinner()
+
+	red := color.New(color.FgRed, color.Bold)
+	_, _ = red.Fprintf(f.writer, "  ✗ Worktree setup failed: %v\n", err)
+	_, _ = fmt.Fprintln(f.writer, "")
+}
+
+// PrintWorktreeMergeStart prints the worktree merge phase header.
+func (f *Formatter) PrintWorktreeMergeStart(worktreePath, branchName, originalBranch string) {
+	if f.quiet {
+		return
+	}
+
+	cyan := color.New(color.FgCyan, color.Bold)
+	white := color.New(color.FgWhite)
+
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = cyan.Fprintln(f.writer, "┌─────────────────────────────────────────────────────────────────┐")
+	_, _ = cyan.Fprintln(f.writer, "│                    Worktree Merge Phase                         │")
+	_, _ = cyan.Fprintln(f.writer, "└─────────────────────────────────────────────────────────────────┘")
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = white.Fprintf(f.writer, "  Merging:     %s -> %s\n", branchName, originalBranch)
+	_, _ = fmt.Fprintln(f.writer, "")
+}
+
+// StartWorktreeMergeSpinner starts the worktree merge spinner.
+func (f *Formatter) StartWorktreeMergeSpinner() {
+	f.StartSpinner("Rebasing and merging changes...")
+}
+
+// PrintWorktreeMergeComplete prints the worktree merge completion.
+func (f *Formatter) PrintWorktreeMergeComplete(cost float64, tokensIn, tokensOut int) {
+	f.StopSpinner()
+
+	if f.quiet {
+		return
+	}
+
+	green := color.New(color.FgGreen, color.Bold)
+	dim := color.New(color.FgHiBlack)
+
+	_, _ = green.Fprintln(f.writer, "  ✓ Merge completed successfully")
+	_, _ = dim.Fprintf(f.writer, "  Cost:        $%.4f | %d tokens\n", cost, tokensIn+tokensOut)
+	_, _ = fmt.Fprintln(f.writer, "")
+}
+
+// PrintWorktreeCleanupComplete prints worktree cleanup success.
+func (f *Formatter) PrintWorktreeCleanupComplete() {
+	if f.quiet {
+		return
+	}
+
+	green := color.New(color.FgGreen)
+	_, _ = green.Fprintln(f.writer, "  ✓ Worktree and branch cleaned up")
+	_, _ = fmt.Fprintln(f.writer, "")
+}
+
+// PrintWorktreePreserved prints info about a preserved worktree.
+func (f *Formatter) PrintWorktreePreserved(worktreePath string) {
+	yellow := color.New(color.FgYellow, color.Bold)
+	white := color.New(color.FgWhite)
+
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = yellow.Fprintln(f.writer, "  Worktree preserved for resume:")
+	_, _ = white.Fprintf(f.writer, "  Path:        %s\n", worktreePath)
+	_, _ = white.Fprintln(f.writer, "  Resume:      orbit-cli continue")
+	_, _ = fmt.Fprintln(f.writer, "")
 }

@@ -256,8 +256,11 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve workflow: %w", err)
 	}
 
+	// Create formatter for output
+	formatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
+
 	// Print banner with config summary (use context files from state if available)
-	printBanner(cfg, sp, st.ContextFiles, wf)
+	printBanner(formatter, cfg, sp, st.ContextFiles, wf)
 
 	// Build the prompt
 	prompt := sp.BuildPrompt()
@@ -277,7 +280,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	loopState, err := controller.Run(ctx, prompt)
 
 	// Print summary
-	printSummary(loopState)
+	printSummary(formatter, loopState)
 
 	// Handle state cleanup or preservation
 	if err != nil {

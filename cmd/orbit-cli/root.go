@@ -21,6 +21,7 @@ import (
 	"github.com/flashingpumpkin/orbit-cli/internal/output"
 	"github.com/flashingpumpkin/orbit-cli/internal/spec"
 	"github.com/flashingpumpkin/orbit-cli/internal/state"
+	"github.com/flashingpumpkin/orbit-cli/internal/tasks"
 	"github.com/flashingpumpkin/orbit-cli/internal/tui"
 	"github.com/flashingpumpkin/orbit-cli/internal/workflow"
 	"github.com/flashingpumpkin/orbit-cli/internal/worktree"
@@ -229,29 +230,51 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	var originalBranch string
 
 	if worktreeMode {
+		// Create formatter for setup phase output
+		setupFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
+
 		// Get original branch before setup
 		originalBranch, err = worktree.GetCurrentBranch(workingDir)
 		if err != nil {
 			return fmt.Errorf("failed to get current branch: %w", err)
 		}
 
-		fmt.Println("Worktree mode: running setup phase...")
+		// Print setup header
+		setupFormatter.PrintWorktreeSetupStart(output.WorktreeSetupConfig{
+			OriginalBranch: originalBranch,
+			Model:          setupModel,
+			SpecFile:       specPath,
+		})
+
+		// Start spinner
+		setupFormatter.StartWorktreeSetupSpinner()
 
 		// Read spec content for setup prompt
 		specContent := sp.BuildPrompt()
 
 		// Run setup phase
+		setupStart := time.Now()
 		setupResult, err := runWorktreeSetup(context.Background(), specContent, worktreeSetupOptions{
 			workingDir:   workingDir,
 			model:        setupModel,
 			worktreeName: worktreeName,
 		})
+		setupDuration := time.Since(setupStart)
+
 		if err != nil {
+			setupFormatter.PrintWorktreeSetupError(err)
 			return fmt.Errorf("worktree setup failed: %w", err)
 		}
 
-		fmt.Printf("Worktree created: %s (branch: %s)\n", setupResult.WorktreePath, setupResult.BranchName)
-		fmt.Printf("Setup cost: $%.4f\n\n", setupResult.CostUSD)
+		// Print success
+		setupFormatter.PrintWorktreeSetupComplete(output.WorktreeSetupResult{
+			WorktreePath: setupResult.WorktreePath,
+			BranchName:   setupResult.BranchName,
+			Cost:         setupResult.CostUSD,
+			TokensIn:     setupResult.TokensIn,
+			TokensOut:    setupResult.TokensOut,
+			Duration:     setupDuration,
+		})
 
 		// Persist worktree state
 		wtStateManager = worktree.NewStateManager(workingDir)
@@ -281,6 +304,12 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	// TUI program (only set if useTUI is true)
 	var tuiProgram *tui.Program
 
+	// Create shared task tracker for persistence across iterations
+	taskTracker := tasks.NewTracker()
+
+	// Stream processor for non-TUI mode (may be nil)
+	var streamProcessor *output.StreamProcessor
+
 	// Enable streaming output
 	if cfg.Debug {
 		// Debug mode: stream raw JSON (no TUI)
@@ -302,7 +331,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		exec.SetStreamWriter(tuiProgram.Bridge())
 	} else if cfg.Verbose || cfg.ShowUnhandled || todosOnly {
 		// Minimal/verbose mode: formatted output
-		streamProcessor := output.NewStreamProcessor(os.Stdout)
+		streamProcessor = output.NewStreamProcessor(os.Stdout)
+		streamProcessor.SetTracker(taskTracker) // Use shared tracker
 		if cfg.ShowUnhandled {
 			streamProcessor.SetShowUnhandled(true)
 		}
@@ -334,11 +364,44 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	}
 	controller.SetStateManager(sm)
 
+	// Resolve workflow from flag or config
+	wf, err := resolveWorkflow(workflowFlag, fileConfig)
+	if err != nil {
+		return fmt.Errorf("failed to resolve workflow: %w", err)
+	}
+
+	// Build the prompt
+	prompt := sp.BuildPrompt()
+
+	// Create formatter for non-TUI output
+	var formatter *output.Formatter
+	if !useTUI {
+		formatter = output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
+	}
+
+	// Track iteration timing for non-TUI mode
+	var iterationStartTime time.Time
+
+	// Set iteration start callback
+	controller.SetIterationStartCallback(func(iteration, maxIterations int) {
+		iterationStartTime = time.Now()
+		if formatter != nil {
+			formatter.PrintIterationStart(iteration, maxIterations)
+		}
+	})
+
 	// Set iteration callback to update state after each iteration
 	controller.SetIterationCallback(func(iteration int, totalCost float64, totalTokensIn, totalTokensOut int) error {
 		// Update state
 		if err := updateState(st, iteration, totalCost); err != nil {
 			return err
+		}
+
+		// Print iteration stats in non-TUI mode
+		if formatter != nil {
+			// Calculate per-iteration cost (approximate - totalCost is cumulative)
+			duration := time.Since(iterationStartTime)
+			formatter.PrintIterationEnd(duration, totalTokensIn, totalTokensOut, totalCost, "Continuing")
 		}
 
 		// Send progress update to TUI if active
@@ -356,18 +419,9 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		return nil
 	})
 
-	// Resolve workflow from flag or config
-	wf, err := resolveWorkflow(workflowFlag, fileConfig)
-	if err != nil {
-		return fmt.Errorf("failed to resolve workflow: %w", err)
-	}
-
-	// Build the prompt
-	prompt := sp.BuildPrompt()
-
-	// Print banner or start TUI
-	if !useTUI {
-		printBanner(cfg, sp, contextFiles, wf)
+	// Print banner for non-TUI mode
+	if formatter != nil {
+		printBanner(formatter, cfg, sp, contextFiles, wf)
 
 		// Print the command that will be executed
 		if cfg.Verbose {
@@ -409,9 +463,13 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Print summary (only in minimal mode)
-	if !useTUI {
-		printSummary(loopState)
+	// Print summary (only in non-TUI mode)
+	if !useTUI && formatter != nil {
+		// Print task summary if we have tasks
+		if streamProcessor != nil {
+			streamProcessor.PrintTaskSummary()
+		}
+		printSummary(formatter, loopState)
 	}
 
 	// Handle state cleanup or preservation
@@ -420,8 +478,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// State is already saved by iteration callback, so no action needed
 		if worktreeMode && wtState != nil {
 			// Preserve worktree on error/interrupt
-			fmt.Printf("\nWorktree preserved: %s\n", wtState.Path)
-			fmt.Println("Run 'orbit-cli continue' to resume.")
+			wtFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
+			wtFormatter.PrintWorktreePreserved(wtState.Path)
 		}
 		switch err {
 		case loop.ErrMaxIterationsReached:
@@ -433,7 +491,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		case context.Canceled:
 			fmt.Println("\nInterrupted by user")
 			if worktreeMode && wtState != nil {
-				fmt.Printf("Worktree preserved: %s\n", wtState.Path)
+				wtFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
+				wtFormatter.PrintWorktreePreserved(wtState.Path)
 			}
 			fmt.Println("Session state preserved. Run 'orbit-cli continue' to resume.")
 			os.Exit(130)
@@ -444,7 +503,13 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 
 	// Worktree mode: run merge phase and cleanup
 	if worktreeMode && wtState != nil {
-		fmt.Println("\nWorktree mode: running merge phase...")
+		mergeFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
+
+		// Print merge header
+		mergeFormatter.PrintWorktreeMergeStart(wtState.Path, wtState.Branch, wtState.OriginalBranch)
+
+		// Start spinner
+		mergeFormatter.StartWorktreeMergeSpinner()
 
 		// Run merge phase
 		mergeResult, mergeErr := runWorktreeMerge(ctx, worktreeMergeOptions{
@@ -454,28 +519,29 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			originalBranch: wtState.OriginalBranch,
 		})
 
+		mergeFormatter.StopSpinner()
+
 		if mergeErr != nil {
-			fmt.Fprintf(os.Stderr, "Merge phase failed: %v\n", mergeErr)
-			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
-			fmt.Println("Resolve manually and run 'orbit-cli continue' to retry.")
+			fmt.Fprintf(os.Stderr, "  ✗ Merge phase failed: %v\n", mergeErr)
+			mergeFormatter.PrintWorktreePreserved(wtState.Path)
 			os.Exit(4)
 		}
 
 		if !mergeResult.Success {
-			fmt.Fprintln(os.Stderr, "Merge phase did not complete successfully.")
-			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
-			fmt.Println("Resolve manually and run 'orbit-cli continue' to retry.")
+			fmt.Fprintln(os.Stderr, "  ✗ Merge phase did not complete successfully.")
+			mergeFormatter.PrintWorktreePreserved(wtState.Path)
 			os.Exit(4)
 		}
 
-		fmt.Printf("Merge cost: $%.4f\n", mergeResult.CostUSD)
+		// Print merge success
+		mergeFormatter.PrintWorktreeMergeComplete(mergeResult.CostUSD, mergeResult.TokensIn, mergeResult.TokensOut)
 
 		// Cleanup worktree and branch
 		cleanup := worktree.NewCleanup(workingDir)
 		if err := cleanup.Run(wtState.Path, wtState.Branch); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup worktree: %v\n", err)
 		} else {
-			fmt.Println("Worktree and branch cleaned up.")
+			mergeFormatter.PrintWorktreeCleanupComplete()
 		}
 
 		// Remove worktree state entry
@@ -493,61 +559,37 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printBanner(cfg *config.Config, sp *spec.Spec, ctxFiles []string, wf *workflow.Workflow) {
-	fmt.Println("╔═══════════════════════════════════════════════════════════════╗")
-	fmt.Println("║                    Orbit - I'm learnding!                     ║")
-	fmt.Println("╚═══════════════════════════════════════════════════════════════╝")
-	fmt.Println()
-	fmt.Printf("  Spec:        %s\n", sp.FilePaths[0])
-	if len(ctxFiles) > 0 {
-		fmt.Printf("  Context:     %d file(s)\n", len(ctxFiles))
-		for _, path := range ctxFiles {
-			fmt.Printf("               - %s\n", path)
-		}
+func printBanner(formatter *output.Formatter, cfg *config.Config, sp *spec.Spec, ctxFiles []string, wf *workflow.Workflow) {
+	bannerCfg := output.BannerConfig{
+		SpecFile:      sp.FilePaths[0],
+		ContextFiles:  ctxFiles,
+		WorkflowName:  wf.Name,
+		WorkflowSteps: len(wf.Steps),
+		HasGates:      wf.HasGates(),
+		Model:         cfg.Model,
+		CheckerModel:  cfg.CheckerModel,
+		MaxIterations: cfg.MaxIterations,
+		Budget:        cfg.MaxBudget,
+		Timeout:       cfg.IterationTimeout,
+		WorkingDir:    cfg.WorkingDir,
+		NotesFile:     spec.NotesFile,
+		SessionID:     cfg.SessionID,
+		DryRun:        cfg.DryRun,
+		Debug:         cfg.Debug,
 	}
-	fmt.Printf("  Workflow:    %s", wf.Name)
-	if wf.HasGates() {
-		fmt.Printf(" (%d steps, with gates)\n", len(wf.Steps))
-	} else {
-		fmt.Printf(" (%d step)\n", len(wf.Steps))
-	}
-	fmt.Printf("  Model:       %s\n", cfg.Model)
-	fmt.Printf("  Checker:     %s\n", cfg.CheckerModel)
-	fmt.Printf("  Iterations:  max %d\n", cfg.MaxIterations)
-	fmt.Printf("  Budget:      $%.2f USD\n", cfg.MaxBudget)
-	fmt.Printf("  Timeout:     %v per iteration\n", cfg.IterationTimeout)
-	fmt.Printf("  Working Dir: %s\n", cfg.WorkingDir)
-	fmt.Printf("  Notes File:  %s\n", spec.NotesFile)
-	if cfg.SessionID != "" {
-		fmt.Printf("  Resuming:    session %s\n", cfg.SessionID)
-	}
-	if cfg.DryRun {
-		fmt.Println("  Mode:        DRY RUN (no commands will be executed)")
-	}
-	if cfg.Debug {
-		fmt.Println("  Debug:       enabled (raw JSON output)")
-	}
-	fmt.Println()
-	fmt.Println("Starting loop...")
-	fmt.Println()
+	formatter.PrintRichBanner(bannerCfg)
 }
 
-func printSummary(loopState *loop.LoopState) {
-	fmt.Println()
-	fmt.Println("════════════════════════════════════════════════════════════════")
-	fmt.Println("                           Summary                              ")
-	fmt.Println("════════════════════════════════════════════════════════════════")
-	fmt.Printf("  Iterations:  %d\n", loopState.Iteration)
-	fmt.Printf("  Total Cost:  $%.4f USD\n", loopState.TotalCost)
-	fmt.Printf("  Total Tokens: %d\n", loopState.TotalTokens)
-	fmt.Printf("  Duration:    %v\n", time.Since(loopState.StartTime).Round(time.Second))
-
-	if loopState.Completed {
-		fmt.Println("  Status:      COMPLETED (promise detected)")
-	} else if loopState.Error != nil {
-		fmt.Printf("  Status:      TERMINATED (%v)\n", loopState.Error)
+func printSummary(formatter *output.Formatter, loopState *loop.LoopState) {
+	summary := output.LoopSummary{
+		Iterations:  loopState.Iteration,
+		TotalCost:   loopState.TotalCost,
+		TotalTokens: loopState.TotalTokens,
+		Duration:    time.Since(loopState.StartTime).Round(time.Second),
+		Completed:   loopState.Completed,
+		Error:       loopState.Error,
 	}
-	fmt.Println()
+	formatter.PrintLoopSummary(summary)
 }
 
 // generateSessionID generates a unique session ID.
