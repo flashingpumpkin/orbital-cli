@@ -21,8 +21,12 @@ const (
 	// WorktreePanelHeight is the height of the worktree info panel (path, branch).
 	WorktreePanelHeight = 1
 
+	// TabBarHeight is the height of the tab bar at the top.
+	TabBarHeight = 1
+
 	// BorderHeight is the total height used by horizontal borders between panels.
-	BorderHeight = 4
+	// Now includes the separator after tab bar.
+	BorderHeight = 5
 )
 
 // Layout represents the calculated dimensions for each UI region.
@@ -30,6 +34,9 @@ type Layout struct {
 	// Total terminal dimensions
 	Width  int
 	Height int
+
+	// TabBar is the tab bar region at the top
+	TabBarHeight int
 
 	// ScrollArea is the output region at the top
 	ScrollAreaHeight int
@@ -58,6 +65,7 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 	layout := Layout{
 		Width:               width,
 		Height:              height,
+		TabBarHeight:        TabBarHeight,
 		ProgressPanelHeight: ProgressPanelHeight,
 		SessionPanelHeight:  SessionPanelHeight,
 	}
@@ -95,7 +103,7 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 	if hasWorktree {
 		borderCount++ // Extra separator before worktree panel
 	}
-	fixedHeight := layout.TaskPanelHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + borderCount
+	fixedHeight := layout.TabBarHeight + layout.TaskPanelHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + borderCount
 
 	// Remaining space goes to scroll area
 	layout.ScrollAreaHeight = height - fixedHeight
@@ -103,7 +111,7 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 	// If scroll area would be too small, collapse task panel
 	if layout.ScrollAreaHeight < 4 && layout.TaskPanelHeight > 0 {
 		layout.TaskPanelHeight = 0
-		fixedHeight = layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + borderCount
+		fixedHeight = layout.TabBarHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + borderCount
 		layout.ScrollAreaHeight = height - fixedHeight
 	}
 
