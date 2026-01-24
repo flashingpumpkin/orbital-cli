@@ -412,6 +412,96 @@ func TestParseLine_ResultMessageActualFormat(t *testing.T) {
 	}
 }
 
+func TestParseLine_AssistantThenResult_NoDoubleCount(t *testing.T) {
+	// This test verifies that when an assistant message is followed by a result message
+	// in the same iteration, the tokens are not double-counted.
+	p := NewParser()
+
+	// Assistant message with intermediate cumulative stats
+	assistant := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Working..."}],"usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}`)
+	_, err := p.ParseLine(assistant)
+	if err != nil {
+		t.Fatalf("unexpected error parsing assistant: %v", err)
+	}
+
+	// Check intermediate state
+	stats := p.GetStats()
+	if stats.TokensIn != 100 {
+		t.Errorf("after assistant: expected TokensIn 100, got %d", stats.TokensIn)
+	}
+	if stats.TokensOut != 50 {
+		t.Errorf("after assistant: expected TokensOut 50, got %d", stats.TokensOut)
+	}
+
+	// Result message with final stats for the iteration
+	// These should REPLACE the assistant stats, not add to them
+	result := []byte(`{"type":"result","total_cost_usd":0.05,"usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}`)
+	_, err = p.ParseLine(result)
+	if err != nil {
+		t.Fatalf("unexpected error parsing result: %v", err)
+	}
+
+	// Final state should be the result values, not assistant + result
+	stats = p.GetStats()
+	if stats.TokensIn != 100 {
+		t.Errorf("after result: expected TokensIn 100 (no double count), got %d", stats.TokensIn)
+	}
+	if stats.TokensOut != 50 {
+		t.Errorf("after result: expected TokensOut 50 (no double count), got %d", stats.TokensOut)
+	}
+	if stats.CostUSD != 0.05 {
+		t.Errorf("expected CostUSD 0.05, got %f", stats.CostUSD)
+	}
+}
+
+func TestParseLine_MultipleIterations_AccumulatesCorrectly(t *testing.T) {
+	// This test verifies that across multiple iterations (assistant + result sequences),
+	// the token counts accumulate correctly without double-counting within each iteration.
+	p := NewParser()
+
+	// Iteration 1: assistant then result
+	assistant1 := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Iter 1"}],"usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}`)
+	_, _ = p.ParseLine(assistant1)
+	result1 := []byte(`{"type":"result","total_cost_usd":0.05,"usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}`)
+	_, _ = p.ParseLine(result1)
+
+	stats := p.GetStats()
+	if stats.TokensIn != 100 {
+		t.Errorf("after iter 1: expected TokensIn 100, got %d", stats.TokensIn)
+	}
+	if stats.TokensOut != 50 {
+		t.Errorf("after iter 1: expected TokensOut 50, got %d", stats.TokensOut)
+	}
+
+	// Iteration 2: assistant then result
+	assistant2 := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Iter 2"}],"usage":{"input_tokens":200,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":100}}}`)
+	_, _ = p.ParseLine(assistant2)
+
+	// During iteration 2, stats should show iter1 result + iter2 assistant
+	stats = p.GetStats()
+	if stats.TokensIn != 300 {
+		t.Errorf("during iter 2: expected TokensIn 300 (100 from iter1 + 200 from assistant2), got %d", stats.TokensIn)
+	}
+	if stats.TokensOut != 150 {
+		t.Errorf("during iter 2: expected TokensOut 150 (50 from iter1 + 100 from assistant2), got %d", stats.TokensOut)
+	}
+
+	result2 := []byte(`{"type":"result","total_cost_usd":0.03,"usage":{"input_tokens":200,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":100}}`)
+	_, _ = p.ParseLine(result2)
+
+	// After iteration 2, should have accumulated results from both iterations
+	stats = p.GetStats()
+	if stats.TokensIn != 300 {
+		t.Errorf("after iter 2: expected TokensIn 300 (100+200), got %d", stats.TokensIn)
+	}
+	if stats.TokensOut != 150 {
+		t.Errorf("after iter 2: expected TokensOut 150 (50+100), got %d", stats.TokensOut)
+	}
+	if stats.CostUSD != 0.08 {
+		t.Errorf("expected CostUSD 0.08 (0.05+0.03), got %f", stats.CostUSD)
+	}
+}
+
 func TestExtractText(t *testing.T) {
 	tests := []struct {
 		name     string

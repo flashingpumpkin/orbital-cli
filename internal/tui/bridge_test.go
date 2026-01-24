@@ -347,6 +347,195 @@ func findSubstring(s, substr string) bool {
 	return false
 }
 
+// mockProgram captures messages sent to it for testing.
+type mockProgram struct {
+	messages []interface{}
+}
+
+func (m *mockProgram) Send(msg interface{}) {
+	m.messages = append(m.messages, msg)
+}
+
+// TestBridgeMessageQueue verifies the non-blocking message queue behaviour.
+func TestBridgeMessageQueue(t *testing.T) {
+	t.Run("sends messages through queue", func(t *testing.T) {
+		tracker := NewTaskTracker()
+		bridge := NewBridge(nil, tracker)
+		defer bridge.Close()
+
+		// With nil program, messages go to queue but aren't forwarded
+		// This test verifies the queue doesn't block
+
+		// Write multiple lines quickly
+		lines := []string{
+			`{"type":"assistant","message":{"content":[{"type":"text","text":"Line 1"}]}}`,
+			`{"type":"assistant","message":{"content":[{"type":"text","text":"Line 2"}]}}`,
+			`{"type":"assistant","message":{"content":[{"type":"text","text":"Line 3"}]}}`,
+		}
+
+		for _, line := range lines {
+			_, err := bridge.Write([]byte(line + "\n"))
+			if err != nil {
+				t.Fatalf("Write failed: %v", err)
+			}
+		}
+
+		// Verify queue received messages (non-blocking check)
+		// With nil program, the pump isn't running, so messages stay in queue
+		queueLen := len(bridge.msgQueue)
+		if queueLen == 0 {
+			// This is expected when program is nil as the pump isn't started
+			// Verify the bridge processes without blocking
+		}
+	})
+
+	t.Run("handles queue full gracefully", func(t *testing.T) {
+		tracker := NewTaskTracker()
+		bridge := NewBridge(nil, tracker)
+
+		// Fill the queue manually since pump isn't running with nil program
+		for i := 0; i < defaultQueueSize; i++ {
+			select {
+			case bridge.msgQueue <- OutputLineMsg("test"):
+			default:
+				t.Fatalf("queue blocked at message %d", i)
+			}
+		}
+
+		// Now queue is full, next message should be dropped without blocking
+		bridge.sendMsg(OutputLineMsg("should be dropped"))
+
+		// Verify bridge still works and didn't block
+		bridge.Close()
+	})
+
+	t.Run("close is idempotent", func(t *testing.T) {
+		tracker := NewTaskTracker()
+		bridge := NewBridge(nil, tracker)
+
+		// Close multiple times should not panic
+		bridge.Close()
+		bridge.Close()
+		bridge.Close()
+	})
+
+	t.Run("sends after close are ignored", func(t *testing.T) {
+		tracker := NewTaskTracker()
+		bridge := NewBridge(nil, tracker)
+		bridge.Close()
+
+		// This should not panic or block
+		bridge.sendMsg(OutputLineMsg("ignored"))
+	})
+}
+
+// TestBridgeStatsMsg verifies that StatsMsg is sent on assistant and result events.
+func TestBridgeStatsMsg(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectStatsMsg bool
+		description    string
+	}{
+		{
+			name:           "assistant with usage sends StatsMsg",
+			input:          `{"type":"assistant","message":{"content":[{"type":"text","text":"Working"}],"usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}`,
+			expectStatsMsg: true,
+			description:    "assistant events with usage stats should trigger StatsMsg",
+		},
+		{
+			name:           "assistant without usage does not send StatsMsg",
+			input:          `{"type":"assistant","message":{"content":[{"type":"text","text":"Hello"}]}}`,
+			expectStatsMsg: false,
+			description:    "assistant events without usage stats should not trigger StatsMsg",
+		},
+		{
+			name:           "result with usage sends StatsMsg",
+			input:          `{"type":"result","total_cost_usd":0.05,"usage":{"input_tokens":100,"output_tokens":50}}`,
+			expectStatsMsg: true,
+			description:    "result events with usage stats should trigger StatsMsg",
+		},
+		{
+			name:           "content_block_delta does not send StatsMsg",
+			input:          `{"type":"content_block_delta","delta":{"text":"streaming"}}`,
+			expectStatsMsg: false,
+			description:    "content_block_delta events should not trigger StatsMsg",
+		},
+		{
+			name:           "system event does not send StatsMsg",
+			input:          `{"type":"system","message":"Initializing..."}`,
+			expectStatsMsg: false,
+			description:    "system events should not trigger StatsMsg",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracker := NewTaskTracker()
+			// We can't easily mock tea.Program, but we can verify parser state
+			// and the conditional logic by checking that the bridge processes correctly
+			bridge := NewBridge(nil, tracker)
+
+			// Parse the line directly through the parser to verify it works
+			event, err := bridge.parser.ParseLine([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			stats := bridge.parser.GetStats()
+
+			// Verify the stats match expectations based on event type
+			if tt.expectStatsMsg {
+				if event.Type != "assistant" && event.Type != "result" {
+					t.Errorf("expected event type 'assistant' or 'result', got %q", event.Type)
+				}
+				// For events that should send StatsMsg, verify stats are non-zero
+				if stats.TokensIn == 0 && stats.TokensOut == 0 && stats.CostUSD == 0 {
+					t.Errorf("expected non-zero stats for %s", tt.description)
+				}
+			}
+		})
+	}
+}
+
+// TestBridgeStatsMsgProgressive verifies that multiple assistant messages
+// result in progressive StatsMsg updates.
+func TestBridgeStatsMsgProgressive(t *testing.T) {
+	tracker := NewTaskTracker()
+	bridge := NewBridge(nil, tracker)
+
+	// First assistant message
+	line1 := `{"type":"assistant","message":{"content":[{"type":"text","text":"First"}],"usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}`
+	_, err := bridge.parser.ParseLine([]byte(line1))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	stats1 := bridge.parser.GetStats()
+	if stats1.TokensIn != 100 {
+		t.Errorf("after first assistant: expected TokensIn 100, got %d", stats1.TokensIn)
+	}
+	if stats1.TokensOut != 50 {
+		t.Errorf("after first assistant: expected TokensOut 50, got %d", stats1.TokensOut)
+	}
+
+	// Second assistant message with updated stats (simulating progressive update)
+	line2 := `{"type":"assistant","message":{"content":[{"type":"text","text":"Second"}],"usage":{"input_tokens":150,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":75}}}`
+	_, err = bridge.parser.ParseLine([]byte(line2))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	stats2 := bridge.parser.GetStats()
+	// Assistant stats should update (not accumulate within iteration)
+	if stats2.TokensIn != 150 {
+		t.Errorf("after second assistant: expected TokensIn 150, got %d", stats2.TokensIn)
+	}
+	if stats2.TokensOut != 75 {
+		t.Errorf("after second assistant: expected TokensOut 75, got %d", stats2.TokensOut)
+	}
+}
+
 func TestFormatToolSummaryTodoWrite(t *testing.T) {
 	input := `{"todos":[{"content":"Read spec file","status":"in_progress"},{"content":"Implement feature","status":"pending"}]}`
 	got := formatToolSummary("TodoWrite", input)

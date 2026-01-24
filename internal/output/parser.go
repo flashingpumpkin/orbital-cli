@@ -31,6 +31,14 @@ type OutputStats struct {
 // Parser accumulates statistics while parsing Claude CLI stream-json output.
 type Parser struct {
 	stats OutputStats
+	// assistantTokensIn/Out track tokens from assistant messages within the current iteration.
+	// These are overwritten by each assistant message (cumulative within iteration).
+	// Result events provide the authoritative final counts and are accumulated separately.
+	assistantTokensIn  int
+	assistantTokensOut int
+	// resultTokensIn/Out accumulate tokens across result events (iterations).
+	resultTokensIn  int
+	resultTokensOut int
 }
 
 // NewParser creates a new Parser instance.
@@ -171,9 +179,14 @@ func (p *Parser) parseAssistantMessage(raw map[string]json.RawMessage, event *St
 	}
 
 	// Extract usage stats if present
+	// Assistant messages contain cumulative tokens within the current API call.
+	// These are intermediate values that get replaced by each subsequent assistant message.
 	if msg.Usage != nil {
-		p.stats.TokensIn = msg.Usage.InputTokens + msg.Usage.CacheCreationInputTokens + msg.Usage.CacheReadInputTokens
-		p.stats.TokensOut = msg.Usage.OutputTokens
+		p.assistantTokensIn = msg.Usage.InputTokens + msg.Usage.CacheCreationInputTokens + msg.Usage.CacheReadInputTokens
+		p.assistantTokensOut = msg.Usage.OutputTokens
+		// Update stats to reflect current state (assistant values + accumulated result values)
+		p.stats.TokensIn = p.resultTokensIn + p.assistantTokensIn
+		p.stats.TokensOut = p.resultTokensOut + p.assistantTokensOut
 	}
 }
 
@@ -222,8 +235,16 @@ func (p *Parser) parseUserMessage(raw map[string]json.RawMessage, event *StreamE
 // The result event format from Claude Code CLI is:
 //
 //	{"type":"result","total_cost_usd":0.07,"duration_ms":2638,"usage":{"input_tokens":3,"cache_creation_input_tokens":10507,"cache_read_input_tokens":14155,"output_tokens":12}}
+//
+// Stat accumulation strategy:
+// - Cost: accumulates across result events (for budget tracking across iterations)
+// - Duration: accumulates across result events
+// - Tokens: result events contain the authoritative final counts for the API call,
+//   so they REPLACE any intermediate values from assistant messages. Token counts
+//   accumulate across multiple result events (iterations).
 func (p *Parser) parseResultStats(raw map[string]json.RawMessage) {
 	// Extract total_cost_usd (note: field is "total_cost_usd" not "cost_usd")
+	// Cost accumulates across iterations for budget tracking
 	if costRaw, ok := raw["total_cost_usd"]; ok {
 		var cost float64
 		if err := json.Unmarshal(costRaw, &cost); err == nil {
@@ -232,6 +253,7 @@ func (p *Parser) parseResultStats(raw map[string]json.RawMessage) {
 	}
 
 	// Extract duration_ms and convert to time.Duration (note: field is "duration_ms" not "duration_seconds")
+	// Duration accumulates across iterations
 	if durationRaw, ok := raw["duration_ms"]; ok {
 		var durationMs int64
 		if err := json.Unmarshal(durationRaw, &durationMs); err == nil {
@@ -240,11 +262,24 @@ func (p *Parser) parseResultStats(raw map[string]json.RawMessage) {
 	}
 
 	// Extract token stats from nested usage object
+	// Result events contain the authoritative final token counts for this API call.
+	// These accumulate across iterations (result events).
+	// When a result arrives, it supersedes any assistant tokens from the same iteration,
+	// so we reset the assistant counters and add result tokens to the running total.
 	if usageRaw, ok := raw["usage"]; ok {
 		var usage usageStats
 		if err := json.Unmarshal(usageRaw, &usage); err == nil {
-			p.stats.TokensIn += usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
-			p.stats.TokensOut += usage.OutputTokens
+			tokensIn := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+			tokensOut := usage.OutputTokens
+			// Accumulate result tokens across iterations
+			p.resultTokensIn += tokensIn
+			p.resultTokensOut += tokensOut
+			// Reset assistant tokens (result supersedes them for this iteration)
+			p.assistantTokensIn = 0
+			p.assistantTokensOut = 0
+			// Update stats to reflect the accumulated result totals
+			p.stats.TokensIn = p.resultTokensIn
+			p.stats.TokensOut = p.resultTokensOut
 		}
 	}
 }

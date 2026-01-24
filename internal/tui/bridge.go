@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/fatih/color"
@@ -11,8 +12,14 @@ import (
 	"github.com/flashingpumpkin/orbital/internal/tasks"
 )
 
+// Default message queue size. Large enough to handle bursts without blocking,
+// small enough to limit memory usage.
+const defaultQueueSize = 100
+
 // Bridge connects the Claude CLI stream output to the bubbletea TUI.
 // It implements io.Writer and sends messages to the tea.Program.
+// Messages are sent through a buffered channel to avoid blocking stream
+// processing when TUI rendering is slow.
 type Bridge struct {
 	program *tea.Program
 	tracker *tasks.Tracker
@@ -20,15 +27,69 @@ type Bridge struct {
 
 	mu        sync.Mutex
 	textShown bool // tracks if we're in a streaming text block
+
+	// Message queue for non-blocking sends to TUI
+	msgQueue chan tea.Msg
+	closed   atomic.Bool
+	wg       sync.WaitGroup // tracks the message pump goroutine
 }
 
 // NewBridge creates a new Bridge with the given program and tracker.
+// It starts a background goroutine that pumps messages to the TUI program.
 func NewBridge(program *tea.Program, tracker *tasks.Tracker) *Bridge {
-	return &Bridge{
-		program: program,
-		tracker: tracker,
-		parser:  output.NewParser(),
+	b := &Bridge{
+		program:  program,
+		tracker:  tracker,
+		parser:   output.NewParser(),
+		msgQueue: make(chan tea.Msg, defaultQueueSize),
 	}
+
+	// Start the message pump goroutine if program is provided
+	if program != nil {
+		b.wg.Add(1)
+		go b.messagePump()
+	}
+
+	return b
+}
+
+// messagePump reads messages from the queue and sends them to the TUI program.
+// It runs until the bridge is closed.
+func (b *Bridge) messagePump() {
+	defer b.wg.Done()
+
+	for msg := range b.msgQueue {
+		// Send to the TUI program (this may block briefly but won't block writers)
+		b.program.Send(msg)
+	}
+}
+
+// sendMsg sends a message to the TUI through the buffered queue.
+// If the queue is full, the message is dropped to avoid blocking stream processing.
+func (b *Bridge) sendMsg(msg tea.Msg) {
+	if b.closed.Load() {
+		return
+	}
+
+	// Non-blocking send to the queue
+	select {
+	case b.msgQueue <- msg:
+		// Message queued successfully
+	default:
+		// Queue is full, drop the message to avoid blocking
+		// This is acceptable for real-time updates as newer messages will follow
+	}
+}
+
+// Close shuts down the bridge and stops the message pump goroutine.
+// It should be called when the bridge is no longer needed.
+func (b *Bridge) Close() {
+	if b.closed.Swap(true) {
+		return // Already closed
+	}
+
+	close(b.msgQueue)
+	b.wg.Wait()
 }
 
 // Write implements io.Writer. It processes each line of stream-json output
@@ -61,24 +122,29 @@ func (b *Bridge) processLine(line string) {
 	// Check for task-related tool uses
 	if event.ToolName != "" && event.ToolInput != "" {
 		if tasks := b.tracker.ProcessToolUse(event.ToolName, event.ToolInput); tasks != nil {
-			b.program.Send(TasksMsg(tasks))
+			b.sendMsg(TasksMsg(tasks))
 		}
 	}
 
 	// Format and send output line based on event type
 	formatted := b.formatEvent(event)
 	if formatted != "" {
-		b.program.Send(OutputLineMsg(formatted))
+		b.sendMsg(OutputLineMsg(formatted))
 	}
 
-	// Send progress updates from result events
-	if event.Type == "result" {
+	// Send progress updates for stats-bearing events
+	// Assistant messages contain intermediate cumulative stats during streaming
+	// Result messages contain final stats for the iteration
+	if event.Type == "assistant" || event.Type == "result" {
 		stats := b.parser.GetStats()
-		b.program.Send(StatsMsg{
-			TokensIn:  stats.TokensIn,
-			TokensOut: stats.TokensOut,
-			Cost:      stats.CostUSD,
-		})
+		// Only send if we have meaningful stats (non-zero values)
+		if stats.TokensIn > 0 || stats.TokensOut > 0 || stats.CostUSD > 0 {
+			b.sendMsg(StatsMsg{
+				TokensIn:  stats.TokensIn,
+				TokensOut: stats.TokensOut,
+				Cost:      stats.CostUSD,
+			})
+		}
 	}
 }
 

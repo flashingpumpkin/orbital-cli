@@ -403,6 +403,14 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		if formatter != nil {
 			formatter.PrintIterationStart(iteration, maxIterations)
 		}
+		// Send progress update to TUI immediately when iteration starts
+		if tuiProgram != nil {
+			tuiProgram.SendProgress(tui.ProgressInfo{
+				Iteration:    iteration,
+				MaxIteration: maxIterations,
+				Budget:       cfg.MaxBudget,
+			})
+		}
 	})
 
 	// Set iteration callback to update state after each iteration
@@ -458,6 +466,11 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		go func() {
 			tuiDone <- tuiProgram.Run()
 		}()
+
+		// Brief delay to allow TUI event loop to start and process WindowSizeMsg.
+		// This ensures the TUI is ready to receive messages before the loop begins.
+		// The delay is minimal (50ms) and occurs only once at startup.
+		time.Sleep(50 * time.Millisecond)
 
 		// Check if workflow has gates (multi-step workflow)
 		if wf.HasGates() {
@@ -862,11 +875,22 @@ func runWorkflowLoop(
 	// Track step summaries for final summary
 	var stepSummaries []output.StepSummary
 
-	// Set start callback to print step start (non-TUI mode)
+	// Set start callback to print step start
 	runner.SetStartCallback(func(info workflow.StepInfo) {
 		stepStartTime = time.Now()
 		if tuiProgram == nil {
+			// Non-TUI mode: print to formatter
 			formatter.PrintStepStart(info.Name, info.Position, info.Total)
+		} else {
+			// TUI mode: send progress update immediately when step starts
+			tuiProgram.SendProgress(tui.ProgressInfo{
+				Iteration:    loopState.Iteration,
+				MaxIteration: cfg.MaxIterations,
+				StepName:     info.Name,
+				StepPosition: info.Position,
+				StepTotal:    info.Total,
+				Budget:       cfg.MaxBudget,
+			})
 		}
 	})
 
