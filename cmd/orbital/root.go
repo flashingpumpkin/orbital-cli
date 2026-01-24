@@ -1154,8 +1154,19 @@ func runWorktreeSetup(ctx context.Context, specContent string, opts worktreeSetu
 		return nil, fmt.Errorf("failed to create worktree: %w", err)
 	}
 
+	// CRITICAL: Convert to absolute path immediately after creation.
+	// The worktree path must be absolute to work correctly regardless of
+	// working directory changes during execution.
+	relPath := worktree.WorktreePath(name)
+	absPath, err := filepath.Abs(filepath.Join(opts.workingDir, relPath))
+	if err != nil {
+		// Clean up the worktree we just created since we can't use it
+		_ = worktree.RemoveWorktree(opts.workingDir, relPath)
+		return nil, fmt.Errorf("failed to get absolute worktree path: %w", err)
+	}
+
 	return &worktree.SetupResult{
-		WorktreePath: worktree.WorktreePath(name),
+		WorktreePath: absPath,
 		BranchName:   worktree.BranchName(name),
 		// No cost since we don't invoke Claude
 		CostUSD:   0,

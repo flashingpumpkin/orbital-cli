@@ -66,6 +66,12 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	if err == nil && len(worktrees) > 0 {
 		// For now, use the first worktree (could add TUI picker later)
 		wt := worktrees[0]
+
+		// Validate the worktree still exists and is valid
+		if err := worktree.ValidateWorktree(&wt); err != nil {
+			return fmt.Errorf("worktree validation failed: %w", err)
+		}
+
 		wtState = &wt
 		fmt.Printf("Found worktree session: %s (branch: %s)\n", wtState.Path, wtState.Branch)
 	}

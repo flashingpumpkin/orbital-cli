@@ -4,10 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/flashingpumpkin/orbital/internal/output"
 )
+
+// mergeSuccessPattern matches various formats of the merge success marker.
+// Handles: "MERGE_SUCCESS: true", "MERGE_SUCCESS:true", "merge_success: True", etc.
+var mergeSuccessPattern = regexp.MustCompile(`(?i)merge[_\s]*success\s*:\s*(true|false)`)
 
 // Merge handles the worktree merge phase.
 type Merge struct {
@@ -55,10 +60,16 @@ func (m *Merge) Run(ctx context.Context, opts MergeOptions) (*MergeResult, error
 
 // containsSuccessMarker checks if the output indicates successful merge.
 // It parses stream-json to get actual text content before searching for markers.
+// Uses case-insensitive matching to handle variations like "MERGE_SUCCESS: True",
+// "merge_success: true", "MERGE_SUCCESS:true", etc.
 func containsSuccessMarker(rawOutput string) bool {
 	text := output.ExtractText(rawOutput)
-	const marker = "MERGE_SUCCESS: true"
-	return strings.Contains(text, marker)
+	matches := mergeSuccessPattern.FindStringSubmatch(text)
+	if matches == nil {
+		return false
+	}
+	// matches[1] contains the captured "true" or "false"
+	return strings.EqualFold(matches[1], "true")
 }
 
 // buildMergePrompt creates the prompt for the merge phase.
