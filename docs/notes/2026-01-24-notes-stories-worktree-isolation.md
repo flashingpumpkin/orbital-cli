@@ -115,3 +115,30 @@ FAIL	github.com/flashingpumpkin/orbit-cli/internal/worktree [build failed]
 ```
 
 This tests the acceptance criterion: "When flag is set, orbit runs a separate Claude invocation before the loop"
+
+### Iteration 6: Implement setup phase
+
+**Implementation**: Created `internal/worktree/setup.go`
+
+**Types added**:
+- `ExecutionResult` struct: `Output string`, `CostUSD float64`, `TokensUsed int`
+- `Executor` interface: `Execute(ctx, prompt) (*ExecutionResult, error)`
+- `Setup` struct: holds an executor
+- `SetupResult` struct: `WorktreePath string`
+
+**Functions added**:
+- `NewSetup(executor)`: constructor
+- `Setup.Run(ctx, specContent)`: invokes executor with spec content, parses `WORKTREE_PATH:` marker from output
+- `extractWorktreePath(output)`: helper to parse the path marker
+
+**Test result**: PASS
+```
+=== RUN   TestSetupPhase_InvokesClaude
+--- PASS: TestSetupPhase_InvokesClaude (0.00s)
+=== RUN   TestSetupPhase_ReturnsErrorOnExecutionFailure
+--- PASS: TestSetupPhase_ReturnsErrorOnExecutionFailure (0.00s)
+=== RUN   TestSetupPhase_ReturnsErrorWhenPathNotFound
+--- PASS: TestSetupPhase_ReturnsErrorWhenPathNotFound (0.00s)
+```
+
+All tests pass. The setup phase now has its core structure in place. The implementation is minimal: it simply passes the spec content to the executor and parses the path from the output. The actual prompt template and Claude integration will be added in subsequent stories.

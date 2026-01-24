@@ -21,7 +21,7 @@ State is persisted so `orbit continue` can resume interrupted worktree sessions.
 ### Acceptance Criteria
 
 - [x] `--worktree` flag added to CLI
-- [ ] When flag is set, orbit runs a separate Claude invocation before the loop
+- [x] When flag is set, orbit runs a separate Claude invocation before the loop
 - [ ] Claude is given the spec content and asked to:
   1. Understand the task
   2. Choose a descriptive kebab-case name
