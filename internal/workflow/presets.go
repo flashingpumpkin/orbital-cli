@@ -6,6 +6,9 @@ import "fmt"
 type PresetName string
 
 const (
+	// PresetFast tries to complete all work in a single iteration.
+	PresetFast PresetName = "fast"
+
 	// PresetSpecDriven is the default preset with a single implement step.
 	PresetSpecDriven PresetName = "spec-driven"
 
@@ -21,7 +24,7 @@ const DefaultPreset = PresetSpecDriven
 
 // ValidPresets returns all valid preset names.
 func ValidPresets() []PresetName {
-	return []PresetName{PresetSpecDriven, PresetReviewed, PresetTDD}
+	return []PresetName{PresetFast, PresetSpecDriven, PresetReviewed, PresetTDD}
 }
 
 // IsValidPreset returns true if the given name is a valid preset.
@@ -38,6 +41,8 @@ func IsValidPreset(name string) bool {
 // Returns an error if the preset name is invalid.
 func GetPreset(name PresetName) (*Workflow, error) {
 	switch name {
+	case PresetFast:
+		return fastPreset(), nil
 	case PresetSpecDriven:
 		return specDrivenPreset(), nil
 	case PresetReviewed:
@@ -46,6 +51,41 @@ func GetPreset(name PresetName) (*Workflow, error) {
 		return tddPreset(), nil
 	default:
 		return nil, fmt.Errorf("unknown preset: %s", name)
+	}
+}
+
+// fastPreset returns the fast workflow that maximises work per iteration.
+func fastPreset() *Workflow {
+	return &Workflow{
+		Name:   string(PresetFast),
+		Preset: string(PresetFast),
+		Steps: []Step{
+			{
+				Name: "implement",
+				Prompt: `Implement as many requirements as possible from {{files}} in this iteration.
+
+Do not work incrementally. Tackle multiple requirements at once:
+1. Read all remaining requirements
+2. Implement as many as you can with tests
+3. Run tests to verify everything works
+4. Check off completed items in the spec file
+
+Maximise throughput. Do not stop after one item.
+Do not output completion promise yet.`,
+			},
+			{
+				Name: "review",
+				Prompt: `Review all code changes made in this iteration.
+Check for: correctness, edge cases, code quality, test coverage.
+
+Write your findings to the notes file with clear action items if any issues found.
+
+If changes are acceptable with no blocking issues, output <gate>PASS</gate>
+If changes need work, output <gate>FAIL</gate>`,
+				Gate:   true,
+				OnFail: "implement",
+			},
+		},
 	}
 }
 
@@ -147,6 +187,7 @@ If needs work, output <gate>FAIL</gate>`,
 // PresetDescriptions returns brief descriptions for each preset.
 func PresetDescriptions() map[PresetName]string {
 	return map[PresetName]string{
+		PresetFast:       "Maximise work per iteration with review gate",
 		PresetSpecDriven: "Single implement step with completion check (default)",
 		PresetReviewed:   "Implement with review gate before completion",
 		PresetTDD:        "Red-green-refactor cycle with review gate",

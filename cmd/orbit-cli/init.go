@@ -68,6 +68,7 @@ The configuration file contains commented examples for:
 - Custom agent definitions
 
 Available workflow presets:
+  fast         Maximise work per iteration with review gate
   spec-driven  Single implement step with completion check (default)
   reviewed     Implement with review gate before completion
   tdd          Red-green-refactor cycle with review gate

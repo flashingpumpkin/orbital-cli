@@ -101,7 +101,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&agents, "agents", "", "JSON object defining custom agents for Claude CLI")
 	rootCmd.PersistentFlags().StringVar(&notesFile, "notes", "", "Path to notes file (default: auto-generated in docs/notes/)")
 	rootCmd.PersistentFlags().StringArrayVar(&contextFiles, "context", []string{}, "Additional context file (can be repeated)")
-	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: spec-driven (default), reviewed, tdd")
+	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: fast, spec-driven (default), reviewed, tdd")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {

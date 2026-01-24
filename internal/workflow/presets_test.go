@@ -10,6 +10,7 @@ func TestIsValidPreset(t *testing.T) {
 		name string
 		want bool
 	}{
+		{"fast", true},
 		{"spec-driven", true},
 		{"reviewed", true},
 		{"tdd", true},
@@ -34,6 +35,7 @@ func TestGetPreset(t *testing.T) {
 		wantSteps int
 		wantErr   bool
 	}{
+		{PresetFast, 2, false},
 		{PresetSpecDriven, 1, false},
 		{PresetReviewed, 2, false},
 		{PresetTDD, 4, false},
@@ -61,6 +63,38 @@ func TestGetPreset(t *testing.T) {
 				t.Errorf("GetPreset() returned invalid workflow: %v", err)
 			}
 		})
+	}
+}
+
+func TestFastPreset(t *testing.T) {
+	w := fastPreset()
+
+	if len(w.Steps) != 2 {
+		t.Errorf("fast should have 2 steps, got %d", len(w.Steps))
+	}
+
+	// Check implement step
+	impl := w.Steps[0]
+	if impl.Name != "implement" {
+		t.Errorf("first step name = %q, want \"implement\"", impl.Name)
+	}
+	if !strings.Contains(impl.Prompt, "{{files}}") {
+		t.Error("implement prompt should contain {{files}} placeholder")
+	}
+	if !strings.Contains(impl.Prompt, "Maximise throughput") {
+		t.Error("implement prompt should mention maximising throughput")
+	}
+
+	// Check review step
+	review := w.Steps[1]
+	if review.Name != "review" {
+		t.Errorf("second step name = %q, want \"review\"", review.Name)
+	}
+	if !review.Gate {
+		t.Error("review step should be a gate")
+	}
+	if review.OnFail != "implement" {
+		t.Errorf("review on_fail = %q, want \"implement\"", review.OnFail)
 	}
 }
 
@@ -145,11 +179,12 @@ func TestTDDPreset(t *testing.T) {
 func TestValidPresets(t *testing.T) {
 	presets := ValidPresets()
 
-	if len(presets) != 3 {
-		t.Errorf("ValidPresets() returned %d presets, want 3", len(presets))
+	if len(presets) != 4 {
+		t.Errorf("ValidPresets() returned %d presets, want 4", len(presets))
 	}
 
 	expected := map[PresetName]bool{
+		PresetFast:       true,
 		PresetSpecDriven: true,
 		PresetReviewed:   true,
 		PresetTDD:        true,
