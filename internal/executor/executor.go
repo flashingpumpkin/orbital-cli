@@ -26,8 +26,11 @@ type ExecutionResult struct {
 	// Duration is how long the execution took.
 	Duration time.Duration
 
-	// TokensUsed is the number of tokens used during execution.
-	TokensUsed int
+	// TokensIn is the number of input tokens used during execution.
+	TokensIn int
+
+	// TokensOut is the number of output tokens used during execution.
+	TokensOut int
 
 	// CostUSD is the estimated cost in USD for the execution.
 	CostUSD float64
@@ -108,14 +111,15 @@ func (e *Executor) BuildArgs(prompt string) []string {
 	return args
 }
 
-// extractStats parses the raw output and extracts token count and cost.
-func extractStats(rawOutput string) (int, float64) {
+// extractStats parses the raw output and extracts token counts and cost.
+// Returns tokensIn, tokensOut, and costUSD.
+func extractStats(rawOutput string) (int, int, float64) {
 	parser := output.NewParser()
 	for _, line := range strings.Split(rawOutput, "\n") {
 		parser.ParseLine([]byte(line))
 	}
 	stats := parser.GetStats()
-	return stats.TokensIn + stats.TokensOut, stats.CostUSD
+	return stats.TokensIn, stats.TokensOut, stats.CostUSD
 }
 
 // Execute runs the Claude CLI with the given prompt.
@@ -164,14 +168,15 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 
 		// Handle context cancellation
 		if ctx.Err() != nil {
-			tokens, cost := extractStats(stdout.String())
+			tokensIn, tokensOut, cost := extractStats(stdout.String())
 			return &ExecutionResult{
-				Output:     stdout.String(),
-				Duration:   duration,
-				TokensUsed: tokens,
-				CostUSD:    cost,
-				Completed:  false,
-				Error:      ctx.Err(),
+				Output:    stdout.String(),
+				Duration:  duration,
+				TokensIn:  tokensIn,
+				TokensOut: tokensOut,
+				CostUSD:   cost,
+				Completed: false,
+				Error:     ctx.Err(),
 			}, ctx.Err()
 		}
 
@@ -181,27 +186,29 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 			if exitErr, ok := runErr.(*exec.ExitError); ok {
 				exitCode = exitErr.ExitCode()
 			}
-			tokens, cost := extractStats(stdout.String())
+			tokensIn, tokensOut, cost := extractStats(stdout.String())
 			return &ExecutionResult{
-				Output:     stdout.String(),
-				ExitCode:   exitCode,
-				Duration:   duration,
-				TokensUsed: tokens,
-				CostUSD:    cost,
-				Completed:  false,
-				Error:      runErr,
+				Output:    stdout.String(),
+				ExitCode:  exitCode,
+				Duration:  duration,
+				TokensIn:  tokensIn,
+				TokensOut: tokensOut,
+				CostUSD:   cost,
+				Completed: false,
+				Error:     runErr,
 			}, nil
 		}
 
-		tokens, cost := extractStats(stdout.String())
+		tokensIn, tokensOut, cost := extractStats(stdout.String())
 		return &ExecutionResult{
-			Output:     stdout.String(),
-			ExitCode:   0,
-			Duration:   duration,
-			TokensUsed: tokens,
-			CostUSD:    cost,
-			Completed:  true,
-			Error:      nil,
+			Output:    stdout.String(),
+			ExitCode:  0,
+			Duration:  duration,
+			TokensIn:  tokensIn,
+			TokensOut: tokensOut,
+			CostUSD:   cost,
+			Completed: true,
+			Error:     nil,
 		}, nil
 	}
 
@@ -214,14 +221,15 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 
 	// Handle context cancellation - check this first as it takes priority
 	if ctx.Err() != nil {
-		tokens, cost := extractStats(stdout.String())
+		tokensIn, tokensOut, cost := extractStats(stdout.String())
 		return &ExecutionResult{
-			Output:     stdout.String(),
-			Duration:   duration,
-			TokensUsed: tokens,
-			CostUSD:    cost,
-			Completed:  false,
-			Error:      ctx.Err(),
+			Output:    stdout.String(),
+			Duration:  duration,
+			TokensIn:  tokensIn,
+			TokensOut: tokensOut,
+			CostUSD:   cost,
+			Completed: false,
+			Error:     ctx.Err(),
 		}, ctx.Err()
 	}
 
@@ -231,26 +239,28 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 		if exitErr, ok := runErr.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		}
-		tokens, cost := extractStats(stdout.String())
+		tokensIn, tokensOut, cost := extractStats(stdout.String())
 		return &ExecutionResult{
-			Output:     stdout.String(),
-			ExitCode:   exitCode,
-			Duration:   duration,
-			TokensUsed: tokens,
-			CostUSD:    cost,
-			Completed:  false,
-			Error:      runErr,
+			Output:    stdout.String(),
+			ExitCode:  exitCode,
+			Duration:  duration,
+			TokensIn:  tokensIn,
+			TokensOut: tokensOut,
+			CostUSD:   cost,
+			Completed: false,
+			Error:     runErr,
 		}, nil
 	}
 
-	tokens, cost := extractStats(stdout.String())
+	tokensIn, tokensOut, cost := extractStats(stdout.String())
 	return &ExecutionResult{
-		Output:     stdout.String(),
-		ExitCode:   0,
-		Duration:   duration,
-		TokensUsed: tokens,
-		CostUSD:    cost,
-		Completed:  true,
-		Error:      nil,
+		Output:    stdout.String(),
+		ExitCode:  0,
+		Duration:  duration,
+		TokensIn:  tokensIn,
+		TokensOut: tokensOut,
+		CostUSD:   cost,
+		Completed: true,
+		Error:     nil,
 	}, nil
 }

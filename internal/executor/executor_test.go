@@ -181,13 +181,14 @@ func TestBuildArgs_BudgetFormatting(t *testing.T) {
 func TestExecutionResult_Fields(t *testing.T) {
 	// Test that ExecutionResult struct has all required fields
 	result := &ExecutionResult{
-		Output:     "test output",
-		ExitCode:   0,
-		Duration:   time.Second * 5,
-		TokensUsed: 1000,
-		CostUSD:    0.05,
-		Completed:  true,
-		Error:      nil,
+		Output:    "test output",
+		ExitCode:  0,
+		Duration:  time.Second * 5,
+		TokensIn:  600,
+		TokensOut: 400,
+		CostUSD:   0.05,
+		Completed: true,
+		Error:     nil,
 	}
 
 	if result.Output != "test output" {
@@ -199,8 +200,11 @@ func TestExecutionResult_Fields(t *testing.T) {
 	if result.Duration != time.Second*5 {
 		t.Errorf("Duration = %v, want %v", result.Duration, time.Second*5)
 	}
-	if result.TokensUsed != 1000 {
-		t.Errorf("TokensUsed = %d, want %d", result.TokensUsed, 1000)
+	if result.TokensIn != 600 {
+		t.Errorf("TokensIn = %d, want %d", result.TokensIn, 600)
+	}
+	if result.TokensOut != 400 {
+		t.Errorf("TokensOut = %d, want %d", result.TokensOut, 400)
 	}
 	if result.CostUSD != 0.05 {
 		t.Errorf("CostUSD = %f, want %f", result.CostUSD, 0.05)

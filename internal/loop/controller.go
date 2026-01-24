@@ -28,7 +28,13 @@ type LoopState struct {
 	// TotalCost is the cumulative cost in USD across all iterations.
 	TotalCost float64
 
-	// TotalTokens is the cumulative number of tokens used across all iterations.
+	// TotalTokensIn is the cumulative number of input tokens used across all iterations.
+	TotalTokensIn int
+
+	// TotalTokensOut is the cumulative number of output tokens used across all iterations.
+	TotalTokensOut int
+
+	// TotalTokens is the cumulative total tokens (in + out) for backward compatibility.
 	TotalTokens int
 
 	// StartTime is when the loop execution began.
@@ -52,7 +58,8 @@ type ExecutorInterface interface {
 
 // IterationCallback is called after each iteration with the current state.
 // This allows external code to update persistent state during the loop.
-type IterationCallback func(iteration int, totalCost float64) error
+// Parameters: iteration, totalCost, totalTokensIn, totalTokensOut
+type IterationCallback func(iteration int, totalCost float64, totalTokensIn, totalTokensOut int) error
 
 // StateManager defines an interface for managing queue state.
 // This allows the loop to check for queued files after completion.
@@ -164,7 +171,7 @@ func (c *Controller) verifyCompletion(ctx context.Context) (*VerificationResult,
 		Unchecked: unchecked,
 		Checked:   checked,
 		Cost:      result.CostUSD,
-		Tokens:    result.TokensUsed,
+		Tokens:    result.TokensIn + result.TokensOut,
 	}, nil
 }
 
@@ -217,7 +224,9 @@ func (c *Controller) Run(ctx context.Context, prompt string) (*LoopState, error)
 		// (e.g., context cancellation still produces partial stats)
 		if result != nil {
 			state.TotalCost += result.CostUSD
-			state.TotalTokens += result.TokensUsed
+			state.TotalTokensIn += result.TokensIn
+			state.TotalTokensOut += result.TokensOut
+			state.TotalTokens = state.TotalTokensIn + state.TotalTokensOut
 			state.LastOutput = result.Output
 		}
 
@@ -228,7 +237,7 @@ func (c *Controller) Run(ctx context.Context, prompt string) (*LoopState, error)
 
 		// Call iteration callback if set
 		if c.iterationCallback != nil {
-			if err := c.iterationCallback(state.Iteration, state.TotalCost); err != nil {
+			if err := c.iterationCallback(state.Iteration, state.TotalCost, state.TotalTokensIn, state.TotalTokensOut); err != nil {
 				state.Error = err
 				return state, err
 			}

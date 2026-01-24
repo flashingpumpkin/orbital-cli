@@ -282,7 +282,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	controller.SetStateManager(sm)
 
 	// Set iteration callback to update state after each iteration
-	controller.SetIterationCallback(func(iteration int, totalCost float64) error {
+	controller.SetIterationCallback(func(iteration int, totalCost float64, totalTokensIn, totalTokensOut int) error {
 		// Update state
 		if err := updateState(st, iteration, totalCost); err != nil {
 			return err
@@ -293,6 +293,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			tuiProgram.SendProgress(tui.ProgressInfo{
 				Iteration:    iteration,
 				MaxIteration: cfg.MaxIterations,
+				TokensIn:     totalTokensIn,
+				TokensOut:    totalTokensOut,
 				Cost:         totalCost,
 				Budget:       cfg.MaxBudget,
 			})
@@ -659,10 +661,11 @@ func (e *claudeStepExecutor) ExecuteStep(ctx context.Context, stepName string, p
 	}
 
 	return &workflow.ExecutionResult{
-		StepName:   stepName,
-		Output:     result.Output,
-		CostUSD:    result.CostUSD,
-		TokensUsed: result.TokensUsed,
+		StepName:  stepName,
+		Output:    result.Output,
+		CostUSD:   result.CostUSD,
+		TokensIn:  result.TokensIn,
+		TokensOut: result.TokensOut,
 	}, nil
 }
 
@@ -694,7 +697,9 @@ func runWorkflowLoop(
 	runner.SetCallback(func(stepName string, result *workflow.ExecutionResult, gateResult workflow.GateResult) error {
 		// Update totals
 		loopState.TotalCost += result.CostUSD
-		loopState.TotalTokens += result.TokensUsed
+		loopState.TotalTokensIn += result.TokensIn
+		loopState.TotalTokensOut += result.TokensOut
+		loopState.TotalTokens = loopState.TotalTokensIn + loopState.TotalTokensOut
 		loopState.LastOutput = result.Output
 
 		// Send progress update to TUI if active
@@ -702,6 +707,8 @@ func runWorkflowLoop(
 			tuiProgram.SendProgress(tui.ProgressInfo{
 				Iteration:    loopState.Iteration,
 				MaxIteration: cfg.MaxIterations,
+				TokensIn:     loopState.TotalTokensIn,
+				TokensOut:    loopState.TotalTokensOut,
 				Cost:         loopState.TotalCost,
 				Budget:       cfg.MaxBudget,
 			})
@@ -864,6 +871,6 @@ func runVerification(ctx context.Context, cfg *config.Config, specFiles []string
 		Unchecked: unchecked,
 		Checked:   checked,
 		Cost:      result.CostUSD,
-		Tokens:    result.TokensUsed,
+		Tokens:    result.TokensIn + result.TokensOut,
 	}, nil
 }

@@ -48,7 +48,7 @@ func (m *mockExecutor) Execute(ctx context.Context, prompt string) (*executor.Ex
 		return &executor.ExecutionResult{
 			Output:     "default output",
 			Completed:  true,
-			TokensUsed: 100,
+			TokensIn: 60, TokensOut: 40,
 			CostUSD:    0.01,
 		}, nil
 	}
@@ -86,7 +86,7 @@ func TestRun_CompletesOnFirstIteration(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Task done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 500,
+		TokensIn: 300, TokensOut: 200,
 		CostUSD:    0.05,
 	}, nil)
 
@@ -132,20 +132,20 @@ func TestRun_CompletesOnThirdIteration(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Working on it...",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Still working...",
 		Completed:  true,
-		TokensUsed: 150,
+		TokensIn: 90, TokensOut: 60,
 		CostUSD:    0.02,
 	}, nil)
 	// Third iteration with completion
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 200,
+		TokensIn: 120, TokensOut: 80,
 		CostUSD:    0.03,
 	}, nil)
 
@@ -188,13 +188,13 @@ func TestRun_BudgetExceeded(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Working...",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.03,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Still working...",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.03,
 	}, nil)
 
@@ -232,7 +232,7 @@ func TestRun_MaxIterationsReached(t *testing.T) {
 		exec.addResult(&executor.ExecutionResult{
 			Output:     "Working...",
 			Completed:  true,
-			TokensUsed: 100,
+			TokensIn: 60, TokensOut: 40,
 			CostUSD:    0.01,
 		}, nil)
 	}
@@ -326,7 +326,7 @@ func TestRun_PromptsPassedCorrectly(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "<promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -355,7 +355,7 @@ func TestRun_StartTimeSet(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "<promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -383,7 +383,7 @@ func TestRun_BudgetExactlyMet(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Working...",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.05,
 	}, nil)
 
@@ -433,22 +433,22 @@ func TestRun_CumulativeTokenTracking(t *testing.T) {
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Step 1",
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Step 2",
-		TokensUsed: 200,
+		TokensIn: 120, TokensOut: 80,
 		CostUSD:    0.02,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Step 3",
-		TokensUsed: 300,
+		TokensIn: 180, TokensOut: 120,
 		CostUSD:    0.03,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
-		TokensUsed: 400,
+		TokensIn: 240, TokensOut: 160,
 		CostUSD:    0.04,
 	}, nil)
 
@@ -583,14 +583,14 @@ func TestRun_ContinuesWithQueuedFiles(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 	// Second iteration with new files, also completes
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done with queued files! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -652,7 +652,7 @@ func TestRun_ExitsWhenQueueEmpty(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -701,7 +701,7 @@ func TestRun_BackwardCompatibleWithoutStateManager(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -733,7 +733,7 @@ func TestRun_PopQueueError(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -771,7 +771,7 @@ func TestRun_MergeFilesError(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -807,7 +807,7 @@ func TestRun_RebuildPromptError(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -974,14 +974,14 @@ func TestRun_VerificationFailureContinuesLoop(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 	// Second iteration: outputs promise, verification passes
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Really done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 
@@ -1027,14 +1027,14 @@ func TestRun_VerificationErrorContinuesLoop(t *testing.T) {
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 	// Second iteration: outputs promise, verification passes
 	exec.addResult(&executor.ExecutionResult{
 		Output:     "Really done! <promise>COMPLETE</promise>",
 		Completed:  true,
-		TokensUsed: 100,
+		TokensIn: 60, TokensOut: 40,
 		CostUSD:    0.01,
 	}, nil)
 

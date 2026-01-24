@@ -25,10 +25,11 @@ func newMockExecutor() *mockStepExecutor {
 
 func (m *mockStepExecutor) setResponse(stepName string, output string, cost float64, tokens int) {
 	m.responses[stepName] = &ExecutionResult{
-		StepName:   stepName,
-		Output:     output,
-		CostUSD:    cost,
-		TokensUsed: tokens,
+		StepName:  stepName,
+		Output:    output,
+		CostUSD:   cost,
+		TokensIn:  tokens * 6 / 10,
+		TokensOut: tokens * 4 / 10,
 	}
 }
 
@@ -54,10 +55,11 @@ func (m *mockStepExecutor) ExecuteStep(ctx context.Context, stepName string, pro
 
 	// Default response
 	return &ExecutionResult{
-		StepName:   stepName,
-		Output:     "default output",
-		CostUSD:    0.01,
-		TokensUsed: 100,
+		StepName:  stepName,
+		Output:    "default output",
+		CostUSD:   0.01,
+		TokensIn:  60,
+		TokensOut: 40,
 	}, nil
 }
 
@@ -137,8 +139,12 @@ func TestRunner_Run_MultipleSteps(t *testing.T) {
 		t.Errorf("TotalCost = %f, want ~%f", result.TotalCost, expectedCost)
 	}
 
-	if result.TotalTokens != 600 {
-		t.Errorf("TotalTokens = %d, want 600", result.TotalTokens)
+	// 200 + 300 + 100 = 600 total, split 60/40
+	if result.TotalTokensIn != 360 {
+		t.Errorf("TotalTokensIn = %d, want 360", result.TotalTokensIn)
+	}
+	if result.TotalTokensOut != 240 {
+		t.Errorf("TotalTokensOut = %d, want 240", result.TotalTokensOut)
 	}
 }
 
@@ -193,12 +199,12 @@ func TestRunner_Run_GateFailsAndLoopsBack(t *testing.T) {
 		if stepName == "review" {
 			if callCount <= 2 {
 				// First review fails
-				return &ExecutionResult{StepName: "review", Output: "Issues found\n<gate>FAIL</gate>", CostUSD: 0.01, TokensUsed: 100}, nil
+				return &ExecutionResult{StepName: "review", Output: "Issues found\n<gate>FAIL</gate>", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
 			}
 			// Second review passes
-			return &ExecutionResult{StepName: "review", Output: "All good\n<gate>PASS</gate>", CostUSD: 0.01, TokensUsed: 100}, nil
+			return &ExecutionResult{StepName: "review", Output: "All good\n<gate>PASS</gate>", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
 		}
-		return &ExecutionResult{StepName: stepName, Output: "Done!", CostUSD: 0.02, TokensUsed: 200}, nil
+		return &ExecutionResult{StepName: stepName, Output: "Done!", CostUSD: 0.02, TokensIn: 120, TokensOut: 80}, nil
 	}
 
 	runner := NewRunner(w, exec)
@@ -280,7 +286,7 @@ func TestRunner_Run_TemplateSubstitution(t *testing.T) {
 	exec := newMockExecutor()
 	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
 		capturedPrompt = prompt
-		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensUsed: 100}, nil
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
 	}
 
 	runner := NewRunner(w, exec)

@@ -223,7 +223,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	controller.SetStateManager(sm)
 
 	// Set iteration callback to update state after each iteration
-	controller.SetIterationCallback(func(iteration int, totalCost float64) error {
+	controller.SetIterationCallback(func(iteration int, totalCost float64, totalTokensIn, totalTokensOut int) error {
 		return updateState(st, iteration, totalCost)
 	})
 

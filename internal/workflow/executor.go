@@ -21,8 +21,11 @@ type ExecutionResult struct {
 	// CostUSD is the cost of this step in USD.
 	CostUSD float64
 
-	// TokensUsed is the number of tokens used by this step.
-	TokensUsed int
+	// TokensIn is the number of input tokens used by this step.
+	TokensIn int
+
+	// TokensOut is the number of output tokens used by this step.
+	TokensOut int
 }
 
 // StepExecutor is the interface for executing a single workflow step.
@@ -71,8 +74,11 @@ type RunResult struct {
 	// TotalCost is the cumulative cost in USD.
 	TotalCost float64
 
-	// TotalTokens is the cumulative token count.
-	TotalTokens int
+	// TotalTokensIn is the cumulative input token count.
+	TotalTokensIn int
+
+	// TotalTokensOut is the cumulative output token count.
+	TotalTokensOut int
 
 	// CompletedAllSteps is true if all steps completed successfully.
 	CompletedAllSteps bool
@@ -80,12 +86,13 @@ type RunResult struct {
 
 // StepResult contains the result of a single step execution.
 type StepResult struct {
-	StepName    string
-	Output      string
-	CostUSD     float64
-	TokensUsed  int
-	GateResult  GateResult
-	RetryCount  int
+	StepName   string
+	Output     string
+	CostUSD    float64
+	TokensIn   int
+	TokensOut  int
+	GateResult GateResult
+	RetryCount int
 }
 
 // Run executes all workflow steps in sequence.
@@ -112,7 +119,8 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 
 		// Update totals
 		result.TotalCost += execResult.CostUSD
-		result.TotalTokens += execResult.TokensUsed
+		result.TotalTokensIn += execResult.TokensIn
+		result.TotalTokensOut += execResult.TokensOut
 
 		// Check gate if this is a gate step
 		var gateResult GateResult
@@ -125,7 +133,8 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 			StepName:   step.Name,
 			Output:     execResult.Output,
 			CostUSD:    execResult.CostUSD,
-			TokensUsed: execResult.TokensUsed,
+			TokensIn:   execResult.TokensIn,
+			TokensOut:  execResult.TokensOut,
 			GateResult: gateResult,
 			RetryCount: gateRetries[step.Name],
 		}
