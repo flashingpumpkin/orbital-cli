@@ -14,6 +14,7 @@ type SessionMsg SessionInfo
 
 // WorktreeInfo contains information about the active worktree.
 type WorktreeInfo struct {
+	Name   string
 	Path   string
 	Branch string
 }

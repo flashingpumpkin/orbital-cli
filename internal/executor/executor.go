@@ -125,6 +125,7 @@ func extractStats(rawOutput string) (int, int, float64) {
 // Execute runs the Claude CLI with the given prompt.
 // It respects context cancellation and returns an error if Claude is not in PATH.
 // If a stream writer is set, output is streamed line-by-line as it arrives.
+// When WorkingDir is set in config, Claude CLI runs in that directory.
 func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult, error) {
 	// Check if the command exists in PATH
 	cmdPath, err := exec.LookPath(e.claudeCmd)
@@ -134,6 +135,11 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 
 	args := e.BuildArgs(prompt)
 	cmd := exec.CommandContext(ctx, cmdPath, args...)
+
+	// Set working directory if configured (used for worktree mode)
+	if e.config.WorkingDir != "" && e.config.WorkingDir != "." {
+		cmd.Dir = e.config.WorkingDir
+	}
 
 	// Use pipe for streaming if writer is set, otherwise buffer
 	var stdout bytes.Buffer

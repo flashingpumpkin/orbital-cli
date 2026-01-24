@@ -10,11 +10,14 @@ import (
 
 // WorktreeState represents the persisted state of a single worktree.
 type WorktreeState struct {
+	// Name is the human-readable name of the worktree (e.g., "swift-falcon").
+	// Added in v2 - may be empty for worktrees created before this field existed.
+	Name           string    `json:"name,omitempty"`
 	Path           string    `json:"path"`
 	Branch         string    `json:"branch"`
 	OriginalBranch string    `json:"originalBranch"`
 	SpecFiles      []string  `json:"specFiles"`
-	SessionID      string    `json:"sessionId"`
+	SessionID      string    `json:"sessionId,omitempty"`
 	CreatedAt      time.Time `json:"createdAt"`
 }
 

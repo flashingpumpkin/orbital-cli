@@ -333,6 +333,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// which would cause a deadlock.
 		if worktreeMode && wtState != nil {
 			tuiProgram = tui.New(session, progress, tui.WorktreeInfo{
+				Name:   wtState.Name,
 				Path:   wtState.Path,
 				Branch: wtState.Branch,
 			})

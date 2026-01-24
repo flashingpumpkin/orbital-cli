@@ -418,21 +418,26 @@ func (m Model) renderWorktreePanel() string {
 
 	// Icon and label
 	icon := m.styles.WorktreeLabel.Render("⎇")
-	label := m.styles.WorktreeLabel.Render(" Worktree: ")
 
-	// Path (truncate if too long)
-	path := w.Path
-	maxPathLen := 40
-	if len(path) > maxPathLen {
-		path = "..." + path[len(path)-maxPathLen+3:]
+	// If name is available, show it prominently
+	var nameStr string
+	if w.Name != "" {
+		nameStr = m.styles.WorktreeLabel.Render(" Worktree: ") + m.styles.WorktreeValue.Render(w.Name)
+	} else {
+		// Fallback to path if no name
+		path := w.Path
+		maxPathLen := 40
+		if len(path) > maxPathLen {
+			path = "..." + path[len(path)-maxPathLen+3:]
+		}
+		nameStr = m.styles.WorktreeLabel.Render(" Worktree: ") + m.styles.WorktreeValue.Render(path)
 	}
-	pathStr := m.styles.WorktreeValue.Render(path)
 
 	// Branch
 	branchLabel := m.styles.Label.Render(" │ Branch: ")
 	branchStr := m.styles.WorktreeValue.Render(w.Branch)
 
-	return "  " + icon + label + pathStr + branchLabel + branchStr
+	return "  " + icon + nameStr + branchLabel + branchStr
 }
 
 // formatPath formats a single file path with truncation.
