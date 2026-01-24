@@ -8,6 +8,8 @@ This project was developed entirely through AI-driven development using Claude C
 
 This serves as both a practical tool and an experiment in autonomous software development.
 
+**Warning:** Orbital runs Claude Code with `--dangerously-skip-permissions`, which bypasses all interactive approval prompts. Claude will execute shell commands, modify files, and make network requests without asking for confirmation. Only run this tool in environments where you accept these risks.
+
 ## What is the Ralph Wiggum Method?
 
 The Ralph Wiggum method is an iterative AI development technique where a prompt is repeatedly fed to Claude Code until completion criteria are met. Named after the Simpsons character's optimistic persistence ("I'm learnding!"), it embodies:
