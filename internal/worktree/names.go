@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"time"
 )
 
 var adjectives = []string{
@@ -41,40 +42,44 @@ func GenerateName() string {
 }
 
 // GenerateUniqueName returns a name not in the excluded list.
-// Falls back to appending a numeric suffix if all base combinations are taken.
+// Falls back to appending a numeric suffix if base combinations are taken.
 func GenerateUniqueName(excluded []string) string {
 	excludeSet := make(map[string]bool)
 	for _, name := range excluded {
 		excludeSet[name] = true
 	}
 
-	// Try up to 10 times to find an unused name
-	for i := 0; i < 10; i++ {
+	// With 50x50=2500 combinations and trying 50 times, we have good coverage
+	// even with many existing worktrees. P(collision) for n existing is ~(n/2500)^50
+	for i := 0; i < 50; i++ {
 		name := GenerateName()
 		if !excludeSet[name] {
 			return name
 		}
 	}
 
-	// Fallback: append suffix
+	// Fallback: append timestamp-based suffix for guaranteed uniqueness
+	// This handles the edge case where we have many collisions
 	base := GenerateName()
-	for suffix := 2; suffix <= 100; suffix++ {
-		name := fmt.Sprintf("%s-%d", base, suffix)
+	suffix := time.Now().UnixNano() % 10000 // Last 4 digits of nanosecond timestamp
+	for attempts := 0; attempts < 100; attempts++ {
+		name := fmt.Sprintf("%s-%d", base, suffix+int64(attempts))
 		if !excludeSet[name] {
 			return name
 		}
 	}
 
-	// Give up and return a name with a high suffix
-	return fmt.Sprintf("%s-%d", base, 101)
+	// Final fallback: use full timestamp (extremely unlikely to reach here)
+	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano())
 }
 
 // randomInt returns a cryptographically secure random integer in [0, max).
 func randomInt(max int) int {
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
 	if err != nil {
-		// Fallback to a deterministic value in the unlikely event of crypto/rand failure
-		return 0
+		// Fallback to time-based pseudo-random if crypto/rand fails.
+		// This is less secure but provides reasonable distribution for name generation.
+		return int(time.Now().UnixNano() % int64(max))
 	}
 	return int(n.Int64())
 }

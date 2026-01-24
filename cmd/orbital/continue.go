@@ -66,6 +66,12 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	if err == nil && len(worktrees) > 0 {
 		// For now, use the first worktree (could add TUI picker later)
 		wt := worktrees[0]
+
+		// Validate the worktree still exists and is valid
+		if err := worktree.ValidateWorktree(&wt); err != nil {
+			return fmt.Errorf("worktree validation failed: %w", err)
+		}
+
 		wtState = &wt
 		fmt.Printf("Found worktree session: %s (branch: %s)\n", wtState.Path, wtState.Branch)
 	}
@@ -310,6 +316,26 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	if wtState != nil {
 		fmt.Println("\nWorktree mode: running merge phase...")
 
+		// Pre-merge verification: ensure branches exist
+		if err := worktree.VerifyBranchExists(wd, wtState.Branch); err != nil {
+			fmt.Fprintf(os.Stderr, "Pre-merge check failed: %v\n", err)
+			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
+			os.Exit(4)
+		}
+		if err := worktree.VerifyBranchExists(wd, wtState.OriginalBranch); err != nil {
+			fmt.Fprintf(os.Stderr, "Pre-merge check failed: %v\n", err)
+			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
+			os.Exit(4)
+		}
+
+		// Get worktree branch HEAD before merge for verification
+		worktreeHead, err := worktree.GetBranchHeadCommit(wd, wtState.Branch)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to get worktree branch HEAD: %v\n", err)
+			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
+			os.Exit(4)
+		}
+
 		// Run merge phase
 		mergeResult, mergeErr := runWorktreeMerge(ctx, worktreeMergeOptions{
 			model:          mergeModel,
@@ -332,7 +358,23 @@ func runContinue(cmd *cobra.Command, args []string) error {
 			os.Exit(4)
 		}
 
+		// Post-merge verification: ensure original branch now contains worktree commits
+		if err := worktree.VerifyBranchContains(wd, wtState.OriginalBranch, worktreeHead); err != nil {
+			fmt.Fprintf(os.Stderr, "Merge verification failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Claude reported success but git shows the merge did not complete.\n")
+			fmt.Printf("Worktree preserved: %s\n", wtState.Path)
+			fmt.Println("Resolve manually and run 'orbital continue' to retry.")
+			os.Exit(4)
+		}
+
+		// Verify we're on the original branch
+		if err := worktree.VerifyOnBranch(wd, wtState.OriginalBranch); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+			fmt.Println("Merge appears successful but you may not be on the expected branch.")
+		}
+
 		fmt.Printf("Merge cost: $%.4f\n", mergeResult.CostUSD)
+		fmt.Println("Merge verified: original branch now contains worktree commits.")
 
 		// Cleanup worktree and branch
 		cleanup := worktree.NewCleanup(wd)

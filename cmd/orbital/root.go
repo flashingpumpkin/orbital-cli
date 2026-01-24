@@ -279,6 +279,11 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// Persist worktree state
 		// Extract the name from the worktree path (last segment after .orbital/worktrees/)
 		worktreeName := filepath.Base(setupResult.WorktreePath)
+		if worktreeName == "" || worktreeName == "." {
+			// Safety check: if filepath.Base returns unexpected value, clean up and fail
+			_ = worktree.RemoveWorktree(workingDir, setupResult.WorktreePath)
+			return fmt.Errorf("invalid worktree path: %s", setupResult.WorktreePath)
+		}
 		wtStateManager = worktree.NewStateManager(workingDir)
 		wtState = &worktree.WorktreeState{
 			Name:           worktreeName,
@@ -288,7 +293,12 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			SpecFiles:      absFilePaths,
 		}
 		if err := wtStateManager.Add(*wtState); err != nil {
-			return fmt.Errorf("failed to persist worktree state: %w", err)
+			// CRITICAL: Clean up the worktree we just created to avoid orphans
+			cleanupErr := worktree.RemoveWorktree(workingDir, setupResult.WorktreePath)
+			if cleanupErr != nil {
+				return fmt.Errorf("failed to persist worktree state: %w (cleanup also failed: %v)", err, cleanupErr)
+			}
+			return fmt.Errorf("failed to persist worktree state: %w (worktree cleaned up)", err)
 		}
 
 		// Update working directory to worktree
@@ -1154,8 +1164,19 @@ func runWorktreeSetup(ctx context.Context, specContent string, opts worktreeSetu
 		return nil, fmt.Errorf("failed to create worktree: %w", err)
 	}
 
+	// CRITICAL: Convert to absolute path immediately after creation.
+	// The worktree path must be absolute to work correctly regardless of
+	// working directory changes during execution.
+	relPath := worktree.WorktreePath(name)
+	absPath, err := filepath.Abs(filepath.Join(opts.workingDir, relPath))
+	if err != nil {
+		// Clean up the worktree we just created since we can't use it
+		_ = worktree.RemoveWorktree(opts.workingDir, relPath)
+		return nil, fmt.Errorf("failed to get absolute worktree path: %w", err)
+	}
+
 	return &worktree.SetupResult{
-		WorktreePath: worktree.WorktreePath(name),
+		WorktreePath: absPath,
 		BranchName:   worktree.BranchName(name),
 		// No cost since we don't invoke Claude
 		CostUSD:   0,

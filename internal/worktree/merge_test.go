@@ -209,6 +209,47 @@ func TestContainsSuccessMarker(t *testing.T) {
 			output: streamJSONMerge("MERGE_SUCCESS:"),
 			want:   false,
 		},
+		// Case-insensitive matching tests
+		{
+			name:   "lowercase marker",
+			output: streamJSONMerge("merge_success: true"),
+			want:   true,
+		},
+		{
+			name:   "mixed case marker",
+			output: streamJSONMerge("Merge_Success: True"),
+			want:   true,
+		},
+		{
+			name:   "uppercase TRUE",
+			output: streamJSONMerge("MERGE_SUCCESS: TRUE"),
+			want:   true,
+		},
+		{
+			name:   "no space after colon",
+			output: streamJSONMerge("MERGE_SUCCESS:true"),
+			want:   true,
+		},
+		{
+			name:   "extra spaces",
+			output: streamJSONMerge("MERGE_SUCCESS:   true"),
+			want:   true,
+		},
+		{
+			name:   "underscore vs space - merge success",
+			output: streamJSONMerge("MERGE SUCCESS: true"),
+			want:   true,
+		},
+		{
+			name:   "lowercase false",
+			output: streamJSONMerge("merge_success: false"),
+			want:   false,
+		},
+		{
+			name:   "mixed case False",
+			output: streamJSONMerge("MERGE_SUCCESS: False"),
+			want:   false,
+		},
 	}
 
 	for _, tt := range tests {

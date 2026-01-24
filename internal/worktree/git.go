@@ -1,12 +1,31 @@
 package worktree
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
+
+// gitCommandTimeout is the maximum time a git command can run before being killed.
+const gitCommandTimeout = 30 * time.Second
+
+// runGitCommand runs a git command with a timeout.
+// Returns the combined stdout/stderr output and any error.
+func runGitCommand(dir string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitCommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return output, fmt.Errorf("git command timed out after %v: git %s", gitCommandTimeout, strings.Join(args, " "))
+	}
+	return output, err
+}
 
 // BranchPrefix is the prefix used for worktree branches.
 const BranchPrefix = "orbital/"
@@ -72,8 +91,7 @@ func CreateWorktree(dir, name string) error {
 	worktreePath := filepath.Join(WorktreeDir, name)
 	branchName := BranchPrefix + name
 
-	cmd := exec.Command("git", "-C", dir, "worktree", "add", "-b", branchName, worktreePath, "HEAD")
-	output, err := cmd.CombinedOutput()
+	output, err := runGitCommand(dir, "worktree", "add", "-b", branchName, worktreePath, "HEAD")
 	if err != nil {
 		return fmt.Errorf("failed to create worktree %q at %q: %w\ngit output: %s",
 			name, worktreePath, err, strings.TrimSpace(string(output)))
@@ -88,8 +106,7 @@ func RemoveWorktree(dir, worktreePath string) error {
 		return fmt.Errorf("worktree path cannot be empty")
 	}
 
-	cmd := exec.Command("git", "-C", dir, "worktree", "remove", worktreePath, "--force")
-	output, err := cmd.CombinedOutput()
+	output, err := runGitCommand(dir, "worktree", "remove", worktreePath, "--force")
 	if err != nil {
 		return fmt.Errorf("failed to remove worktree %q: %w\ngit output: %s",
 			worktreePath, err, strings.TrimSpace(string(output)))
@@ -106,15 +123,13 @@ func DeleteBranch(dir, branchName string) error {
 	}
 
 	// Try safe delete first
-	cmd := exec.Command("git", "-C", dir, "branch", "-d", branchName)
-	output, err := cmd.CombinedOutput()
+	output, err := runGitCommand(dir, "branch", "-d", branchName)
 	if err == nil {
 		return nil
 	}
 
 	// Safe delete failed, try force delete
-	forceCmd := exec.Command("git", "-C", dir, "branch", "-D", branchName)
-	forceOutput, forceErr := forceCmd.CombinedOutput()
+	forceOutput, forceErr := runGitCommand(dir, "branch", "-D", branchName)
 	if forceErr != nil {
 		return fmt.Errorf("failed to delete branch %q: %w\ngit branch -d output: %s\ngit branch -D output: %s",
 			branchName, forceErr, strings.TrimSpace(string(output)), strings.TrimSpace(string(forceOutput)))
@@ -123,20 +138,127 @@ func DeleteBranch(dir, branchName string) error {
 	return nil
 }
 
-// ListWorktreeNames returns the names of existing worktrees by reading the state file.
-// This is used for collision avoidance when generating new names.
+// ListWorktreeNames returns the names of existing worktrees.
+// It combines names from both the state file and actual git worktrees to ensure
+// collision avoidance even when state is out of sync (e.g., after a crash).
 func ListWorktreeNames(dir string) ([]string, error) {
+	nameSet := make(map[string]bool)
+
+	// Get names from state file
 	manager := NewStateManager(dir)
 	state, err := manager.Load()
+	if err == nil {
+		for _, wt := range state.Worktrees {
+			if wt.Name != "" {
+				nameSet[wt.Name] = true
+			}
+		}
+	}
+
+	// Get names from actual git worktrees
+	gitNames, err := listGitWorktreeNames(dir)
+	if err == nil {
+		for _, name := range gitNames {
+			nameSet[name] = true
+		}
+	}
+
+	// Convert set to slice
+	var names []string
+	for name := range nameSet {
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+// listGitWorktreeNames queries git for existing worktrees and extracts names
+// for any that match the orbital worktree pattern (.orbital/worktrees/<name>).
+func listGitWorktreeNames(dir string) ([]string, error) {
+	output, err := runGitCommand(dir, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
 
 	var names []string
-	for _, wt := range state.Worktrees {
-		names = append(names, wt.Name)
+	worktreePathPrefix := filepath.Join(WorktreeDir) + string(filepath.Separator)
+
+	// Parse porcelain output: each worktree starts with "worktree <path>"
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "worktree ") {
+			path := strings.TrimPrefix(line, "worktree ")
+			// Check if this is an orbital worktree
+			if idx := strings.Index(path, worktreePathPrefix); idx != -1 {
+				// Extract the name (everything after .orbital/worktrees/)
+				namePart := path[idx+len(worktreePathPrefix):]
+				// Handle any trailing path components
+				if sepIdx := strings.IndexAny(namePart, "/\\"); sepIdx != -1 {
+					namePart = namePart[:sepIdx]
+				}
+				if namePart != "" {
+					names = append(names, namePart)
+				}
+			}
+		}
 	}
+
 	return names, nil
+}
+
+// ListGitBranches returns all branches matching the orbital prefix.
+func ListGitBranches(dir string) ([]string, error) {
+	output, err := runGitCommand(dir, "branch", "--list", BranchPrefix+"*", "--format=%(refname:short)")
+	if err != nil {
+		return nil, err
+	}
+
+	var branches []string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line != "" {
+			branches = append(branches, line)
+		}
+	}
+	return branches, nil
+}
+
+// VerifyBranchExists checks if a branch exists in the repository.
+func VerifyBranchExists(dir, branchName string) error {
+	output, err := runGitCommand(dir, "rev-parse", "--verify", branchName)
+	if err != nil {
+		return fmt.Errorf("branch %q does not exist: %w\ngit output: %s", branchName, err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// VerifyOnBranch checks if the repository is currently on the specified branch.
+func VerifyOnBranch(dir, expectedBranch string) error {
+	output, err := runGitCommand(dir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	currentBranch := strings.TrimSpace(string(output))
+	if currentBranch != expectedBranch {
+		return fmt.Errorf("expected to be on branch %q but currently on %q", expectedBranch, currentBranch)
+	}
+	return nil
+}
+
+// VerifyBranchContains checks if a branch contains a specific commit (is ancestor of).
+func VerifyBranchContains(dir, branch, commit string) error {
+	_, err := runGitCommand(dir, "merge-base", "--is-ancestor", commit, branch)
+	if err != nil {
+		return fmt.Errorf("branch %q does not contain commit %q", branch, commit)
+	}
+	return nil
+}
+
+// GetBranchHeadCommit returns the commit SHA of the branch HEAD.
+func GetBranchHeadCommit(dir, branch string) (string, error) {
+	output, err := runGitCommand(dir, "rev-parse", branch)
+	if err != nil {
+		return "", fmt.Errorf("failed to get HEAD of branch %q: %w", branch, err)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 // WorktreePath returns the full path for a worktree with the given name.

@@ -13,6 +13,9 @@ import (
 // ErrNotGitRepository is returned when the working directory is not a git repository.
 var ErrNotGitRepository = errors.New("not a git repository")
 
+// ErrDetachedHead is returned when the repository is in detached HEAD state.
+var ErrDetachedHead = errors.New("worktree mode requires a branch, currently on detached HEAD\nCheckout a branch first: git checkout -b <branch-name>")
+
 // CheckGitRepository verifies that the given directory is a git repository.
 func CheckGitRepository(dir string) error {
 	// Check for .git directory or file (worktrees use a .git file)
@@ -32,13 +35,21 @@ func CheckGitRepository(dir string) error {
 }
 
 // GetCurrentBranch returns the current branch name.
+// Returns ErrDetachedHead if the repository is in detached HEAD state.
 func GetCurrentBranch(dir string) (string, error) {
 	cmd := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}
-	return strings.TrimSpace(string(output)), nil
+	branch := strings.TrimSpace(string(output))
+
+	// In detached HEAD state, git returns "HEAD" as the branch name
+	if branch == "HEAD" {
+		return "", ErrDetachedHead
+	}
+
+	return branch, nil
 }
 
 // ExecutionResult contains the result of executing Claude.
@@ -94,9 +105,15 @@ func SetupDirect(workingDir string, opts SetupOptions) (*SetupResult, error) {
 	}
 
 	// Convert worktree path to absolute to ensure it works regardless of
-	// how spec file paths are provided (relative or absolute)
-	absWorktreePath, err := filepath.Abs(WorktreePath(name))
+	// how spec file paths are provided (relative or absolute).
+	// CRITICAL: Must join with workingDir first, since WorktreePath returns
+	// a relative path and filepath.Abs would resolve relative to the current
+	// working directory (which may differ from workingDir).
+	relPath := WorktreePath(name)
+	absWorktreePath, err := filepath.Abs(filepath.Join(workingDir, relPath))
 	if err != nil {
+		// Clean up the worktree we just created since we can't use it
+		_ = RemoveWorktree(workingDir, relPath)
 		return nil, fmt.Errorf("failed to get absolute worktree path: %w", err)
 	}
 

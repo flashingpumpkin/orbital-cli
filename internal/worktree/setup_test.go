@@ -64,3 +64,37 @@ func TestSetupResult(t *testing.T) {
 // Note: Integration tests for SetupDirect would require a real git repository.
 // These are deferred per the implementation plan (docs/plans/2026-01-24-164500-stories-worktree-fixes.md).
 // The function is exercised through the git.go helpers which are unit tested in git_test.go.
+
+func TestErrDetachedHead(t *testing.T) {
+	t.Run("error message contains helpful instructions", func(t *testing.T) {
+		errMsg := ErrDetachedHead.Error()
+
+		if !containsSubstr(errMsg, "detached HEAD") {
+			t.Errorf("error message should mention 'detached HEAD'; got %q", errMsg)
+		}
+
+		if !containsSubstr(errMsg, "git checkout -b") {
+			t.Errorf("error message should suggest 'git checkout -b'; got %q", errMsg)
+		}
+	})
+}
+
+func TestErrNotGitRepository(t *testing.T) {
+	t.Run("error message is descriptive", func(t *testing.T) {
+		errMsg := ErrNotGitRepository.Error()
+
+		if !containsSubstr(errMsg, "git repository") {
+			t.Errorf("error message should mention 'git repository'; got %q", errMsg)
+		}
+	})
+}
+
+// Helper function
+func containsSubstr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
