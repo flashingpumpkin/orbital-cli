@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -104,12 +103,12 @@ func (q *Queue) withLock(fn func() error) error {
 	}()
 
 	// Acquire exclusive lock
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("failed to acquire lock: %w", err)
+	if err := acquireLock(lockFile); err != nil {
+		return err
 	}
 	defer func() {
-		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to unlock file: %v\n", err)
+		if err := releaseLock(lockFile); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 		}
 	}()
 
