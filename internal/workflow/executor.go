@@ -35,14 +35,36 @@ type StepExecutor interface {
 	ExecuteStep(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error)
 }
 
+// StepInfo provides context about the current step execution.
+type StepInfo struct {
+	// Name is the step name.
+	Name string
+
+	// Position is the 1-indexed position in the workflow.
+	Position int
+
+	// Total is the total number of steps in the workflow.
+	Total int
+
+	// GateRetries is the current retry count for this step (0 if first attempt).
+	GateRetries int
+
+	// MaxRetries is the maximum allowed gate retries.
+	MaxRetries int
+}
+
 // RunnerCallback is called after each step completes.
-type RunnerCallback func(stepName string, result *ExecutionResult, gateResult GateResult) error
+type RunnerCallback func(info StepInfo, result *ExecutionResult, gateResult GateResult) error
+
+// StepStartCallback is called before each step begins execution.
+type StepStartCallback func(info StepInfo)
 
 // Runner executes a workflow by running its steps in sequence.
 type Runner struct {
-	workflow *Workflow
-	executor StepExecutor
-	callback RunnerCallback
+	workflow      *Workflow
+	executor      StepExecutor
+	callback      RunnerCallback
+	startCallback StepStartCallback
 
 	// filePaths is used for template substitution in prompts.
 	filePaths []string
@@ -59,6 +81,11 @@ func NewRunner(w *Workflow, exec StepExecutor) *Runner {
 // SetCallback sets the callback function called after each step.
 func (r *Runner) SetCallback(cb RunnerCallback) {
 	r.callback = cb
+}
+
+// SetStartCallback sets the callback function called before each step starts.
+func (r *Runner) SetStartCallback(cb StepStartCallback) {
+	r.startCallback = cb
 }
 
 // SetFilePaths sets the file paths for template substitution.
@@ -108,6 +135,18 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 	for stepIndex < len(r.workflow.Steps) {
 		step := r.workflow.Steps[stepIndex]
 
+		// Call start callback if set
+		if r.startCallback != nil {
+			info := StepInfo{
+				Name:        step.Name,
+				Position:    stepIndex + 1, // 1-indexed
+				Total:       len(r.workflow.Steps),
+				GateRetries: gateRetries[step.Name],
+				MaxRetries:  r.workflow.EffectiveMaxGateRetries(),
+			}
+			r.startCallback(info)
+		}
+
 		// Build the prompt with template substitution
 		prompt := r.buildPrompt(step.Prompt)
 
@@ -142,7 +181,14 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 
 		// Call callback if set
 		if r.callback != nil {
-			if err := r.callback(step.Name, execResult, gateResult); err != nil {
+			info := StepInfo{
+				Name:        step.Name,
+				Position:    stepIndex + 1, // 1-indexed
+				Total:       len(r.workflow.Steps),
+				GateRetries: gateRetries[step.Name],
+				MaxRetries:  r.workflow.EffectiveMaxGateRetries(),
+			}
+			if err := r.callback(info, execResult, gateResult); err != nil {
 				return result, err
 			}
 		}

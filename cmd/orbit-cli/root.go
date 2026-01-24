@@ -699,8 +699,27 @@ func runWorkflowLoop(
 	runner := workflow.NewRunner(wf, stepExec)
 	runner.SetFilePaths(specFiles)
 
+	// Create formatter for non-TUI output
+	formatter := output.NewFormatter(cfg.Verbose, false, os.Stdout)
+
+	// Track step start time for duration calculation
+	var stepStartTime time.Time
+
+	// Track step summaries for final summary
+	var stepSummaries []output.StepSummary
+
+	// Set start callback to print step start (non-TUI mode)
+	runner.SetStartCallback(func(info workflow.StepInfo) {
+		stepStartTime = time.Now()
+		if tuiProgram == nil {
+			formatter.PrintStepStart(info.Name, info.Position, info.Total)
+		}
+	})
+
 	// Set callback to track step execution
-	runner.SetCallback(func(stepName string, result *workflow.ExecutionResult, gateResult workflow.GateResult) error {
+	runner.SetCallback(func(info workflow.StepInfo, result *workflow.ExecutionResult, gateResult workflow.GateResult) error {
+		stepDuration := time.Since(stepStartTime)
+
 		// Update totals
 		loopState.TotalCost += result.CostUSD
 		loopState.TotalTokensIn += result.TokensIn
@@ -708,11 +727,34 @@ func runWorkflowLoop(
 		loopState.TotalTokens = loopState.TotalTokensIn + loopState.TotalTokensOut
 		loopState.LastOutput = result.Output
 
+		// Track step summary
+		summary := output.StepSummary{
+			Name:   info.Name,
+			Cost:   result.CostUSD,
+			Tokens: result.TokensIn + result.TokensOut,
+		}
+		switch gateResult {
+		case workflow.GatePassed:
+			summary.Status = "passed"
+			summary.GateResult = "PASS"
+		case workflow.GateFailed:
+			summary.Status = "failed"
+			summary.GateResult = "FAIL"
+		default:
+			summary.Status = "completed"
+		}
+		stepSummaries = append(stepSummaries, summary)
+
 		// Send progress update to TUI if active
 		if tuiProgram != nil {
 			tuiProgram.SendProgress(tui.ProgressInfo{
 				Iteration:    loopState.Iteration,
 				MaxIteration: cfg.MaxIterations,
+				StepName:     info.Name,
+				StepPosition: info.Position,
+				StepTotal:    info.Total,
+				GateRetries:  info.GateRetries,
+				MaxRetries:   info.MaxRetries,
 				TokensIn:     loopState.TotalTokensIn,
 				TokensOut:    loopState.TotalTokensOut,
 				Cost:         loopState.TotalCost,
@@ -722,10 +764,11 @@ func runWorkflowLoop(
 
 		// Log step completion (non-TUI mode)
 		if tuiProgram == nil {
-			if gateResult == workflow.GatePassed || gateResult == workflow.GateFailed {
-				fmt.Printf("\n[%s] Step completed: gate %s\n", stepName, gateResult)
-			} else {
-				fmt.Printf("\n[%s] Step completed\n", stepName)
+			formatter.PrintStepComplete(info.Name, stepDuration, result.CostUSD, result.TokensIn+result.TokensOut)
+			if gateResult == workflow.GatePassed {
+				formatter.PrintGateResult(true, info.GateRetries, info.MaxRetries)
+			} else if gateResult == workflow.GateFailed {
+				formatter.PrintGateResult(false, info.GateRetries, info.MaxRetries)
 			}
 		}
 
@@ -841,16 +884,20 @@ func runWorkflowLoop(
 				}
 			}
 
-			// Done
+			// Done - print workflow summary
 			if tuiProgram == nil {
 				fmt.Println("No queued files. Work complete.")
+				formatter.PrintWorkflowSummary(stepSummaries, loopState.TotalCost, loopState.TotalTokens)
 			}
 			loopState.Completed = true
 			return loopState, nil
 		}
 	}
 
-	// Max iterations reached
+	// Max iterations reached - print summary before returning
+	if tuiProgram == nil && len(stepSummaries) > 0 {
+		formatter.PrintWorkflowSummary(stepSummaries, loopState.TotalCost, loopState.TotalTokens)
+	}
 	loopState.Error = loop.ErrMaxIterationsReached
 	return loopState, loop.ErrMaxIterationsReached
 }

@@ -165,3 +165,100 @@ func formatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%dm%ds", minutes, seconds)
 }
+
+// PrintStepStart prints the start of a workflow step.
+func (f *Formatter) PrintStepStart(name string, position, total int) {
+	if f.quiet {
+		return
+	}
+
+	blue := color.New(color.FgBlue, color.Bold)
+	_, _ = blue.Fprintf(f.writer, "[Step %d/%d] %s\n", position, total, name)
+}
+
+// PrintStepComplete prints the completion of a workflow step.
+func (f *Formatter) PrintStepComplete(name string, duration time.Duration, cost float64, tokens int) {
+	if f.quiet {
+		return
+	}
+
+	white := color.New(color.FgWhite)
+	_, _ = white.Fprintf(f.writer, "  Completed in %s | $%.4f | %d tokens\n", formatDuration(duration), cost, tokens)
+}
+
+// PrintGateResult prints the result of a gate check.
+func (f *Formatter) PrintGateResult(passed bool, retries, maxRetries int) {
+	if f.quiet {
+		return
+	}
+
+	if passed {
+		green := color.New(color.FgGreen)
+		_, _ = green.Fprintln(f.writer, "  Gate: PASS")
+	} else {
+		yellow := color.New(color.FgYellow)
+		_, _ = yellow.Fprintf(f.writer, "  Gate: FAIL (retry %d/%d)\n", retries+1, maxRetries)
+	}
+}
+
+// StepSummary contains summary information for a completed step.
+type StepSummary struct {
+	Name       string
+	Status     string // "passed", "failed", "completed"
+	Cost       float64
+	Tokens     int
+	GateResult string // "PASS", "FAIL", "" for non-gate steps
+}
+
+// PrintWorkflowSummary prints a summary of all completed workflow steps.
+func (f *Formatter) PrintWorkflowSummary(steps []StepSummary, totalCost float64, totalTokens int) {
+	if f.quiet {
+		return
+	}
+
+	_, _ = fmt.Fprintln(f.writer, "")
+	cyan := color.New(color.FgCyan, color.Bold)
+	_, _ = cyan.Fprintln(f.writer, "Workflow Steps Summary")
+	_, _ = fmt.Fprintln(f.writer, "")
+
+	white := color.New(color.FgWhite)
+	green := color.New(color.FgGreen)
+	red := color.New(color.FgRed)
+
+	for i, step := range steps {
+		var statusIcon string
+		var statusColor *color.Color
+
+		switch step.Status {
+		case "passed":
+			statusIcon = "✓"
+			statusColor = green
+		case "failed":
+			statusIcon = "✗"
+			statusColor = red
+		default:
+			statusIcon = "•"
+			statusColor = white
+		}
+
+		// Print step with status
+		_, _ = statusColor.Fprintf(f.writer, "  %s %d. %s", statusIcon, i+1, step.Name)
+
+		// Add gate result if applicable
+		if step.GateResult != "" {
+			if step.GateResult == "PASS" {
+				_, _ = green.Fprintf(f.writer, " [%s]", step.GateResult)
+			} else {
+				_, _ = red.Fprintf(f.writer, " [%s]", step.GateResult)
+			}
+		}
+		_, _ = fmt.Fprintln(f.writer)
+
+		// Print cost and tokens
+		_, _ = white.Fprintf(f.writer, "      $%.4f | %d tokens\n", step.Cost, step.Tokens)
+	}
+
+	// Print totals
+	_, _ = fmt.Fprintln(f.writer, "")
+	_, _ = white.Fprintf(f.writer, "  Total: $%.4f | %d tokens\n", totalCost, totalTokens)
+}

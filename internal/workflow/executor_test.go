@@ -313,10 +313,10 @@ func TestRunner_Run_Callback(t *testing.T) {
 
 	exec := newMockExecutor()
 
-	var callbackCalls []string
+	var callbackInfos []StepInfo
 	runner := NewRunner(w, exec)
-	runner.SetCallback(func(stepName string, result *ExecutionResult, gateResult GateResult) error {
-		callbackCalls = append(callbackCalls, stepName)
+	runner.SetCallback(func(info StepInfo, result *ExecutionResult, gateResult GateResult) error {
+		callbackInfos = append(callbackInfos, info)
 		return nil
 	})
 
@@ -325,8 +325,26 @@ func TestRunner_Run_Callback(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if len(callbackCalls) != 2 {
-		t.Errorf("callback calls = %v, want 2 calls", callbackCalls)
+	if len(callbackInfos) != 2 {
+		t.Errorf("callback calls = %d, want 2", len(callbackInfos))
+	}
+
+	// Verify step info is correct
+	if callbackInfos[0].Name != "step1" {
+		t.Errorf("callbackInfos[0].Name = %q, want %q", callbackInfos[0].Name, "step1")
+	}
+	if callbackInfos[0].Position != 1 {
+		t.Errorf("callbackInfos[0].Position = %d, want 1", callbackInfos[0].Position)
+	}
+	if callbackInfos[0].Total != 2 {
+		t.Errorf("callbackInfos[0].Total = %d, want 2", callbackInfos[0].Total)
+	}
+
+	if callbackInfos[1].Name != "step2" {
+		t.Errorf("callbackInfos[1].Name = %q, want %q", callbackInfos[1].Name, "step2")
+	}
+	if callbackInfos[1].Position != 2 {
+		t.Errorf("callbackInfos[1].Position = %d, want 2", callbackInfos[1].Position)
 	}
 }
 
@@ -340,7 +358,7 @@ func TestRunner_Run_CallbackError(t *testing.T) {
 	exec := newMockExecutor()
 
 	runner := NewRunner(w, exec)
-	runner.SetCallback(func(stepName string, result *ExecutionResult, gateResult GateResult) error {
+	runner.SetCallback(func(info StepInfo, result *ExecutionResult, gateResult GateResult) error {
 		return errors.New("callback error")
 	})
 
@@ -351,5 +369,101 @@ func TestRunner_Run_CallbackError(t *testing.T) {
 
 	if err.Error() != "callback error" {
 		t.Errorf("Run() error = %q, want \"callback error\"", err.Error())
+	}
+}
+
+func TestRunner_Run_StartCallback(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "step1", Prompt: "First"},
+			{Name: "step2", Prompt: "Second"},
+		},
+	}
+
+	exec := newMockExecutor()
+
+	var startInfos []StepInfo
+	runner := NewRunner(w, exec)
+	runner.SetStartCallback(func(info StepInfo) {
+		startInfos = append(startInfos, info)
+	})
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if len(startInfos) != 2 {
+		t.Errorf("start callback calls = %d, want 2", len(startInfos))
+	}
+
+	// Verify step info is correct
+	if startInfos[0].Name != "step1" {
+		t.Errorf("startInfos[0].Name = %q, want %q", startInfos[0].Name, "step1")
+	}
+	if startInfos[0].Position != 1 {
+		t.Errorf("startInfos[0].Position = %d, want 1", startInfos[0].Position)
+	}
+
+	if startInfos[1].Name != "step2" {
+		t.Errorf("startInfos[1].Name = %q, want %q", startInfos[1].Name, "step2")
+	}
+	if startInfos[1].Position != 2 {
+		t.Errorf("startInfos[1].Position = %d, want 2", startInfos[1].Position)
+	}
+}
+
+func TestRunner_Run_CallbackGateRetries(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Do it"},
+			{Name: "review", Prompt: "Review", Gate: true, OnFail: "implement"},
+		},
+		MaxGateRetries: 3,
+	}
+
+	exec := newMockExecutor()
+
+	// Track call count to vary responses
+	callCount := 0
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		callCount++
+		if stepName == "review" {
+			if callCount <= 4 {
+				// First two reviews fail
+				return &ExecutionResult{StepName: "review", Output: "<gate>FAIL</gate>", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+			}
+			// Third review passes
+			return &ExecutionResult{StepName: "review", Output: "<gate>PASS</gate>", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+		}
+		return &ExecutionResult{StepName: stepName, Output: "Done!", CostUSD: 0.02, TokensIn: 120, TokensOut: 80}, nil
+	}
+
+	var reviewRetries []int
+	runner := NewRunner(w, exec)
+	runner.SetCallback(func(info StepInfo, result *ExecutionResult, gateResult GateResult) error {
+		if info.Name == "review" {
+			reviewRetries = append(reviewRetries, info.GateRetries)
+		}
+		return nil
+	})
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Should see review called 3 times: retries 0, 1, 2
+	if len(reviewRetries) != 3 {
+		t.Fatalf("review callback calls = %d, want 3", len(reviewRetries))
+	}
+	if reviewRetries[0] != 0 {
+		t.Errorf("reviewRetries[0] = %d, want 0", reviewRetries[0])
+	}
+	if reviewRetries[1] != 1 {
+		t.Errorf("reviewRetries[1] = %d, want 1", reviewRetries[1])
+	}
+	if reviewRetries[2] != 2 {
+		t.Errorf("reviewRetries[2] = %d, want 2", reviewRetries[2])
 	}
 }
