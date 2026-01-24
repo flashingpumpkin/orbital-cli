@@ -38,3 +38,22 @@ The test fails because the `--worktree` flag has not been implemented yet. This 
 ```
 
 All tests pass. The flag is now registered but not yet wired to any functionality. The next story item will add the setup phase logic.
+
+### Iteration 3: Refactor worktree tests
+
+**Refactoring performed**:
+- Consolidated three separate test functions into a single `TestWorktreeFlag` function
+- Flag lookup now happens once at the top, eliminating repetition
+- Used subtests (`t.Run`) for the individual property checks
+- Changed first check from `t.Error` to `t.Fatal` since subsequent subtests depend on the flag existing
+
+**Before**: 3 separate functions with repeated `rootCmd.PersistentFlags().Lookup("worktree")` calls
+**After**: 1 function with subtests, single flag lookup
+
+**Test result**: PASS
+```
+=== RUN   TestWorktreeFlag
+=== RUN   TestWorktreeFlag/is_bool_type
+=== RUN   TestWorktreeFlag/defaults_to_false
+--- PASS: TestWorktreeFlag (0.00s)
+```
