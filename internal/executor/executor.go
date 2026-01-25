@@ -159,6 +159,9 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 			return nil, fmt.Errorf("failed to start command: %w", err)
 		}
 
+		// Parse output during streaming to avoid double-parsing at the end
+		parser := output.NewParser()
+
 		// Read and stream output line by line
 		scanner := bufio.NewScanner(stdoutPipe)
 		// Increase buffer size for long lines
@@ -169,6 +172,8 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 			line := scanner.Text()
 			stdout.WriteString(line)
 			stdout.WriteString("\n")
+			// Parse line for stats during streaming
+			_, _ = parser.ParseLine([]byte(line))
 			// Write to stream writer
 			_, _ = fmt.Fprintln(e.streamWriter, line)
 		}
@@ -176,15 +181,17 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 		runErr := cmd.Wait()
 		duration := time.Since(startTime)
 
+		// Get stats from streaming parser (already parsed, no double-parsing)
+		stats := parser.GetStats()
+
 		// Handle context cancellation
 		if ctx.Err() != nil {
-			tokensIn, tokensOut, cost := extractStats(stdout.String())
 			return &ExecutionResult{
 				Output:    stdout.String(),
 				Duration:  duration,
-				TokensIn:  tokensIn,
-				TokensOut: tokensOut,
-				CostUSD:   cost,
+				TokensIn:  stats.TokensIn,
+				TokensOut: stats.TokensOut,
+				CostUSD:   stats.CostUSD,
 				Completed: false,
 				Error:     ctx.Err(),
 			}, ctx.Err()
@@ -196,42 +203,42 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 			if exitErr, ok := runErr.(*exec.ExitError); ok {
 				exitCode = exitErr.ExitCode()
 			}
-			tokensIn, tokensOut, cost := extractStats(stdout.String())
 			return &ExecutionResult{
 				Output:    stdout.String(),
 				ExitCode:  exitCode,
 				Duration:  duration,
-				TokensIn:  tokensIn,
-				TokensOut: tokensOut,
-				CostUSD:   cost,
+				TokensIn:  stats.TokensIn,
+				TokensOut: stats.TokensOut,
+				CostUSD:   stats.CostUSD,
 				Completed: false,
 				Error:     runErr,
 			}, nil
 		}
 
-		tokensIn, tokensOut, cost := extractStats(stdout.String())
 		return &ExecutionResult{
 			Output:    stdout.String(),
 			ExitCode:  0,
 			Duration:  duration,
-			TokensIn:  tokensIn,
-			TokensOut: tokensOut,
-			CostUSD:   cost,
+			TokensIn:  stats.TokensIn,
+			TokensOut: stats.TokensOut,
+			CostUSD:   stats.CostUSD,
 			Completed: true,
 			Error:     nil,
 		}, nil
 	}
 
-	// Non-streaming path (original behavior)
+	// Non-streaming path: parse once at the end
 	cmd.Stdout = &stdout
 
 	startTime := time.Now()
 	runErr := cmd.Run()
 	duration := time.Since(startTime)
 
+	// Parse output once for stats
+	tokensIn, tokensOut, cost := extractStats(stdout.String())
+
 	// Handle context cancellation - check this first as it takes priority
 	if ctx.Err() != nil {
-		tokensIn, tokensOut, cost := extractStats(stdout.String())
 		return &ExecutionResult{
 			Output:    stdout.String(),
 			Duration:  duration,
@@ -249,7 +256,6 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 		if exitErr, ok := runErr.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		}
-		tokensIn, tokensOut, cost := extractStats(stdout.String())
 		return &ExecutionResult{
 			Output:    stdout.String(),
 			ExitCode:  exitCode,
@@ -262,7 +268,6 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 		}, nil
 	}
 
-	tokensIn, tokensOut, cost := extractStats(stdout.String())
 	return &ExecutionResult{
 		Output:    stdout.String(),
 		ExitCode:  0,

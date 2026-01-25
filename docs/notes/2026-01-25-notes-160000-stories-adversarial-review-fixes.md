@@ -289,6 +289,30 @@ Summary of issues:
 
 The cache implementation is functionally correct for normal operation. The design issues (duplication, struct size) and the performance issue (O(n) rebuilds after buffer full) are technical debt that should be addressed but do not prevent the feature from working correctly for typical use cases.
 
+### PERF-4: Eliminate double parsing in executor
+
+**Completed**
+
+Implementation details:
+1. Modified streaming path in `executor.Execute()` to create a parser at the start of streaming
+2. Each line is now parsed as it's read during streaming (line 171: `parser.ParseLine()`)
+3. Stats are retrieved from the streaming parser after the scan loop completes (line 180: `parser.GetStats()`)
+4. All three exit points in the streaming path (context cancellation, run error, success) now use the pre-computed stats
+5. Non-streaming path remains unchanged (parses once at the end via `extractStats()`)
+6. Added two new tests:
+   - `TestExecute_StreamingParsesStatsOnce`: Verifies streaming path extracts stats correctly
+   - `TestExecute_NonStreamingParsesStatsOnce`: Verifies non-streaming path extracts stats correctly
+
+The streaming path now parses output exactly once during streaming, rather than:
+- Once implicitly (stats discarded) during streaming
+- Then again via `extractStats()` at each exit point
+
+This eliminates redundant JSON parsing for streaming executions. For a 10MB output with thousands of JSON lines, this is a significant CPU saving.
+
+Note: `extractStats()` is retained for the non-streaming path and legacy compatibility, but could be deprecated in future if non-streaming mode is removed.
+
+Verification: `make check` passes (lint + tests).
+
 ## Code Review Feedback Addressed - Iteration 4
 
 ### HIGH: Code duplication in cache update logic
@@ -320,3 +344,85 @@ Implementation details:
 This change improves performance from O(n²) to O(n) when parsing assistant messages with many text blocks. Each string concatenation with `+=` creates a new allocation and copies all previous content. Using `strings.Builder` avoids this by maintaining an internal buffer that grows efficiently.
 
 Verification: `make check` passes (lint + tests).
+
+## Code Review - Iteration 5 (PERF-3 and Cache Deduplication)
+
+### Security
+No issues. Both files follow secure coding practices:
+- Standard library JSON parsing with safe error handling
+- Bounds checking on array/slice indices
+- No shell command execution with user input
+- File operations are bounded by size limits and come from user-controlled configuration
+
+### Design
+**ISSUES FOUND**
+
+1. **God Object (HIGH)**: `model.go` is 1400+ lines handling 7+ distinct responsibilities: layout management, output buffering/caching, task list state, progress/metrics, session info, tab management (including file I/O), and scroll state. Testing individual features requires mocking the entire Model.
+
+2. **Feature Envy (MEDIUM)**: Bridge reaches into Parser's stats multiple times (`GetStats()` called twice per result event). Bridge duplicates knowledge about which event types carry stats.
+
+3. **Code Duplication (MEDIUM)**: ANSI escape sequence detection duplicated verbatim in `findBreakPoint` (lines 1290-1302) and `truncateToWidth` (lines 1329-1338). Hand-rolled parser may disagree with `ansi.StringWidth()`.
+
+4. **Scattered Utilities (MEDIUM)**: Number formatting functions split between `model.go` (formatFraction, formatNumber, formatCurrency, intToString, padLeft) and `bridge.go` (formatInt, formatFloat).
+
+5. **Open/Closed Violation (MEDIUM)**: Adding new event types requires modifying both Parser and Bridge switch statements.
+
+6. **Missing Abstraction (LOW)**: File loading (`os.Stat`, `os.ReadFile`) embedded directly in TUI model, making it untestable without filesystem.
+
+7. **Leaky Abstraction (LOW)**: Parser exposes internal token accounting strategy; callers must understand when stats are meaningful.
+
+### Logic
+**ISSUES FOUND**
+
+1. **Division by Zero (MEDIUM)**: `formatIteration` (line 1025) and `formatCost` (line 1067) divide by `max` and `budget` without checking for zero. Produces `+Inf` or `NaN` if uninitialised.
+
+2. **Negative Currency Bug (MEDIUM)**: `formatCurrency` (lines 1183-1190) produces malformed output like `"$0.-49"` for negative amounts due to negative modulo.
+
+3. **Integer Overflow (LOW)**: `intToString` (lines 1192-1211) causes infinite recursion on `math.MinInt` due to `-n` overflow.
+
+4. **UTF-8 Truncation (MEDIUM)**: Task content truncation (lines 985-988) and path truncation (lines 1118-1139) use byte length `len()` instead of rune length, potentially cutting multi-byte characters mid-sequence.
+
+5. **Incomplete ANSI Parsing (LOW)**: Manual ANSI escape detection (lines 1289-1337) doesn't handle OSC sequences or complex CSI parameters. May disagree with `ansi.StringWidth()`.
+
+6. **Potential Token Double-Counting (LOW)**: If assistant message arrives after result event for same iteration, tokens may be double-counted (parser.go lines 186-287).
+
+### Error Handling
+**ISSUES FOUND**
+
+1. **Silently Swallowed JSON Errors (HIGH)**: `parser.go` lines 106-108, 113-114 return `nil, nil` for malformed JSON. If Claude CLI changes format, parser silently ignores output. Completion markers, token counts, and cost tracking become unreliable with no indication.
+
+2. **Multiple Silent Failures (MEDIUM)**: Helper functions (`parseAssistantMessage`, `parseResultStats`, etc.) silently return on unmarshal failure. Budget tracking becomes unreliable.
+
+3. **Lost Error Context (MEDIUM)**: `model.go` lines 280-284 convert file load errors to display strings, losing programmatic error handling capability.
+
+4. **Division by Zero (LOW)**: Same as logic issues above; float division produces `+Inf`/`NaN` rather than error.
+
+### Data Integrity
+**ISSUES FOUND**
+
+1. **Division by Zero (MEDIUM)**: `formatCost` and `formatIteration` produce `+Inf`/`NaN` with zero divisors.
+
+2. **Negative Currency Corruption (MEDIUM)**: Negative amounts produce malformed strings like `"$-1.-24"`.
+
+3. **Integer Overflow (LOW)**: `intToString` infinite recursion on `math.MinInt`.
+
+4. **Potential Race Condition (LOW)**: `Model` has both direct setter methods (`AppendOutput`, etc.) and message-based updates. If setters called from different goroutine while bubbletea runs, data race possible.
+
+5. **Floating Point Precision Loss (LOW)**: `parser.go` line 254 accumulates `CostUSD` via repeated float addition, losing precision over many iterations.
+
+6. **Silent Data Loss (MEDIUM)**: Malformed JSON silently ignored; no logging, no metrics, no error propagation.
+
+### Verdict
+**FAIL**
+
+Summary by severity:
+- **HIGH**: 2 (God object in model.go, silently swallowed JSON errors in parser.go)
+- **MEDIUM**: 10 (division by zero x2, negative currency, UTF-8 truncation x2, feature envy, code duplication, scattered utilities, open/closed violation, silent failures, lost error context, silent data loss)
+- **LOW**: 8 (integer overflow, incomplete ANSI parsing, token double-counting, missing abstraction, leaky abstraction, race condition, floating point precision)
+
+The most critical issues requiring immediate attention:
+1. JSON parse errors should be logged or returned, not silently swallowed
+2. Division by zero guards needed in `formatCost` and `formatIteration`
+3. Negative currency handling needs proper sign management
+
+Note: Most issues are edge cases or design debt rather than bugs affecting normal operation. The core functionality (parser text extraction, TUI display) works correctly for typical inputs.

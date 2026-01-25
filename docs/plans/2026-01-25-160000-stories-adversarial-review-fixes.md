@@ -296,7 +296,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ---
 
-### [ ] **Ticket: PERF-4 - Eliminate double parsing in executor**
+### [x] **Ticket: PERF-4 - Eliminate double parsing in executor**
 
 **As a** user running iterations
 **I want** output to be parsed only once
@@ -313,19 +313,19 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Ensure non-streaming path also avoids double parsing
 
 **Acceptance Criteria**:
-- [ ] Given streaming execution, when result created, then stats come from streaming parser
-- [ ] Given non-streaming execution, when result created, then output parsed exactly once
-- [ ] Given 10MB output, when executed, then no redundant parsing occurs
-- [ ] Token and cost values in result are identical to previous implementation
-- [ ] All existing executor tests pass
+- [x] Given streaming execution, when result created, then stats come from streaming parser
+- [x] Given non-streaming execution, when result created, then output parsed exactly once
+- [x] Given 10MB output, when executed, then no redundant parsing occurs
+- [x] Token and cost values in result are identical to previous implementation
+- [x] All existing executor tests pass
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Parser stats passed through execution path
-- [ ] `extractStats()` removed or marked deprecated
-- [ ] Streaming and non-streaming paths both optimised
-- [ ] Unit tests verify single parse
-- [ ] Benchmark comparing old vs new
+- [x] Feature complete in one atomic commit
+- [x] Parser stats passed through execution path
+- [x] `extractStats()` removed or marked deprecated
+- [x] Streaming and non-streaming paths both optimised
+- [x] Unit tests verify single parse
+- [x] Benchmark comparing old vs new
 
 **Dependencies**:
 - None
@@ -487,7 +487,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 **Should Have (Sprint 2):**
 - [x] PERF-2: Cache wrapped lines in TUI (UI responsiveness)
 - [x] PERF-3: Use strings.Builder for parser concatenation (easy win)
-- [ ] PERF-4: Eliminate double parsing in executor (CPU efficiency)
+- [x] PERF-4: Eliminate double parsing in executor (CPU efficiency)
 - [ ] PERF-6: Increase scanner buffer limit (prevents data loss)
 
 **Could Have (Sprint 3):**

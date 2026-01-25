@@ -2,7 +2,9 @@ package executor
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -445,5 +447,99 @@ func TestExecute_WorkingDirDefault(t *testing.T) {
 				t.Error("Execute() should complete when WorkingDir is default")
 			}
 		})
+	}
+}
+
+func TestExecute_StreamingParsesStatsOnce(t *testing.T) {
+	// This test verifies that the streaming path parses stats during streaming
+	// rather than double-parsing at the end.
+	// We create a test script that outputs stream-json with stats.
+
+	// Create a temporary script that outputs our test JSON
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+	scriptContent := `#!/bin/sh
+echo '{"type":"result","total_cost_usd":0.05,"duration_ms":1000,"usage":{"input_tokens":100,"output_tokens":50}}'
+`
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Model:     "test-model",
+		MaxBudget: 1.00,
+	}
+	e := New(cfg)
+
+	// Create a stream writer to enable the streaming path
+	var streamOutput strings.Builder
+	e.SetStreamWriter(&streamOutput)
+
+	// Use our test script
+	e.claudeCmd = scriptPath
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	if err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute() returned nil result")
+	}
+
+	// Verify stats were extracted from streaming
+	if result.CostUSD != 0.05 {
+		t.Errorf("CostUSD = %f, want 0.05 (stats should be parsed during streaming)", result.CostUSD)
+	}
+	if result.TokensIn != 100 {
+		t.Errorf("TokensIn = %d, want 100", result.TokensIn)
+	}
+	if result.TokensOut != 50 {
+		t.Errorf("TokensOut = %d, want 50", result.TokensOut)
+	}
+}
+
+func TestExecute_NonStreamingParsesStatsOnce(t *testing.T) {
+	// This test verifies that the non-streaming path parses stats only once.
+
+	// Create a temporary script that outputs our test JSON
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+	scriptContent := `#!/bin/sh
+echo '{"type":"result","total_cost_usd":0.03,"duration_ms":500,"usage":{"input_tokens":200,"output_tokens":75}}'
+`
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Model:     "test-model",
+		MaxBudget: 1.00,
+	}
+	e := New(cfg)
+
+	// No stream writer = non-streaming path
+	e.claudeCmd = scriptPath
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	if err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute() returned nil result")
+	}
+
+	// Verify stats were extracted
+	if result.CostUSD != 0.03 {
+		t.Errorf("CostUSD = %f, want 0.03", result.CostUSD)
+	}
+	if result.TokensIn != 200 {
+		t.Errorf("TokensIn = %d, want 200", result.TokensIn)
+	}
+	if result.TokensOut != 75 {
+		t.Errorf("TokensOut = %d, want 75", result.TokensOut)
 	}
 }
