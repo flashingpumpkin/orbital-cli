@@ -36,3 +36,25 @@
 ### Observations
 - The `renderScrollArea()` function was updated in this ticket to respect scroll state, even though this is technically Ticket 5. This was necessary because scroll-up would have no visible effect otherwise.
 - Ticket 5 can now focus on edge cases and clamping logic rather than the initial implementation.
+
+### Next Steps
+- Ticket 4: Add page up/down scrolling for output window
+
+## 2026-01-25 - Iteration 3
+
+### Completed
+- Ticket 3: Implement scroll-down with auto-tail re-lock
+  - Updated `scrollDown()` to handle output tab (activeTab == 0)
+  - When tailing, scroll-down does nothing (already at bottom)
+  - When not tailing, scroll-down increments `outputScroll` by 1
+  - When reaching max offset, re-locks to tail mode (`outputTailing = true`)
+  - File tab scrolling continues to work as before
+  - Added unit tests: `TestScrollDownOutputTab` (5 subtests)
+  - All tests pass, build succeeds
+
+### Observations
+- The re-lock logic uses `>=` comparison to ensure we lock when at or past max offset
+- Test for "new output auto-tails when in tail mode" required a larger terminal height (40 instead of 20) to ensure the scroll area had room to display the new line
+
+### Next Steps
+- Ticket 4: Add page up/down scrolling for output window

@@ -459,9 +459,38 @@ func (m Model) scrollUp() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// scrollDown scrolls the current file tab down.
+// scrollDown scrolls the current tab down.
 func (m Model) scrollDown() (tea.Model, tea.Cmd) {
-	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+	// Handle output tab (tab 0)
+	if m.activeTab == 0 {
+		// If already tailing, nothing to do (already at bottom)
+		if m.outputTailing {
+			return m, nil
+		}
+
+		wrappedLines := m.wrapAllOutputLines()
+		height := m.layout.ScrollAreaHeight
+
+		// Calculate max scroll offset
+		maxOffset := len(wrappedLines) - height
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+
+		// Increment scroll offset
+		m.outputScroll++
+
+		// If we've reached or exceeded max offset, re-lock to tail mode
+		if m.outputScroll >= maxOffset {
+			m.outputScroll = maxOffset
+			m.outputTailing = true
+		}
+
+		return m, nil
+	}
+
+	// Handle file tabs
+	if len(m.tabs) <= m.activeTab {
 		return m, nil
 	}
 

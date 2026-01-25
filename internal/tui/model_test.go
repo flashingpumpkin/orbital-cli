@@ -592,6 +592,184 @@ func TestScrollUpOutputTab(t *testing.T) {
 	})
 }
 
+func TestScrollDownOutputTab(t *testing.T) {
+	t.Run("tailing does nothing", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 30; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Verify initial state: tailing is true
+		if !model.outputTailing {
+			t.Error("expected outputTailing to be true initially")
+		}
+
+		// Press down arrow
+		keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should still be tailing
+		if !model.outputTailing {
+			t.Error("expected outputTailing to remain true when already at bottom")
+		}
+
+		// Scroll should remain at 0
+		if model.outputScroll != 0 {
+			t.Errorf("expected outputScroll to remain 0, got %d", model.outputScroll)
+		}
+	})
+
+	t.Run("not tailing increments scroll offset", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 30; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Scroll up to unlock tailing
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Scroll up a few more times to get some distance from bottom
+		for i := 0; i < 5; i++ {
+			updatedModel, _ = model.Update(keyMsg)
+			model = updatedModel.(Model)
+		}
+
+		previousScroll := model.outputScroll
+
+		// Now scroll down
+		keyMsg = tea.KeyMsg{Type: tea.KeyDown}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		if model.outputScroll != previousScroll+1 {
+			t.Errorf("expected outputScroll to be %d, got %d", previousScroll+1, model.outputScroll)
+		}
+
+		// Should not be tailing yet (not at bottom)
+		if model.outputTailing {
+			t.Error("expected outputTailing to be false when not at bottom")
+		}
+	})
+
+	t.Run("reaching bottom re-locks to tail mode", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 30; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Scroll up to unlock tailing
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should be one line up from bottom
+		if model.outputTailing {
+			t.Error("expected outputTailing to be false after scroll up")
+		}
+
+		// Now scroll down to return to bottom
+		keyMsg = tea.KeyMsg{Type: tea.KeyDown}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should re-lock to tail mode
+		if !model.outputTailing {
+			t.Error("expected outputTailing to be true after scrolling to bottom")
+		}
+	})
+
+	t.Run("new output auto-tails when in tail mode", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions (larger height to ensure scroll area has room)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 40}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 30; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Verify we're tailing
+		if !model.outputTailing {
+			t.Error("expected outputTailing to be true initially")
+		}
+
+		// Add more output with unique identifier
+		model.AppendOutput("UNIQUE_NEW_OUTPUT_LINE")
+
+		// Render the view to verify it shows the new content
+		view := model.View()
+
+		// The new line should be visible (it's at the bottom, and we're tailing)
+		if !strings.Contains(view, "UNIQUE_NEW_OUTPUT_LINE") {
+			t.Errorf("expected new output to be visible when tailing, view: %s", view)
+		}
+	})
+
+	t.Run("file tab scrolling still works", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Set up session with a spec file to create file tabs
+		model.SetSession(SessionInfo{
+			SpecFiles: []string{"/path/to/spec.md"},
+		})
+		model.tabs = model.buildTabs()
+
+		// Switch to file tab (tab 1)
+		model.activeTab = 1
+
+		// Set file content and initial scroll
+		model.fileContents["/path/to/spec.md"] = strings.Repeat("Line\n", 50)
+		model.fileScroll["/path/to/spec.md"] = 5
+
+		// Press down arrow
+		keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Verify file scroll incremented
+		if model.fileScroll["/path/to/spec.md"] != 6 {
+			t.Errorf("expected file scroll to be 6, got %d", model.fileScroll["/path/to/spec.md"])
+		}
+
+		// Verify output scroll unchanged
+		if model.outputScroll != 0 {
+			t.Errorf("expected output scroll to remain 0, got %d", model.outputScroll)
+		}
+	})
+}
+
 func TestWrapAllOutputLines(t *testing.T) {
 	m := NewModel()
 

@@ -129,17 +129,17 @@ Initialize both fields in `NewModel()` to default to auto-tail behaviour (curren
 - Use `wrapAllOutputLines()` helper from Ticket 2
 
 **Acceptance Criteria**:
-- [ ] Given the output tab is active and tailing, when pressing `↓`, then nothing happens
-- [ ] Given the output tab is active and not tailing, when pressing `↓`, then `outputScroll` increments by 1
-- [ ] Given the output tab is active and scrolled near bottom, when pressing `↓` to reach bottom, then `outputTailing` becomes `true`
-- [ ] Given the output tab is active and at bottom, when new output arrives, then the window auto-scrolls (tailing)
-- [ ] Given a file tab is active, when pressing `↓`, then file tab scrolling works as before
+- [x] Given the output tab is active and tailing, when pressing `↓`, then nothing happens
+- [x] Given the output tab is active and not tailing, when pressing `↓`, then `outputScroll` increments by 1
+- [x] Given the output tab is active and scrolled near bottom, when pressing `↓` to reach bottom, then `outputTailing` becomes `true`
+- [x] Given the output tab is active and at bottom, when new output arrives, then the window auto-scrolls (tailing)
+- [x] Given a file tab is active, when pressing `↓`, then file tab scrolling works as before
 
 **Definition of Done** (Single Commit):
-- [ ] `scrollDown()` updated to handle output tab
-- [ ] Unit tests added for scroll-down and re-lock behaviour
-- [ ] All existing tests pass
-- [ ] Manual verification: pressing `↓` to bottom resumes auto-tailing
+- [x] `scrollDown()` updated to handle output tab
+- [x] Unit tests added for scroll-down and re-lock behaviour
+- [x] All existing tests pass
+- [x] Manual verification: pressing `↓` to bottom resumes auto-tailing
 
 **Dependencies**:
 - Ticket 1 (scroll state must exist)
