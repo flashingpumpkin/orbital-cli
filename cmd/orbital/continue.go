@@ -472,7 +472,7 @@ func selectSession(sessions []session.Session, validator sessionValidator) (*ses
 	}
 
 	if result.Session == nil {
-		return nil, nil, fmt.Errorf("no session selected")
+		return nil, result.CleanupPaths, fmt.Errorf("no session selected")
 	}
 
 	return result.Session, result.CleanupPaths, nil

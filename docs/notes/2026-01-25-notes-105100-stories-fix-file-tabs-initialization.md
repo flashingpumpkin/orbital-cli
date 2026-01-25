@@ -96,6 +96,33 @@ The primary functional change (processing cleanup even on cancellation) is corre
 
 These issues are minor individually but collectively reduce operational reliability. The code functions correctly for the happy path but has rough edges in error scenarios.
 
+### Iteration 6 - Addressing Critical Review Feedback
+
+**Issue Fixed:**
+
+1. **Inconsistent `CleanupPaths` return contract** (Critical) - Fixed at `cmd/orbital/continue.go:475`. When `result.Session == nil` (but not cancelled), the function now returns `result.CleanupPaths` instead of `nil`, ensuring consistent behaviour regardless of the error path.
+
+**Change Made:**
+```go
+// Before
+if result.Session == nil {
+    return nil, nil, fmt.Errorf("no session selected")
+}
+
+// After
+if result.Session == nil {
+    return nil, result.CleanupPaths, fmt.Errorf("no session selected")
+}
+```
+
+**Rationale for Other Issues:**
+The remaining issues from the review (SRP violation, function length, sentinel errors, empty path validation) are valid observations but are out of scope for this fix. They represent technical debt that can be addressed in a separate refactoring effort. The critical functional inconsistency has been resolved.
+
+**Verification:**
+- Lint: Passed
+- Tests: All passed
+- Build: Passed
+
 ### Iteration 4 - Review Feedback Addressed
 
 **Issues Fixed:**
@@ -120,3 +147,53 @@ These issues are minor individually but collectively reduce operational reliabil
 - Lint: Passed
 - Tests: All passed
 - Build: Passed
+
+### Code Review (Iteration 5) - Improved Cleanup Error Handling
+
+**Reviewer:** Multi-agent review (security, design, logic, error handling, data integrity)
+
+**Files Changed:**
+- `cmd/orbital/continue.go`
+
+**Changes Summary:**
+Improved cleanup error handling and consistency. Added path inclusion in error messages, success logging for removed sessions, cleanup summary reporting, and error context wrapping with cleanup statistics.
+
+### Security
+No issues. The `StateManager.Remove()` only filters entries in the JSON state file; it does not perform filesystem operations on the path parameter. Paths originate from the user's own state file. No injection or traversal vectors.
+
+### Design
+Issues found:
+1. **SRP violation** - Cleanup logic is embedded inline in `runContinue` rather than extracted to a dedicated function. The function now has two responsibilities: session resumption and stale session cleanup.
+2. **Inconsistent return contract** - `selectSession` returns cleanup paths on cancellation but `nil` on other errors (line 475). This creates an asymmetric API.
+3. **Mixed concerns** - Error messages conflate selection failure reason with cleanup statistics. These are orthogonal pieces of information.
+4. **Function length** - `runContinue` is 361 lines with growing inline logic.
+
+### Logic
+Issues found:
+1. **Lost CleanupPaths when Session is nil** (line 475) - When `selectSession` returns because `result.Session == nil` (not cancellation), cleanup paths are returned as `nil` rather than `result.CleanupPaths`. While the current TUI always sets `Cancelled = true` in this scenario, this creates an inconsistency with the cancellation case.
+
+### Error Handling
+Issues found:
+1. **Unclear error message** (line 100) - Error includes counts but not which paths failed, making debugging difficult when stderr is separated.
+2. **Inconsistent output channels** - Success messages ("Removed stale session") go to stderr, which is unconventional. Warning about this persists from previous review.
+3. **Silent failure semantics** - User cancellation after successful cleanup returns an error, which may confuse CI pipelines where useful work (cleanup) was performed.
+4. **Error not wrapped as sentinel** (line 471) - `fmt.Errorf("selection cancelled")` prevents programmatic handling with `errors.Is()`.
+5. **Missing context in cleanup errors** (line 84) - No distinction between permission errors, file not found, lock contention, etc.
+
+### Data Integrity
+Issues found:
+1. **Empty path not validated** - While the TUI validates paths before adding to `CleanupPaths`, the consumer code does not validate before calling `Remove()`. Future code paths could introduce empty strings.
+2. **Counter accuracy not guaranteed** - No invariant check that `cleanupSucceeded + cleanupFailed == len(cleanupPaths)`. Future code adding early `continue` statements could break this.
+3. **Partial cleanup state** - Non-atomic batch operation; partial failure leaves inconsistent state (acknowledged as acceptable in previous iteration).
+
+### Verdict
+**FAIL**
+
+The changes improve observability (success logging, summary, error context) but introduce design issues:
+
+1. **Critical:** Inconsistent `CleanupPaths` return contract in `selectSession` (nil on error vs populated on cancellation)
+2. **Medium:** SRP violation with growing inline cleanup logic
+3. **Low:** Missing input validation for empty paths
+4. **Low:** Error message could be more debuggable
+
+The inconsistent return contract is the most concerning issue as it creates a maintenance trap where future changes to the TUI could silently drop cleanup paths.
