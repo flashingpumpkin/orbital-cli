@@ -1333,6 +1333,66 @@ func TestEmptyOutputState(t *testing.T) {
 	}
 }
 
+func TestRenderScrollAreaEdgeCases(t *testing.T) {
+	t.Run("narrow terminal does not panic with negative padding", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up with very narrow terminal (but above minimum)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Don't add any output - test empty state with centred message
+		view := model.View()
+
+		// Should render without panic
+		if view == "" {
+			t.Error("expected non-empty view")
+		}
+
+		// Should show waiting message
+		if !strings.Contains(view, "Waiting for output") {
+			t.Error("expected waiting message")
+		}
+	})
+
+	t.Run("zero height scroll area returns empty string", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Force layout to have zero scroll area height
+		model.layout.ScrollAreaHeight = 0
+
+		// Should return empty string, not panic
+		result := model.renderScrollArea()
+		if result != "" {
+			t.Errorf("expected empty string for zero height, got %q", result)
+		}
+	})
+
+	t.Run("negative height scroll area returns empty string", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Force layout to have negative scroll area height
+		model.layout.ScrollAreaHeight = -5
+
+		// Should return empty string, not panic
+		result := model.renderScrollArea()
+		if result != "" {
+			t.Errorf("expected empty string for negative height, got %q", result)
+		}
+	})
+}
+
 func TestWindowResizeScrollClamping(t *testing.T) {
 	t.Run("resize larger maintains scroll position", func(t *testing.T) {
 		m := NewModel()

@@ -947,6 +947,15 @@ func (m *Model) invalidateWrappedLinesCache() {
 func (m Model) renderScrollArea() string {
 	height := m.layout.ScrollAreaHeight
 	contentWidth := m.layout.ContentWidth()
+
+	// Guard against invalid dimensions
+	if height <= 0 {
+		return ""
+	}
+	if contentWidth < 0 {
+		contentWidth = 0
+	}
+
 	wrappedLines := m.wrapAllOutputLines()
 	border := m.styles.Border.Render(BoxVertical)
 	emptyLine := border + strings.Repeat(" ", contentWidth) + border
@@ -960,9 +969,16 @@ func (m Model) renderScrollArea() string {
 		}
 		// Centred waiting message
 		waitMsg := m.styles.Label.Render("Waiting for output...")
-		waitWidth := ansi.StringWidth("Waiting for output...")
+		waitWidth := ansi.StringWidth(waitMsg) // Measure the styled message, not raw text
 		leftPad := (contentWidth - waitWidth) / 2
 		rightPad := contentWidth - waitWidth - leftPad
+		// Guard against negative padding (terminal too narrow for message)
+		if leftPad < 0 {
+			leftPad = 0
+		}
+		if rightPad < 0 {
+			rightPad = 0
+		}
 		lines = append(lines, border+strings.Repeat(" ", leftPad)+waitMsg+strings.Repeat(" ", rightPad)+border)
 		for len(lines) < height {
 			lines = append(lines, emptyLine)
