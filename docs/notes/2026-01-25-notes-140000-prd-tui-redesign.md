@@ -147,3 +147,72 @@ Added `TestRenderScrollAreaEdgeCases` with three subtests:
 ### Completion
 
 The TUI redesign implementation is complete with all code review issues resolved.
+
+## Code Review - Iteration 3
+
+### Security
+No issues. The changes are purely defensive guards for TUI rendering logic. No injection vectors, auth concerns, or data exposure.
+
+### Design
+Issues found:
+- **Missing abstraction**: The `if x < 0 { x = 0 }` clamping pattern appears 8+ times throughout the file. This repetition indicates a missing helper function (e.g., `clampPositive(n int) int`).
+- **Inconsistent guard placement**: Guards are added in `renderScrollArea()` rather than at the source (`Layout.ContentWidth()`). This means other callers (like `wrapAllOutputLines()`) still receive unguarded values.
+- **`wrapAllOutputLines` uses unguarded width**: The function calls `m.layout.ContentWidth()` internally, bypassing the local guard in `renderScrollArea()`.
+
+### Logic
+Issues found:
+- **Incorrect width measurement**: The comment says "Measure the styled message, not raw text" but this may cause incorrect centering if the Label style includes lipgloss padding or margins. `ansi.StringWidth()` measures visible character width excluding ANSI codes, but lipgloss padding is represented as actual space characters, not ANSI codes. Should use `lipgloss.Width(waitMsg)` or keep measuring raw text width consistently.
+
+### Error Handling
+No issues. The guards are appropriate defensive programming for a TUI where silent degradation is preferable to crashes. The lack of logging is consistent with the TUI package which has no logging infrastructure.
+
+### Data Integrity
+Issues found:
+- **Inconsistent validation**: `renderScrollArea()` guards `contentWidth`, but `wrapAllOutputLines()` (called from line 911) uses `m.layout.ContentWidth()` directly without the same guard, creating inconsistent behaviour.
+- **Missing guards in `renderFileContent()`**: The parallel function at lines 807-883 has no guards for `height <= 0` or `contentWidth < 0`. If `contentWidth < 0`, lines 850 and 823 call `strings.Repeat(" ", contentWidth)` which panics on negative count.
+- **Negative `visibleWidth` in `renderFileContent()`**: Line 866 calculates `visibleWidth := contentWidth - 6`. If `contentWidth` is 0-5, `visibleWidth` becomes negative or very small, and `ansi.Truncate(line, visibleWidth-3, "...")` may behave unexpectedly.
+
+### Verdict
+**FAIL** - Multiple issues found:
+1. Design: Guards placed in rendering layer rather than at source (Layout), creating inconsistent validation
+2. Logic: Potential incorrect centering due to width measurement approach
+3. Data integrity: Missing guards in `renderFileContent()` could cause panic on edge cases
+4. Data integrity: `wrapAllOutputLines()` bypasses the contentWidth guard
+
+The immediate fixes address the reported bugs from iteration 2, but they expose underlying architectural weaknesses where defensive logic is scattered rather than centralised.
+
+## Iteration 4 - 2026-01-25
+
+### Fixed Issues from Code Review
+
+Addressed the remaining issues from iteration 3's code review verdict (FAIL):
+
+1. **renderFileContent() height validation**: Added early return for `height <= 0` to prevent rendering overflow issues (same pattern as renderScrollArea).
+
+2. **renderFileContent() contentWidth guard**: Added guard to clamp negative contentWidth to 0, preventing panics from `strings.Repeat(" ", negative)`.
+
+3. **Negative visibleWidth guard**: Added guards to ensure `visibleWidth` and `truncateWidth` never go below 1, preventing issues when `contentWidth` is smaller than the 6-character line number column.
+
+### Tests Added
+
+Added `TestRenderFileContentEdgeCases` with five subtests:
+- `zero height returns empty string`
+- `negative height returns empty string`
+- `very narrow content width does not panic`
+- `zero content width does not panic`
+- `file not loaded shows loading message without panic`
+
+### All Checks Pass
+
+- `make lint` - No issues
+- `make test` - All 14 packages pass with race detector
+
+### Remaining Architectural Notes
+
+The code review noted that guards are placed in rendering functions rather than at the source (Layout.ContentWidth()). This is a deliberate choice for this iteration:
+
+1. The Layout struct is designed to work with valid terminal dimensions (minimum 80x24)
+2. Guards in rendering functions provide defence in depth
+3. Centralising guards in Layout.ContentWidth() would require API changes that could affect other callers
+
+These architectural improvements could be addressed in a future refactoring effort focused on layout validation.

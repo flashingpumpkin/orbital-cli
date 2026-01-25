@@ -1393,6 +1393,110 @@ func TestRenderScrollAreaEdgeCases(t *testing.T) {
 	})
 }
 
+func TestRenderFileContentEdgeCases(t *testing.T) {
+	t.Run("zero height returns empty string", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Set up file content
+		model.fileContents["/test/file.txt"] = "Test content\nLine 2\nLine 3"
+
+		// Force layout to have zero scroll area height
+		model.layout.ScrollAreaHeight = 0
+
+		// Should return empty string, not panic
+		result := model.renderFileContent("/test/file.txt")
+		if result != "" {
+			t.Errorf("expected empty string for zero height, got %q", result)
+		}
+	})
+
+	t.Run("negative height returns empty string", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Set up file content
+		model.fileContents["/test/file.txt"] = "Test content\nLine 2\nLine 3"
+
+		// Force layout to have negative scroll area height
+		model.layout.ScrollAreaHeight = -5
+
+		// Should return empty string, not panic
+		result := model.renderFileContent("/test/file.txt")
+		if result != "" {
+			t.Errorf("expected empty string for negative height, got %q", result)
+		}
+	})
+
+	t.Run("very narrow content width does not panic", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Set up file content with long lines
+		model.fileContents["/test/file.txt"] = "This is a very long line that would normally need truncation"
+
+		// Force layout to have very narrow content width (below the 6 char line number column)
+		model.layout.Width = 8 // ContentWidth() will return 6
+
+		// Should render without panic
+		result := model.renderFileContent("/test/file.txt")
+		if result == "" {
+			t.Error("expected non-empty result")
+		}
+	})
+
+	t.Run("zero content width does not panic", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Set up file content
+		model.fileContents["/test/file.txt"] = "Test content"
+
+		// Force layout to have zero width (ContentWidth() returns -2 for width=0)
+		model.layout.Width = 0
+
+		// Should render without panic
+		result := model.renderFileContent("/test/file.txt")
+		// Result may be empty or minimal, but no panic
+		_ = result
+	})
+
+	t.Run("file not loaded shows loading message without panic", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Don't set file content - test loading state
+		// Force very narrow width
+		model.layout.Width = 10
+
+		// Should render loading message without panic
+		result := model.renderFileContent("/test/file.txt")
+		if !strings.Contains(result, "Loading") {
+			t.Error("expected loading message")
+		}
+	})
+}
+
 func TestWindowResizeScrollClamping(t *testing.T) {
 	t.Run("resize larger maintains scroll position", func(t *testing.T) {
 		m := NewModel()

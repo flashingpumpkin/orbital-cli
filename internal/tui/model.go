@@ -817,6 +817,15 @@ func (m Model) renderMainContent() string {
 func (m Model) renderFileContent(path string) string {
 	height := m.layout.ScrollAreaHeight
 	contentWidth := m.layout.ContentWidth()
+
+	// Guard against invalid dimensions
+	if height <= 0 {
+		return ""
+	}
+	if contentWidth < 0 {
+		contentWidth = 0
+	}
+
 	border := m.styles.Border.Render(BoxVertical)
 
 	content, ok := m.fileContents[path]
@@ -874,8 +883,15 @@ func (m Model) renderFileContent(path string) string {
 
 		// Truncate long lines (ANSI-aware)
 		visibleWidth := contentWidth - 6 // Account for line number column
+		if visibleWidth < 1 {
+			visibleWidth = 1 // Minimum visible width to avoid negative truncation
+		}
 		if ansi.StringWidth(line) > visibleWidth {
-			line = ansi.Truncate(line, visibleWidth-3, "...")
+			truncateWidth := visibleWidth - 3
+			if truncateWidth < 1 {
+				truncateWidth = 1
+			}
+			line = ansi.Truncate(line, truncateWidth, "...")
 		}
 
 		// Pad line to content width
