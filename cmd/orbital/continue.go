@@ -73,19 +73,33 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	}
 
 	// Select session based on flags or interactive TUI
-	selected, cleanupPaths, err := selectSession(sessions, collector)
-	if err != nil {
-		return err
-	}
+	selected, cleanupPaths, selectErr := selectSession(sessions, collector)
 
-	// Handle cleanup of stale sessions
+	// Handle cleanup of stale sessions (even if selection was cancelled)
+	var cleanupSucceeded, cleanupFailed int
 	if len(cleanupPaths) > 0 {
 		wtStateManager := worktree.NewStateManager(wd)
 		for _, path := range cleanupPaths {
 			if err := wtStateManager.Remove(path); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to remove stale entry: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Warning: failed to remove stale entry %s: %v\n", path, err)
+				cleanupFailed++
+			} else {
+				fmt.Fprintf(os.Stderr, "Removed stale session: %s\n", path)
+				cleanupSucceeded++
 			}
 		}
+		// Report cleanup summary
+		if cleanupFailed > 0 {
+			fmt.Fprintf(os.Stderr, "Cleanup summary: %d removed, %d failed\n", cleanupSucceeded, cleanupFailed)
+		}
+	}
+
+	if selectErr != nil {
+		// Include cleanup context in error when relevant
+		if cleanupSucceeded > 0 || cleanupFailed > 0 {
+			return fmt.Errorf("%w (cleanup: %d removed, %d failed)", selectErr, cleanupSucceeded, cleanupFailed)
+		}
+		return selectErr
 	}
 
 	// Extract session details for resumption
@@ -453,7 +467,8 @@ func selectSession(sessions []session.Session, validator sessionValidator) (*ses
 	}
 
 	if result.Cancelled {
-		return nil, nil, fmt.Errorf("selection cancelled")
+		// Return cleanup paths even when cancelled so they get processed
+		return nil, result.CleanupPaths, fmt.Errorf("selection cancelled")
 	}
 
 	if result.Session == nil {
