@@ -504,9 +504,13 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			loopState, err = controller.Run(ctx, prompt)
 		}
 
-		// Quit the TUI
-		tuiProgram.Quit()
-		<-tuiDone
+		// Quit the TUI - use Kill() for immediate exit on interrupt
+		if errors.Is(err, context.Canceled) {
+			tuiProgram.Kill()
+		} else {
+			tuiProgram.Quit()
+			<-tuiDone
+		}
 	} else {
 		// Check if workflow has gates (multi-step workflow)
 		if wf.HasGates() {
