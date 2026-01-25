@@ -56,6 +56,11 @@ type Config struct {
 
 	// Agents is a JSON string defining custom agents for Claude CLI --agents flag.
 	Agents string
+
+	// DangerouslySkipPermissions enables the --dangerously-skip-permissions flag
+	// for Claude CLI. When false (default), Claude will prompt for permission before
+	// executing potentially dangerous operations. Set to true only in trusted environments.
+	DangerouslySkipPermissions bool
 }
 
 // NewConfig returns a new Config with default values.

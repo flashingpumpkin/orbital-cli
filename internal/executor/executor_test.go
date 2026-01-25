@@ -36,12 +36,11 @@ func TestBuildArgs_BasicConfig(t *testing.T) {
 
 	args := e.BuildArgs("test prompt")
 
-	// Check required args are present
+	// Check required args are present - note: --dangerously-skip-permissions NOT included by default
 	expected := []string{
 		"-p",
 		"--output-format", "stream-json",
 		"--verbose",
-		"--dangerously-skip-permissions",
 		"--model", "claude-sonnet-4-20250514",
 		"--max-budget-usd", "5.00",
 		"test prompt",
@@ -68,11 +67,11 @@ func TestBuildArgs_WithSessionID(t *testing.T) {
 
 	args := e.BuildArgs("resume this")
 
+	// Note: --dangerously-skip-permissions NOT included by default
 	expected := []string{
 		"-p",
 		"--output-format", "stream-json",
 		"--verbose",
-		"--dangerously-skip-permissions",
 		"--model", "claude-opus-4-20250514",
 		"--max-budget-usd", "10.50",
 		"--resume", "session-123",
@@ -86,6 +85,51 @@ func TestBuildArgs_WithSessionID(t *testing.T) {
 	for i, arg := range expected {
 		if args[i] != arg {
 			t.Errorf("BuildArgs()[%d] = %q, want %q", i, args[i], arg)
+		}
+	}
+}
+
+func TestBuildArgs_WithDangerousMode(t *testing.T) {
+	cfg := &config.Config{
+		Model:                      "claude-sonnet-4-20250514",
+		MaxBudget:                  5.00,
+		SessionID:                  "",
+		DangerouslySkipPermissions: true,
+	}
+	e := New(cfg)
+
+	args := e.BuildArgs("test prompt")
+
+	// Check --dangerously-skip-permissions flag is present when enabled
+	var found bool
+	for _, arg := range args {
+		if arg == "--dangerously-skip-permissions" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Error("BuildArgs() should include --dangerously-skip-permissions when DangerouslySkipPermissions is true")
+	}
+}
+
+func TestBuildArgs_WithoutDangerousMode(t *testing.T) {
+	cfg := &config.Config{
+		Model:                      "claude-sonnet-4-20250514",
+		MaxBudget:                  5.00,
+		SessionID:                  "",
+		DangerouslySkipPermissions: false, // Explicitly false
+	}
+	e := New(cfg)
+
+	args := e.BuildArgs("test prompt")
+
+	// Check --dangerously-skip-permissions flag is NOT present by default
+	for _, arg := range args {
+		if arg == "--dangerously-skip-permissions" {
+			t.Error("BuildArgs() should NOT include --dangerously-skip-permissions when DangerouslySkipPermissions is false")
+			break
 		}
 	}
 }

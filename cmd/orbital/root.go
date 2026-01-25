@@ -57,6 +57,7 @@ var (
 	mergeModel          string
 	continueWorktree    string
 	nonInteractive      bool
+	dangerous           bool
 )
 
 var rootCmd = &cobra.Command{
@@ -122,6 +123,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&mergeModel, "merge-model", "haiku", "Model for worktree merge phase")
 	rootCmd.PersistentFlags().StringVar(&continueWorktree, "continue-worktree", "", "Specify worktree name to resume (for continue command)")
 	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "Error if interactive selection would be needed")
+	rootCmd.PersistentFlags().BoolVar(&dangerous, "dangerous", false, "Enable --dangerously-skip-permissions for Claude CLI (allows execution without permission prompts)")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {
@@ -143,20 +145,21 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	// Note: SessionID is only set if explicitly provided via --session-id flag
 	// for resuming an existing Claude session. For new sessions, leave it empty.
 	cfg := &config.Config{
-		SpecPath:          specPath,
-		MaxIterations:     iterations,
-		CompletionPromise: promise,
-		Model:             model,
-		CheckerModel:      checkerModel,
-		MaxBudget:         budget,
-		WorkingDir:        workingDir,
-		Verbose:           verbose,
-		Debug:             debug,
-		ShowUnhandled:     showUnhandled,
-		DryRun:            dryRun,
-		SessionID:         sessionID, // Only use if explicitly provided
-		IterationTimeout:  timeout,
-		MaxTurns:          maxTurns,
+		SpecPath:                   specPath,
+		MaxIterations:              iterations,
+		CompletionPromise:          promise,
+		Model:                      model,
+		CheckerModel:               checkerModel,
+		MaxBudget:                  budget,
+		WorkingDir:                 workingDir,
+		Verbose:                    verbose,
+		Debug:                      debug,
+		ShowUnhandled:              showUnhandled,
+		DryRun:                     dryRun,
+		SessionID:                  sessionID, // Only use if explicitly provided
+		IterationTimeout:           timeout,
+		MaxTurns:                   maxTurns,
+		DangerouslySkipPermissions: dangerous,
 	}
 
 	// Validate configuration
@@ -184,6 +187,17 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	}
 	if fileConfig != nil && fileConfig.Prompt != "" {
 		spec.PromptTemplate = fileConfig.Prompt
+	}
+
+	// Handle dangerous mode: CLI flag takes precedence over config file
+	// If neither is set, default is false (safe mode)
+	if !dangerous && fileConfig != nil && fileConfig.Dangerous {
+		cfg.DangerouslySkipPermissions = true
+	}
+
+	// Warn if dangerous mode is enabled
+	if cfg.DangerouslySkipPermissions {
+		fmt.Fprintln(os.Stderr, "WARNING: Running with --dangerous flag. Claude can execute commands without permission prompts.")
 	}
 
 	// Handle agents: CLI flag takes precedence over config file, defaults always included

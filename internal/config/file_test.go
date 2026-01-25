@@ -279,6 +279,55 @@ preset = "tdd"
 	}
 }
 
+func TestLoadFileConfig_WithDangerous(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".orbital")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	configContent := `dangerous = true`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFileConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadFileConfig() error = %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("LoadFileConfig() = nil, want config")
+	}
+	if !cfg.Dangerous {
+		t.Error("Dangerous = false, want true")
+	}
+}
+
+func TestLoadFileConfig_WithoutDangerous(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".orbital")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Config without dangerous option - should default to false
+	configContent := `prompt = "test prompt"`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFileConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadFileConfig() error = %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("LoadFileConfig() = nil, want config")
+	}
+	if cfg.Dangerous {
+		t.Error("Dangerous = true, want false (default)")
+	}
+}
+
 func TestWorkflowConfig_ToWorkflow(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -85,9 +85,13 @@ func (e *Executor) BuildArgs(prompt string) []string {
 		"-p",
 		"--output-format", "stream-json",
 		"--verbose",
-		"--dangerously-skip-permissions",
 		"--model", e.config.Model,
 		"--max-budget-usd", fmt.Sprintf("%.2f", e.config.MaxBudget),
+	}
+
+	// Only include --dangerously-skip-permissions when explicitly enabled
+	if e.config.DangerouslySkipPermissions {
+		args = append(args, "--dangerously-skip-permissions")
 	}
 
 	if e.config.SessionID != "" {

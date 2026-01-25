@@ -20,6 +20,11 @@ type FileConfig struct {
 
 	// Workflow defines the multi-step workflow configuration.
 	Workflow *WorkflowConfig `toml:"workflow"`
+
+	// Dangerous enables --dangerously-skip-permissions for Claude CLI.
+	// When true, Claude can execute commands without prompting for permission.
+	// Default is false for safety.
+	Dangerous bool `toml:"dangerous"`
 }
 
 // WorkflowConfig represents the workflow section in config.toml.
