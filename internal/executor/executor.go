@@ -7,12 +7,25 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/flashingpumpkin/orbital/internal/config"
 	"github.com/flashingpumpkin/orbital/internal/output"
+)
+
+const (
+	// scannerInitialBufSize is the initial buffer size for the scanner (64KB).
+	scannerInitialBufSize = 64 * 1024
+
+	// scannerMaxBufSize is the maximum line size the scanner can handle (10MB).
+	// Claude's stream-json output can have single lines >1MB for large file reads.
+	scannerMaxBufSize = 10 * 1024 * 1024
+
+	// scannerWarnThreshold is the size threshold above which a warning is logged (8MB).
+	scannerWarnThreshold = 8 * 1024 * 1024
 )
 
 // ExecutionResult contains the result of a Claude CLI execution.
@@ -164,18 +177,36 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 
 		// Read and stream output line by line
 		scanner := bufio.NewScanner(stdoutPipe)
-		// Increase buffer size for long lines
-		buf := make([]byte, 0, 64*1024)
-		scanner.Buffer(buf, 1024*1024)
+		// Increase buffer size for long lines (10MB max to handle large file reads)
+		buf := make([]byte, 0, scannerInitialBufSize)
+		scanner.Buffer(buf, scannerMaxBufSize)
 
+		var scanErr error
 		for scanner.Scan() {
 			line := scanner.Text()
+			lineLen := len(line)
+
+			// Warn about very large lines that approach the buffer limit
+			if e.verbose && lineLen > scannerWarnThreshold {
+				fmt.Fprintf(os.Stderr, "warning: large output line (%d bytes), approaching %d byte limit\n",
+					lineLen, scannerMaxBufSize)
+			}
+
 			stdout.WriteString(line)
 			stdout.WriteString("\n")
 			// Parse line for stats during streaming
 			_, _ = parser.ParseLine([]byte(line))
 			// Write to stream writer
 			_, _ = fmt.Fprintln(e.streamWriter, line)
+		}
+
+		// Check for scanner errors (including buffer overflow)
+		if err := scanner.Err(); err != nil {
+			if err == bufio.ErrTooLong {
+				scanErr = fmt.Errorf("output line exceeded %d byte limit: %w", scannerMaxBufSize, err)
+			} else {
+				scanErr = fmt.Errorf("scanner error: %w", err)
+			}
 		}
 
 		runErr := cmd.Wait()
@@ -195,6 +226,19 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 				Completed: false,
 				Error:     ctx.Err(),
 			}, ctx.Err()
+		}
+
+		// Handle scanner errors (e.g., line too long)
+		if scanErr != nil {
+			return &ExecutionResult{
+				Output:    stdout.String(),
+				Duration:  duration,
+				TokensIn:  stats.TokensIn,
+				TokensOut: stats.TokensOut,
+				CostUSD:   stats.CostUSD,
+				Completed: false,
+				Error:     scanErr,
+			}, scanErr
 		}
 
 		// Handle command execution error

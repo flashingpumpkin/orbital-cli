@@ -385,7 +385,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ---
 
-### [ ] **Ticket: PERF-6 - Increase scanner buffer limit**
+### [x] **Ticket: PERF-6 - Increase scanner buffer limit**
 
 **As a** user processing Claude responses with large tool results
 **I want** large JSON lines to be handled without data loss
@@ -402,18 +402,18 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Log warning when lines approach limit
 
 **Acceptance Criteria**:
-- [ ] Given JSON line of 5MB, when scanned, then line is processed successfully
-- [ ] Given JSON line of 10MB, when scanned, then line is processed successfully
-- [ ] Given JSON line > 10MB, when scanned, then clear error message returned
-- [ ] Given line near limit (>8MB), when scanned, then warning logged
-- [ ] Existing functionality unchanged for normal-sized lines
+- [x] Given JSON line of 5MB, when scanned, then line is processed successfully
+- [x] Given JSON line of 10MB, when scanned, then line is processed successfully
+- [x] Given JSON line > 10MB, when scanned, then clear error message returned
+- [x] Given line near limit (>8MB), when scanned, then warning logged
+- [x] Existing functionality unchanged for normal-sized lines
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Buffer limit increased in executor
-- [ ] Error handling for `ErrTooLong`
-- [ ] Warning for lines approaching limit
-- [ ] Test with large JSON lines
+- [x] Feature complete in one atomic commit
+- [x] Buffer limit increased in executor
+- [x] Error handling for `ErrTooLong`
+- [x] Warning for lines approaching limit
+- [x] Test with large JSON lines
 
 **Dependencies**:
 - None
@@ -488,7 +488,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 - [x] PERF-2: Cache wrapped lines in TUI (UI responsiveness)
 - [x] PERF-3: Use strings.Builder for parser concatenation (easy win)
 - [x] PERF-4: Eliminate double parsing in executor (CPU efficiency)
-- [ ] PERF-6: Increase scanner buffer limit (prevents data loss)
+- [x] PERF-6: Increase scanner buffer limit (prevents data loss)
 
 **Could Have (Sprint 3):**
 - [ ] PERF-5: Add configurable output retention limit (memory safety)

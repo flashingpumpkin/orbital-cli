@@ -1,7 +1,9 @@
 package executor
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -541,5 +543,167 @@ echo '{"type":"result","total_cost_usd":0.03,"duration_ms":500,"usage":{"input_t
 	}
 	if result.TokensOut != 75 {
 		t.Errorf("TokensOut = %d, want 75", result.TokensOut)
+	}
+}
+
+func TestExecute_LargeLineHandled(t *testing.T) {
+	// Test that lines up to 10MB can be handled without error.
+	// We use 5MB as a practical test size to keep test execution fast.
+
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+
+	// Create a 5MB line (well under the 10MB limit)
+	largeLineSize := 5 * 1024 * 1024
+	largeLine := strings.Repeat("x", largeLineSize)
+
+	// Script that outputs a large JSON line
+	scriptContent := fmt.Sprintf(`#!/bin/sh
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"%s"}]}}'
+`, largeLine)
+
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Model:     "test-model",
+		MaxBudget: 1.00,
+	}
+	e := New(cfg)
+
+	// Enable streaming path
+	var streamOutput strings.Builder
+	e.SetStreamWriter(&streamOutput)
+	e.claudeCmd = scriptPath
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	if err != nil {
+		t.Fatalf("Execute() returned error for 5MB line: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute() returned nil result")
+	}
+	if !result.Completed {
+		t.Error("Execute() should complete successfully for 5MB line")
+	}
+
+	// Verify the large line was captured
+	if len(result.Output) < largeLineSize {
+		t.Errorf("Output length = %d, want at least %d", len(result.Output), largeLineSize)
+	}
+}
+
+func TestExecute_OversizedLineError(t *testing.T) {
+	// Test that lines exceeding the 10MB limit return an error.
+	// We create a script that outputs a line slightly over the limit.
+
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+
+	// Create a line that exceeds 10MB (add 1KB over to ensure it's over)
+	oversizedLineSize := 10*1024*1024 + 1024
+	oversizedLine := strings.Repeat("y", oversizedLineSize)
+
+	// Script that outputs an oversized line
+	scriptContent := fmt.Sprintf(`#!/bin/sh
+printf '%s'
+`, oversizedLine)
+
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Model:     "test-model",
+		MaxBudget: 1.00,
+	}
+	e := New(cfg)
+
+	// Enable streaming path
+	var streamOutput strings.Builder
+	e.SetStreamWriter(&streamOutput)
+	e.claudeCmd = scriptPath
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	// Should return an error for oversized line
+	if err == nil {
+		t.Error("Execute() should return error for oversized line")
+	}
+
+	// Check that error message mentions the limit
+	if err != nil && !strings.Contains(err.Error(), "byte limit") {
+		t.Errorf("Error should mention byte limit, got: %v", err)
+	}
+
+	// Result should indicate failure
+	if result != nil && result.Completed {
+		t.Error("Result should not be Completed for oversized line")
+	}
+}
+
+func TestExecute_LargeLineWarning(t *testing.T) {
+	// Test that lines approaching the limit trigger a warning when verbose mode is on.
+	// We create a line just over the warning threshold (8MB).
+
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+
+	// Create a line just over the warning threshold (8MB + 1KB)
+	warningLineSize := 8*1024*1024 + 1024
+	warningLine := strings.Repeat("z", warningLineSize)
+
+	// Script that outputs a line over the warning threshold
+	scriptContent := fmt.Sprintf(`#!/bin/sh
+printf '%s\n'
+`, warningLine)
+
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Model:     "test-model",
+		MaxBudget: 1.00,
+		Verbose:   true, // Enable verbose mode to get warnings
+	}
+	e := New(cfg)
+
+	// Enable streaming path
+	var streamOutput strings.Builder
+	e.SetStreamWriter(&streamOutput)
+	e.claudeCmd = scriptPath
+
+	// Capture stderr to check for warning
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	// Close write end and restore stderr
+	w.Close()
+	os.Stderr = oldStderr
+
+	// Read captured stderr
+	var stderrBuf bytes.Buffer
+	_, _ = stderrBuf.ReadFrom(r)
+	stderrOutput := stderrBuf.String()
+
+	if err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute() returned nil result")
+	}
+
+	// Verify warning was logged
+	if !strings.Contains(stderrOutput, "warning") || !strings.Contains(stderrOutput, "large output line") {
+		t.Errorf("Expected warning about large output line, got stderr: %s", stderrOutput)
 	}
 }

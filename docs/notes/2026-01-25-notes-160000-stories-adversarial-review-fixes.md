@@ -313,6 +313,39 @@ Note: `extractStats()` is retained for the non-streaming path and legacy compati
 
 Verification: `make check` passes (lint + tests).
 
+### PERF-6: Increase scanner buffer limit
+
+**Completed**
+
+Implementation details:
+1. Added constants for buffer configuration:
+   - `scannerInitialBufSize`: 64KB (initial allocation)
+   - `scannerMaxBufSize`: 10MB (maximum line size, increased from 1MB)
+   - `scannerWarnThreshold`: 8MB (warning threshold for large lines)
+2. Updated scanner buffer configuration to use the new 10MB limit
+3. Added scanner error detection after the streaming loop
+4. When `bufio.ErrTooLong` occurs, return a clear error message indicating the byte limit
+5. Added verbose mode warning for lines exceeding 8MB (approaching the limit)
+6. Added three new tests:
+   - `TestExecute_LargeLineHandled`: Verifies 5MB lines are processed successfully
+   - `TestExecute_OversizedLineError`: Verifies lines over 10MB return an error with clear message
+   - `TestExecute_LargeLineWarning`: Verifies warning is logged for lines over 8MB in verbose mode
+
+The 10MB limit handles most realistic scenarios for Claude's stream-json output while preventing unbounded memory allocation. The warning threshold at 8MB gives users early notice when outputs approach the limit.
+
+Verification: `make check` passes (lint + tests).
+
+## Sprint 2 Complete
+
+All "Should Have (Sprint 2)" items from the adversarial review have been completed:
+
+1. **PERF-2**: Cache wrapped lines in TUI (already completed in previous iterations)
+2. **PERF-3**: Use strings.Builder for parser concatenation (already completed)
+3. **PERF-4**: Eliminate double parsing in executor
+4. **PERF-6**: Increase scanner buffer limit
+
+Remaining items (PERF-5, DESIGN-1) are explicitly marked as Sprint 3/Could Have, outside the scope of this iteration.
+
 ## Code Review Feedback Addressed - Iteration 4
 
 ### HIGH: Code duplication in cache update logic
