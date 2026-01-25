@@ -28,6 +28,7 @@ func New(session SessionInfo, progress ProgressInfo, worktree ...WorktreeInfo) *
 	// Create the model with initial values
 	model := NewModel()
 	model.session = session
+	model.tabs = model.buildTabs()
 	model.progress = progress
 	if len(worktree) > 0 {
 		model.worktree = worktree[0]
