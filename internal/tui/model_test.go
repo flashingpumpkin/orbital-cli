@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestNewModel(t *testing.T) {
@@ -1638,6 +1639,54 @@ func TestWindowResizeScrollClamping(t *testing.T) {
 			t.Error("expected tailing to show Line 50 after resize")
 		}
 	})
+}
+
+func TestRenderLineWidths(t *testing.T) {
+	// Test that all rendered lines have the correct width (equal to terminal width)
+	m := NewModel()
+
+	// Set up valid dimensions
+	terminalWidth := 100
+	msg := tea.WindowSizeMsg{Width: terminalWidth, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set some data
+	model.SetProgress(ProgressInfo{
+		Iteration:    3,
+		MaxIteration: 50,
+		StepName:     "implement",
+		StepPosition: 2,
+		StepTotal:    4,
+		TokensIn:     45231,
+		TokensOut:    12847,
+		Cost:         2.34,
+		Budget:       10.00,
+	})
+
+	model.SetSession(SessionInfo{
+		SpecFiles: []string{"docs/plans/auth-feature.md"},
+		NotesFile: ".orbital/notes.md",
+		StateFile: ".orbital/state.json",
+	})
+
+	model.AppendOutput("Test output line")
+
+	view := model.View()
+
+	// Split into lines and verify each line width
+	lines := strings.Split(view, "\n")
+	for i, line := range lines {
+		// Skip the help bar (last line) which doesn't have borders
+		if i == len(lines)-1 {
+			continue
+		}
+
+		lineWidth := ansi.StringWidth(line)
+		if lineWidth != terminalWidth {
+			t.Errorf("line %d has width %d, expected %d: %q", i, lineWidth, terminalWidth, line)
+		}
+	}
 }
 
 func TestWrappedLinesCaching(t *testing.T) {

@@ -724,9 +724,10 @@ func (m Model) renderHeader() string {
 		costStyled
 
 	// Calculate padding between brand and metrics
+	// Account for the 2 extra space characters (after left border and before right border)
 	brandWidth := ansi.StringWidth(IconBrand + " ORBITAL")
 	metricsWidth := ansi.StringWidth("Iteration " + iterStr + "  " + InnerVertical + "  " + costStr)
-	padding := width - brandWidth - metricsWidth
+	padding := width - brandWidth - metricsWidth - 2
 	if padding < 1 {
 		padding = 1
 	}
