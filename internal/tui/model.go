@@ -411,9 +411,42 @@ func (m Model) handleTabClick(x int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// scrollUp scrolls the current file tab up.
+// scrollUp scrolls the current tab up.
 func (m Model) scrollUp() (tea.Model, tea.Cmd) {
-	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+	// Handle output tab (tab 0)
+	if m.activeTab == 0 {
+		wrappedLines := m.wrapAllOutputLines()
+		height := m.layout.ScrollAreaHeight
+
+		// Calculate max scroll offset
+		maxOffset := len(wrappedLines) - height
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+
+		// Nothing to scroll if content fits in viewport
+		if maxOffset == 0 {
+			return m, nil
+		}
+
+		if m.outputTailing {
+			// Unlock tail mode and position one line up from bottom
+			m.outputTailing = false
+			m.outputScroll = maxOffset - 1
+			if m.outputScroll < 0 {
+				m.outputScroll = 0
+			}
+		} else {
+			// Already scrolling, move up one line
+			if m.outputScroll > 0 {
+				m.outputScroll--
+			}
+		}
+		return m, nil
+	}
+
+	// Handle file tabs
+	if len(m.tabs) <= m.activeTab {
 		return m, nil
 	}
 
@@ -687,22 +720,45 @@ func (m Model) renderFileContent(path string) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderScrollArea renders the scrolling output region.
-func (m Model) renderScrollArea() string {
-	height := m.layout.ScrollAreaHeight
+// wrapAllOutputLines wraps all output lines to fit within the current content width.
+// This function ensures consistent wrapping logic between scroll calculations and rendering.
+func (m Model) wrapAllOutputLines() []string {
 	width := m.layout.ContentWidth()
-
-	// First, wrap all output lines to fit within width
 	var wrappedLines []string
 	for _, line := range m.outputLines {
 		wrapped := wrapLine(line, width)
 		wrappedLines = append(wrappedLines, wrapped...)
 	}
+	return wrappedLines
+}
 
-	// Get visible lines (show most recent)
-	startIdx := 0
-	if len(wrappedLines) > height {
-		startIdx = len(wrappedLines) - height
+// renderScrollArea renders the scrolling output region.
+func (m Model) renderScrollArea() string {
+	height := m.layout.ScrollAreaHeight
+	wrappedLines := m.wrapAllOutputLines()
+
+	// Determine start index based on scroll state
+	var startIdx int
+	if m.outputTailing {
+		// Tailing: show most recent lines
+		startIdx = 0
+		if len(wrappedLines) > height {
+			startIdx = len(wrappedLines) - height
+		}
+	} else {
+		// Scrolling: use the scroll offset
+		startIdx = m.outputScroll
+		// Clamp to valid range
+		maxOffset := len(wrappedLines) - height
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if startIdx > maxOffset {
+			startIdx = maxOffset
+		}
+		if startIdx < 0 {
+			startIdx = 0
+		}
 	}
 
 	var lines []string

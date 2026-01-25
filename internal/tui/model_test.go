@@ -429,3 +429,185 @@ func TestRenderScrollAreaWrap(t *testing.T) {
 		t.Errorf("full content should be preserved after wrapping, got: %s", view)
 	}
 }
+
+func TestScrollUpOutputTab(t *testing.T) {
+	t.Run("tailing unlocks and positions one line up from bottom", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling (more than viewport height)
+		for i := 0; i < 30; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Verify initial state: tailing is true
+		if !model.outputTailing {
+			t.Error("expected outputTailing to be true initially")
+		}
+
+		// Press up arrow
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Verify tailing is now false
+		if model.outputTailing {
+			t.Error("expected outputTailing to be false after scroll up")
+		}
+
+		// Verify scroll position is one line up from bottom
+		wrappedLines := model.wrapAllOutputLines()
+		height := model.layout.ScrollAreaHeight
+		maxOffset := len(wrappedLines) - height
+		expectedScroll := maxOffset - 1
+
+		if model.outputScroll != expectedScroll {
+			t.Errorf("expected outputScroll to be %d, got %d", expectedScroll, model.outputScroll)
+		}
+	})
+
+	t.Run("not tailing decrements scroll offset", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 30; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Scroll up once to unlock tailing
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		previousScroll := model.outputScroll
+
+		// Scroll up again
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		if model.outputScroll != previousScroll-1 {
+			t.Errorf("expected outputScroll to be %d, got %d", previousScroll-1, model.outputScroll)
+		}
+	})
+
+	t.Run("at top does not go negative", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 30; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Manually set scroll to top
+		model.outputTailing = false
+		model.outputScroll = 0
+
+		// Press up arrow
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		if model.outputScroll != 0 {
+			t.Errorf("expected outputScroll to stay at 0, got %d", model.outputScroll)
+		}
+	})
+
+	t.Run("output fits in viewport does nothing", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions with large height
+		msg := tea.WindowSizeMsg{Width: 80, Height: 50}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add only a few lines (less than viewport)
+		for i := 0; i < 5; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Press up arrow
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should still be tailing since content fits
+		if !model.outputTailing {
+			t.Error("expected outputTailing to remain true when content fits in viewport")
+		}
+
+		if model.outputScroll != 0 {
+			t.Errorf("expected outputScroll to remain 0, got %d", model.outputScroll)
+		}
+	})
+
+	t.Run("file tab scrolling still works", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Set up session with a spec file to create file tabs
+		model.SetSession(SessionInfo{
+			SpecFiles: []string{"/path/to/spec.md"},
+		})
+		model.tabs = model.buildTabs()
+
+		// Switch to file tab (tab 1)
+		model.activeTab = 1
+
+		// Set file content and initial scroll
+		model.fileContents["/path/to/spec.md"] = strings.Repeat("Line\n", 50)
+		model.fileScroll["/path/to/spec.md"] = 10
+
+		// Press up arrow
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Verify file scroll decremented
+		if model.fileScroll["/path/to/spec.md"] != 9 {
+			t.Errorf("expected file scroll to be 9, got %d", model.fileScroll["/path/to/spec.md"])
+		}
+
+		// Verify output scroll unchanged
+		if model.outputScroll != 0 {
+			t.Errorf("expected output scroll to remain 0, got %d", model.outputScroll)
+		}
+	})
+}
+
+func TestWrapAllOutputLines(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Add some lines
+	model.AppendOutput("Short line")
+	model.AppendOutput("This is a much longer line that should wrap when the terminal is narrow enough to require wrapping")
+
+	wrappedLines := model.wrapAllOutputLines()
+
+	// Should have more than 2 lines due to wrapping
+	if len(wrappedLines) < 2 {
+		t.Errorf("expected at least 2 wrapped lines, got %d", len(wrappedLines))
+	}
+}

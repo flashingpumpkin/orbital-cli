@@ -17,4 +17,22 @@
 - Ticket 2 will need to extract a `wrapAllOutputLines()` helper since the wrapping logic is currently inline in `renderScrollArea()`
 
 ### Next Steps
+- Ticket 3: Implement scroll-down with auto-tail re-lock
+
+## 2026-01-25 - Iteration 2
+
+### Completed
 - Ticket 2: Implement scroll-up with auto-tail unlock
+  - Extracted `wrapAllOutputLines()` helper to ensure consistent wrapping logic between scroll calculations and rendering
+  - Updated `scrollUp()` to handle output tab (activeTab == 0)
+  - When tailing, scroll-up unlocks tail mode and positions one line up from bottom
+  - When not tailing, scroll-up decrements `outputScroll` by 1 (clamped at 0)
+  - If output fits in viewport, scroll-up does nothing
+  - File tab scrolling continues to work as before
+  - Added unit tests: `TestScrollUpOutputTab` (5 subtests) and `TestWrapAllOutputLines`
+  - All tests pass, build succeeds
+  - Updated `renderScrollArea()` to respect scroll state (part of Ticket 5, but necessary for Ticket 2 to function)
+
+### Observations
+- The `renderScrollArea()` function was updated in this ticket to respect scroll state, even though this is technically Ticket 5. This was necessary because scroll-up would have no visible effect otherwise.
+- Ticket 5 can now focus on edge cases and clamping logic rather than the initial implementation.

@@ -85,19 +85,19 @@ Initialize both fields in `NewModel()` to default to auto-tail behaviour (curren
 - Handle edge case: nothing to scroll (output fits in viewport)
 
 **Acceptance Criteria**:
-- [ ] Given the output tab is active and tailing, when pressing `↑`, then `outputTailing` becomes `false`
-- [ ] Given the output tab is active and tailing, when pressing `↑`, then `outputScroll` is set to one line up from bottom
-- [ ] Given the output tab is active and not tailing, when pressing `↑`, then `outputScroll` decrements by 1
-- [ ] Given the output tab is active and at the top, when pressing `↑`, then `outputScroll` stays at 0
-- [ ] Given output fits in viewport, when pressing `↑`, then nothing happens
-- [ ] Given a file tab is active, when pressing `↑`, then file tab scrolling works as before
+- [x] Given the output tab is active and tailing, when pressing `↑`, then `outputTailing` becomes `false`
+- [x] Given the output tab is active and tailing, when pressing `↑`, then `outputScroll` is set to one line up from bottom
+- [x] Given the output tab is active and not tailing, when pressing `↑`, then `outputScroll` decrements by 1
+- [x] Given the output tab is active and at the top, when pressing `↑`, then `outputScroll` stays at 0
+- [x] Given output fits in viewport, when pressing `↑`, then nothing happens
+- [x] Given a file tab is active, when pressing `↑`, then file tab scrolling works as before
 
 **Definition of Done** (Single Commit):
-- [ ] `wrapAllOutputLines()` helper function extracted
-- [ ] `scrollUp()` updated to handle output tab
-- [ ] Unit tests added for scroll-up behaviour
-- [ ] All existing tests pass
-- [ ] Manual verification: pressing `↑` in output tab scrolls up
+- [x] `wrapAllOutputLines()` helper function extracted
+- [x] `scrollUp()` updated to handle output tab
+- [x] Unit tests added for scroll-up behaviour
+- [x] All existing tests pass
+- [x] Manual verification: pressing `↑` in output tab scrolls up
 
 **Dependencies**:
 - Ticket 1 (scroll state must exist)
