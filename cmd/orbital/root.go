@@ -58,6 +58,7 @@ var (
 	continueWorktree    string
 	nonInteractive      bool
 	dangerous           bool
+	maxOutputSize       int
 )
 
 var rootCmd = &cobra.Command{
@@ -124,6 +125,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&continueWorktree, "continue-worktree", "", "Specify worktree name to resume (for continue command)")
 	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "Error if interactive selection would be needed")
 	rootCmd.PersistentFlags().BoolVar(&dangerous, "dangerous", false, "Enable --dangerously-skip-permissions for Claude CLI (allows execution without permission prompts)")
+	rootCmd.PersistentFlags().IntVar(&maxOutputSize, "max-output-size", config.DefaultMaxOutputSize, "Maximum output size in bytes to retain (0 = unlimited)")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {
@@ -160,6 +162,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		IterationTimeout:           timeout,
 		MaxTurns:                   maxTurns,
 		DangerouslySkipPermissions: dangerous,
+		MaxOutputSize:              maxOutputSize,
 	}
 
 	// Validate configuration

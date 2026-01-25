@@ -177,6 +177,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		IterationTimeout:           timeout,
 		MaxTurns:                   maxTurns,
 		DangerouslySkipPermissions: dangerous,
+		MaxOutputSize:              maxOutputSize,
 	}
 
 	// Validate configuration

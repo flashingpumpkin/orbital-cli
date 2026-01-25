@@ -61,7 +61,15 @@ type Config struct {
 	// for Claude CLI. When false (default), Claude will prompt for permission before
 	// executing potentially dangerous operations. Set to true only in trusted environments.
 	DangerouslySkipPermissions bool
+
+	// MaxOutputSize is the maximum size of output to retain in bytes (default: 10MB).
+	// When exceeded, older output is truncated to preserve the most recent content
+	// where completion promises typically appear. Set to 0 to disable truncation.
+	MaxOutputSize int
 }
+
+// DefaultMaxOutputSize is the default maximum output size in bytes (10MB).
+const DefaultMaxOutputSize = 10 * 1024 * 1024
 
 // NewConfig returns a new Config with default values.
 func NewConfig() *Config {
@@ -73,6 +81,7 @@ func NewConfig() *Config {
 		MaxBudget:         100.00,
 		WorkingDir:        ".",
 		IterationTimeout:  30 * time.Minute,
+		MaxOutputSize:     DefaultMaxOutputSize,
 	}
 }
 

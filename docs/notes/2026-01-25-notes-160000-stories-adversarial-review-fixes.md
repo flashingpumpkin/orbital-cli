@@ -481,3 +481,114 @@ The most critical issues requiring immediate attention:
 3. Negative currency handling needs proper sign management
 
 Note: Most issues are edge cases or design debt rather than bugs affecting normal operation. The core functionality (parser text extraction, TUI display) works correctly for typical inputs.
+
+## Sprint 3 Progress
+
+### PERF-5: Add configurable output retention limit
+
+**Completed**
+
+Implementation details:
+1. Added `MaxOutputSize int` field to `config.Config` with `DefaultMaxOutputSize` constant (10MB)
+2. Added `--max-output-size` CLI flag to root command (default 10MB, 0 = unlimited)
+3. Added `MaxOutputSize` to config struct in both `root.go` and `continue.go`
+4. Implemented truncation logic in executor's streaming loop:
+   - Tracks total buffer size during streaming
+   - When exceeds MaxOutputSize, truncates from front to keep ~50% of max size
+   - Finds nearest newline to avoid cutting mid-line
+   - Prepends truncation marker: `[OUTPUT TRUNCATED - SHOWING MOST RECENT CONTENT]`
+   - Logs warning on first truncation (verbose mode only)
+5. Added `truncateOutput()` helper function for non-streaming path
+6. Non-streaming path applies truncation after command completes (before returning result)
+7. Added comprehensive tests:
+   - `TestExecute_OutputTruncation_Streaming`: Verifies streaming path truncation
+   - `TestExecute_OutputTruncation_NonStreaming`: Verifies non-streaming path truncation
+   - `TestExecute_NoTruncation_UnderLimit`: Verifies no truncation when under limit
+   - `TestExecute_NoTruncation_ZeroLimit`: Verifies MaxOutputSize=0 disables truncation
+   - `TestTruncateOutput`: Unit tests for truncateOutput helper function
+
+The implementation preserves the most recent content where completion promises typically appear, ensuring promise detection continues to work after truncation.
+
+Verification: `make check` passes (lint + tests).
+
+## Code Review - Iteration 6 (Sprint 2 Final Review)
+
+Files reviewed:
+- internal/executor/executor.go
+- internal/executor/executor_test.go
+- internal/output/parser.go
+- internal/tui/model.go
+- internal/tui/model_test.go
+- internal/tui/ringbuffer.go
+- internal/tui/ringbuffer_test.go
+
+### Security
+No issues. The code follows secure practices:
+- Buffer size increase (10MB) is bounded with proper error handling for overflow
+- Scanner returns `bufio.ErrTooLong` which is properly propagated
+- No shell invocation in executor; uses `exec.CommandContext` with argument array
+- No command injection vectors; prompt passed as single argument, not shell-interpreted
+- Resource exhaustion mitigated by bounded ring buffer (10,000 lines) and scanner limit (10MB)
+
+### Design
+**ISSUES FOUND**
+
+1. **God Object (HIGH)**: `Model` struct handles 6+ distinct concerns: layout, output buffering/scrolling/caching, task tracking, session/progress state, tab management (file I/O), and styling. The Update method is a 120-line switch statement mixing concerns.
+
+2. **Duplicate Scroll Logic (MEDIUM)**: `scrollUp`, `scrollDown`, `scrollPageUp`, `scrollPageDown` each contain two nearly identical branches for output tab vs file tabs, repeated across 200+ lines.
+
+3. **Hidden Dependency (MEDIUM)**: Executor creates `output.NewParser()` internally, violating Dependency Inversion. Cannot mock parser for isolated testing.
+
+4. **Brittle Cache Invalidation (MEDIUM)**: `appendLineToCache` check `m.outputLines.Len() == m.cacheLineCount+1` assumes knowledge of RingBuffer internals. If RingBuffer behaviour changes, this logic silently breaks.
+
+5. **Magic Number (LOW)**: `activeTab == 0` check scattered throughout code assumes Output tab is always first. Adding a new first tab breaks all checks.
+
+### Logic
+**ISSUES FOUND**
+
+1. **Division by Zero (MEDIUM)**: `formatCost` (line 1067) divides `cost / budget` without checking if budget is 0. Produces `+Inf` or `NaN`.
+
+2. **Division by Zero (MEDIUM)**: `formatIteration` (line 1026) divides by `max` without zero check. Same issue.
+
+3. **Negative Currency Bug (LOW)**: `formatCurrency` (lines 1183-1190) produces malformed output like `$-1.-49` for negative amounts due to negative modulo.
+
+4. **Scanner Error May Cause Subprocess Hang (MEDIUM)**: When scanner error occurs (lines 185-210), remaining output in pipe is not drained before `cmd.Wait()`. If subprocess continues writing, it may block indefinitely on full pipe buffer.
+
+5. **RingBuffer.Get Returns Empty String for Out-of-Bounds (LOW)**: Cannot distinguish between stored empty string and invalid index.
+
+### Error Handling
+**ISSUES FOUND**
+
+1. **Ignored Write Errors (MEDIUM)**: `stdout.WriteString(line)` and `fmt.Fprintln(e.streamWriter, line)` errors are silently discarded (lines 195-200). Write failures to buffer or stream are invisible.
+
+2. **Silent JSON Parse Failures (MEDIUM)**: Parser returns `nil, nil` for malformed JSON (lines 106-116). No logging or metrics for parse failures. Token/cost stats could be wrong with no indication.
+
+3. **Incomplete Error Context (LOW)**: Scanner error message lacks context about how many lines were processed or what the last line contained.
+
+4. **Missing Correlation in Warnings (LOW)**: Large line warning (lines 190-193) lacks timestamp, line number, or session ID for log correlation.
+
+5. **Fallback Path Without Logging (LOW)**: `wrapAllOutputLines()` has fallback rebuild path that "shouldn't happen in normal operation" but doesn't log when it occurs.
+
+### Data Integrity
+**ISSUES FOUND**
+
+1. **Division by Zero (MEDIUM)**: Same as logic issues; `formatCost` and `formatIteration` can produce `+Inf`/`NaN`.
+
+2. **Integer Overflow in formatCurrency (LOW)**: `int(amount*100 + 0.5)` can overflow for very large amounts (unlikely in practice).
+
+3. **Narrow Width Edge Case (LOW)**: `wrapLine` with width <= 10 may have edge cases; currently falls back to full width which could still be problematic.
+
+### Verdict
+**FAIL**
+
+Summary by severity:
+- **HIGH**: 1 (God Object in Model)
+- **MEDIUM**: 9 (duplicate scroll logic, hidden dependency, brittle cache invalidation, division by zero x2, scanner hang risk, ignored write errors, silent JSON parse failures)
+- **LOW**: 7 (magic number, negative currency, RingBuffer.Get ambiguity, incomplete error context, missing correlation, fallback logging, integer overflow, narrow width edge case)
+
+Critical issues for immediate attention:
+1. Division by zero in `formatCost` and `formatIteration`
+2. Drain remaining pipe output after scanner error to prevent subprocess hang
+3. Add guards or zero checks before divisions
+
+Note: These are predominantly edge case and design issues. The core performance optimisations (ring buffer, wrapped line cache, single-pass parsing, increased buffer limit) are correctly implemented and work for normal operation.

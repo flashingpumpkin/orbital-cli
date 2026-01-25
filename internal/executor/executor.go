@@ -26,6 +26,9 @@ const (
 
 	// scannerWarnThreshold is the size threshold above which a warning is logged (8MB).
 	scannerWarnThreshold = 8 * 1024 * 1024
+
+	// truncationMarker is the message prepended to truncated output.
+	truncationMarker = "[OUTPUT TRUNCATED - SHOWING MOST RECENT CONTENT]\n"
 )
 
 // ExecutionResult contains the result of a Claude CLI execution.
@@ -139,6 +142,34 @@ func extractStats(rawOutput string) (int, int, float64) {
 	return stats.TokensIn, stats.TokensOut, stats.CostUSD
 }
 
+// truncateOutput truncates output to the specified maximum size, preserving
+// the most recent content where completion promises typically appear.
+// Returns the truncated output and whether truncation occurred.
+func truncateOutput(content []byte, maxSize int) ([]byte, bool) {
+	if maxSize <= 0 || len(content) <= maxSize {
+		return content, false
+	}
+
+	// Keep approximately half the max size to avoid cutting too close
+	keepSize := maxSize / 2
+	truncatePoint := len(content) - keepSize
+
+	// Find the next newline after truncatePoint to avoid cutting mid-line
+	for i := truncatePoint; i < len(content); i++ {
+		if content[i] == '\n' {
+			truncatePoint = i + 1
+			break
+		}
+	}
+
+	// Build result with truncation marker
+	result := make([]byte, 0, len(truncationMarker)+len(content)-truncatePoint)
+	result = append(result, truncationMarker...)
+	result = append(result, content[truncatePoint:]...)
+
+	return result, true
+}
+
 // Execute runs the Claude CLI with the given prompt.
 // It respects context cancellation and returns an error if Claude is not in PATH.
 // If a stream writer is set, output is streamed line-by-line as it arrives.
@@ -181,6 +212,10 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 		buf := make([]byte, 0, scannerInitialBufSize)
 		scanner.Buffer(buf, scannerMaxBufSize)
 
+		// Track if truncation has occurred
+		var truncated bool
+		maxOutputSize := e.config.MaxOutputSize
+
 		var scanErr error
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -194,6 +229,39 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 
 			stdout.WriteString(line)
 			stdout.WriteString("\n")
+
+			// Check if truncation is needed (only if MaxOutputSize > 0)
+			if maxOutputSize > 0 && stdout.Len() > maxOutputSize {
+				// Truncate from the front to preserve recent content
+				// Keep approximately half the max size to avoid frequent truncation
+				keepSize := maxOutputSize / 2
+				content := stdout.Bytes()
+				truncatePoint := len(content) - keepSize
+
+				// Find the next newline after truncatePoint to avoid cutting mid-line
+				for i := truncatePoint; i < len(content); i++ {
+					if content[i] == '\n' {
+						truncatePoint = i + 1
+						break
+					}
+				}
+
+				// Rebuild buffer with truncation marker and remaining content
+				remaining := content[truncatePoint:]
+				stdout.Reset()
+				stdout.WriteString(truncationMarker)
+				stdout.Write(remaining)
+
+				// Log warning on first truncation only
+				if !truncated {
+					truncated = true
+					if e.verbose {
+						fmt.Fprintf(os.Stderr, "warning: output exceeded %d bytes, truncating to preserve recent content\n",
+							maxOutputSize)
+					}
+				}
+			}
+
 			// Parse line for stats during streaming
 			_, _ = parser.ParseLine([]byte(line))
 			// Write to stream writer
@@ -278,13 +346,27 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 	runErr := cmd.Run()
 	duration := time.Since(startTime)
 
-	// Parse output once for stats
+	// Parse output once for stats (parse before truncation to get accurate stats)
 	tokensIn, tokensOut, cost := extractStats(stdout.String())
+
+	// Apply truncation if configured
+	outputBytes := stdout.Bytes()
+	if e.config.MaxOutputSize > 0 {
+		truncatedOutput, wasTruncated := truncateOutput(outputBytes, e.config.MaxOutputSize)
+		if wasTruncated {
+			outputBytes = truncatedOutput
+			if e.verbose {
+				fmt.Fprintf(os.Stderr, "warning: output exceeded %d bytes, truncating to preserve recent content\n",
+					e.config.MaxOutputSize)
+			}
+		}
+	}
+	outputStr := string(outputBytes)
 
 	// Handle context cancellation - check this first as it takes priority
 	if ctx.Err() != nil {
 		return &ExecutionResult{
-			Output:    stdout.String(),
+			Output:    outputStr,
 			Duration:  duration,
 			TokensIn:  tokensIn,
 			TokensOut: tokensOut,
@@ -301,7 +383,7 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 			exitCode = exitErr.ExitCode()
 		}
 		return &ExecutionResult{
-			Output:    stdout.String(),
+			Output:    outputStr,
 			ExitCode:  exitCode,
 			Duration:  duration,
 			TokensIn:  tokensIn,
@@ -313,7 +395,7 @@ func (e *Executor) Execute(ctx context.Context, prompt string) (*ExecutionResult
 	}
 
 	return &ExecutionResult{
-		Output:    stdout.String(),
+		Output:    outputStr,
 		ExitCode:  0,
 		Duration:  duration,
 		TokensIn:  tokensIn,

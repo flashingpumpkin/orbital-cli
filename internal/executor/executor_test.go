@@ -707,3 +707,317 @@ printf '%s\n'
 		t.Errorf("Expected warning about large output line, got stderr: %s", stderrOutput)
 	}
 }
+
+func TestExecute_OutputTruncation_Streaming(t *testing.T) {
+	// Test that output is truncated when it exceeds MaxOutputSize in streaming mode.
+
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+
+	// Create a script that outputs more than our limit
+	// Each line is 100 bytes + newline
+	lineContent := strings.Repeat("a", 100)
+	numLines := 200 // 200 lines * 101 bytes = ~20KB total
+
+	var scriptBuilder strings.Builder
+	scriptBuilder.WriteString("#!/bin/sh\n")
+	for i := 0; i < numLines; i++ {
+		scriptBuilder.WriteString(fmt.Sprintf("echo '%s'\n", lineContent))
+	}
+	// Add a completion marker at the end
+	scriptBuilder.WriteString("echo 'COMPLETION_MARKER'\n")
+
+	if err := os.WriteFile(scriptPath, []byte(scriptBuilder.String()), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	// Set a small MaxOutputSize to force truncation
+	maxSize := 5000 // 5KB limit
+
+	cfg := &config.Config{
+		Model:         "test-model",
+		MaxBudget:     1.00,
+		MaxOutputSize: maxSize,
+		Verbose:       true, // Enable verbose mode to get truncation warning
+	}
+	e := New(cfg)
+
+	// Enable streaming path
+	var streamOutput strings.Builder
+	e.SetStreamWriter(&streamOutput)
+	e.claudeCmd = scriptPath
+
+	// Capture stderr to check for warning
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	// Close write end and restore stderr
+	w.Close()
+	os.Stderr = oldStderr
+
+	// Read captured stderr
+	var stderrBuf bytes.Buffer
+	_, _ = stderrBuf.ReadFrom(r)
+	stderrOutput := stderrBuf.String()
+
+	if err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute() returned nil result")
+	}
+
+	// Verify output was truncated (should be less than original size)
+	if len(result.Output) > maxSize+len(truncationMarker) {
+		t.Errorf("Output length = %d, expected <= %d (max + marker)", len(result.Output), maxSize+len(truncationMarker))
+	}
+
+	// Verify truncation marker is present
+	if !strings.Contains(result.Output, "TRUNCATED") {
+		t.Error("Output should contain truncation marker")
+	}
+
+	// Verify most recent content is preserved (completion marker should still be there)
+	if !strings.Contains(result.Output, "COMPLETION_MARKER") {
+		t.Error("Output should preserve recent content (COMPLETION_MARKER)")
+	}
+
+	// Verify warning was logged
+	if !strings.Contains(stderrOutput, "truncating") {
+		t.Errorf("Expected truncation warning in stderr, got: %s", stderrOutput)
+	}
+}
+
+func TestExecute_OutputTruncation_NonStreaming(t *testing.T) {
+	// Test that output is truncated when it exceeds MaxOutputSize in non-streaming mode.
+
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+
+	// Create a script that outputs more than our limit
+	lineContent := strings.Repeat("b", 100)
+	numLines := 200 // ~20KB total
+
+	var scriptBuilder strings.Builder
+	scriptBuilder.WriteString("#!/bin/sh\n")
+	for i := 0; i < numLines; i++ {
+		scriptBuilder.WriteString(fmt.Sprintf("echo '%s'\n", lineContent))
+	}
+	scriptBuilder.WriteString("echo 'END_MARKER'\n")
+
+	if err := os.WriteFile(scriptPath, []byte(scriptBuilder.String()), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	// Set a small MaxOutputSize to force truncation
+	maxSize := 5000
+
+	cfg := &config.Config{
+		Model:         "test-model",
+		MaxBudget:     1.00,
+		MaxOutputSize: maxSize,
+		Verbose:       true,
+	}
+	e := New(cfg)
+
+	// No stream writer = non-streaming path
+	e.claudeCmd = scriptPath
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var stderrBuf bytes.Buffer
+	_, _ = stderrBuf.ReadFrom(r)
+	stderrOutput := stderrBuf.String()
+
+	if err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute() returned nil result")
+	}
+
+	// Verify output was truncated
+	if len(result.Output) > maxSize+len(truncationMarker) {
+		t.Errorf("Output length = %d, expected <= %d", len(result.Output), maxSize+len(truncationMarker))
+	}
+
+	// Verify truncation marker is present
+	if !strings.Contains(result.Output, "TRUNCATED") {
+		t.Error("Output should contain truncation marker")
+	}
+
+	// Verify most recent content is preserved
+	if !strings.Contains(result.Output, "END_MARKER") {
+		t.Error("Output should preserve recent content (END_MARKER)")
+	}
+
+	// Verify warning was logged
+	if !strings.Contains(stderrOutput, "truncating") {
+		t.Errorf("Expected truncation warning, got: %s", stderrOutput)
+	}
+}
+
+func TestExecute_NoTruncation_UnderLimit(t *testing.T) {
+	// Test that output under the limit is not truncated.
+
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+
+	// Create small output (100 bytes)
+	scriptContent := `#!/bin/sh
+echo 'Small output that should not be truncated'
+`
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Model:         "test-model",
+		MaxBudget:     1.00,
+		MaxOutputSize: 10000, // 10KB limit, output is ~50 bytes
+	}
+	e := New(cfg)
+	e.claudeCmd = scriptPath
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	if err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	// Verify output was NOT truncated
+	if strings.Contains(result.Output, "TRUNCATED") {
+		t.Error("Output should not be truncated when under limit")
+	}
+
+	// Verify full content is present
+	if !strings.Contains(result.Output, "Small output") {
+		t.Error("Full output content should be preserved")
+	}
+}
+
+func TestExecute_NoTruncation_ZeroLimit(t *testing.T) {
+	// Test that MaxOutputSize=0 disables truncation.
+
+	tempDir := t.TempDir()
+	scriptPath := tempDir + "/test-claude.sh"
+
+	// Create larger output
+	lineContent := strings.Repeat("c", 100)
+	numLines := 100
+
+	var scriptBuilder strings.Builder
+	scriptBuilder.WriteString("#!/bin/sh\n")
+	for i := 0; i < numLines; i++ {
+		scriptBuilder.WriteString(fmt.Sprintf("echo '%s'\n", lineContent))
+	}
+
+	if err := os.WriteFile(scriptPath, []byte(scriptBuilder.String()), 0755); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Model:         "test-model",
+		MaxBudget:     1.00,
+		MaxOutputSize: 0, // Disabled
+	}
+	e := New(cfg)
+	e.claudeCmd = scriptPath
+
+	ctx := context.Background()
+	result, err := e.Execute(ctx, "test prompt")
+
+	if err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	// Verify output was NOT truncated (no truncation marker)
+	if strings.Contains(result.Output, "TRUNCATED") {
+		t.Error("Output should not be truncated when MaxOutputSize=0")
+	}
+
+	// Verify full output is present (100 lines * ~101 bytes = ~10KB)
+	expectedMinSize := 9000
+	if len(result.Output) < expectedMinSize {
+		t.Errorf("Output length = %d, expected > %d (no truncation)", len(result.Output), expectedMinSize)
+	}
+}
+
+func TestTruncateOutput(t *testing.T) {
+	tests := []struct {
+		name           string
+		content        string
+		maxSize        int
+		expectTrunc    bool
+		expectContains string
+	}{
+		{
+			name:           "under limit",
+			content:        "short content",
+			maxSize:        1000,
+			expectTrunc:    false,
+			expectContains: "short content",
+		},
+		{
+			name:           "at limit",
+			content:        strings.Repeat("x", 100),
+			maxSize:        100,
+			expectTrunc:    false,
+			expectContains: strings.Repeat("x", 100),
+		},
+		{
+			name:           "over limit",
+			content:        "line1\nline2\nline3\nline4\nline5\nline6\n",
+			maxSize:        20,
+			expectTrunc:    true,
+			expectContains: "TRUNCATED",
+		},
+		{
+			name:           "zero limit disabled",
+			content:        strings.Repeat("y", 1000),
+			maxSize:        0,
+			expectTrunc:    false,
+			expectContains: strings.Repeat("y", 1000),
+		},
+		{
+			name:           "negative limit disabled",
+			content:        strings.Repeat("z", 500),
+			maxSize:        -1,
+			expectTrunc:    false,
+			expectContains: strings.Repeat("z", 500),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, truncated := truncateOutput([]byte(tt.content), tt.maxSize)
+
+			if truncated != tt.expectTrunc {
+				t.Errorf("truncated = %v, want %v", truncated, tt.expectTrunc)
+			}
+
+			if !strings.Contains(string(result), tt.expectContains) {
+				t.Errorf("result should contain %q, got %q", tt.expectContains, string(result))
+			}
+
+			// If truncated, verify the marker is at the start
+			if truncated && !strings.HasPrefix(string(result), "[OUTPUT TRUNCATED") {
+				t.Errorf("truncated output should start with marker, got: %q", string(result)[:50])
+			}
+		})
+	}
+}

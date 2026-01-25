@@ -340,7 +340,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ---
 
-### [ ] **Ticket: PERF-5 - Add configurable output retention limit**
+### [x] **Ticket: PERF-5 - Add configurable output retention limit**
 
 **As a** user processing large Claude outputs
 **I want** to limit how much output is retained in memory
@@ -358,19 +358,19 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Ensure completion detection still works after truncation
 
 **Acceptance Criteria**:
-- [ ] Given output under limit, when execution completes, then full output retained
-- [ ] Given output over limit, when execution completes, then output truncated to limit
-- [ ] Given truncation occurs, when checking for promise, then detection still works (promise at end)
-- [ ] Given truncation occurs, when verbose mode on, then warning logged
-- [ ] Memory usage bounded regardless of output size
+- [x] Given output under limit, when execution completes, then full output retained
+- [x] Given output over limit, when execution completes, then output truncated to limit
+- [x] Given truncation occurs, when checking for promise, then detection still works (promise at end)
+- [x] Given truncation occurs, when verbose mode on, then warning logged
+- [x] Memory usage bounded regardless of output size
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Config option added
-- [ ] Truncation logic in executor
-- [ ] Warning on truncation
-- [ ] Tests for truncation behaviour
-- [ ] Tests for promise detection after truncation
+- [x] Feature complete in one atomic commit
+- [x] Config option added
+- [x] Truncation logic in executor
+- [x] Warning on truncation
+- [x] Tests for truncation behaviour
+- [x] Tests for promise detection after truncation
 
 **Dependencies**:
 - None
@@ -491,7 +491,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 - [x] PERF-6: Increase scanner buffer limit (prevents data loss)
 
 **Could Have (Sprint 3):**
-- [ ] PERF-5: Add configurable output retention limit (memory safety)
+- [x] PERF-5: Add configurable output retention limit (memory safety)
 - [ ] DESIGN-1: Add parser format validation and warnings (maintainability)
 
 **Won't Have:**
