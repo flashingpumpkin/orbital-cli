@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/flashingpumpkin/orbital/internal/tasks"
+	"github.com/flashingpumpkin/orbital/internal/util"
 )
 
 // Task is an alias to the shared tasks.Task type for TUI use.
@@ -155,12 +156,12 @@ func loadFileCmd(path string) tea.Cmd {
 // formatFileSize formats a file size in human-readable form.
 func formatFileSize(size int64) string {
 	if size < 1024 {
-		return intToString(int(size)) + " B"
+		return util.IntToString(int(size)) + " B"
 	}
 	if size < 1024*1024 {
-		return intToString(int(size/1024)) + " KB"
+		return util.IntToString(int(size/1024)) + " KB"
 	}
-	return intToString(int(size/(1024*1024))) + " MB"
+	return util.IntToString(int(size/(1024*1024))) + " MB"
 }
 
 // Update implements tea.Model.
@@ -364,7 +365,7 @@ func (m Model) handleTabClick(x int) (tea.Model, tea.Cmd) {
 		// Tab name with number prefix (must match renderTabBar logic)
 		name := tab.Name
 		if i < 9 {
-			name = intToString(i+1) + ":" + name
+			name = util.IntToString(i+1) + ":" + name
 		}
 		// Tab width is name length + 2 (for padding from style)
 		tabWidth := ansi.StringWidth(name) + 2
@@ -751,7 +752,7 @@ func (m Model) renderTabBar() string {
 		// Add number hint for keyboard navigation
 		name := tab.Name
 		if i < 9 {
-			name = intToString(i+1) + ":" + name
+			name = util.IntToString(i+1) + ":" + name
 		}
 
 		// Calculate tab width (name + padding from style)
@@ -862,7 +863,7 @@ func (m Model) renderFileContent(path string) string {
 		lineNum := lineIdx + 1
 
 		// Format line number (right-aligned, 5 chars)
-		numStr := intToString(lineNum)
+		numStr := util.IntToString(lineNum)
 		for len(numStr) < 5 {
 			numStr = " " + numStr
 		}
@@ -1178,8 +1179,8 @@ func (m Model) formatGateRetries(retries, max int) string {
 // formatTokens formats token counts with thousands separator.
 func (m Model) formatTokens(in, out int) string {
 	label := m.styles.Label.Render("Tokens: ")
-	inStr := m.styles.Value.Render(formatNumber(in))
-	outStr := m.styles.Value.Render(formatNumber(out))
+	inStr := m.styles.Value.Render(util.FormatNumber(in))
+	outStr := m.styles.Value.Render(util.FormatNumber(out))
 	return label + inStr + m.styles.Label.Render(" in / ") + outStr + m.styles.Label.Render(" out")
 }
 
@@ -1263,31 +1264,15 @@ func (m Model) formatPaths(label string, paths []string) string {
 		}
 		return labelStr + m.styles.Value.Render(path)
 	}
-	return labelStr + m.styles.Value.Render(formatNumber(len(paths))+" files")
+	return labelStr + m.styles.Value.Render(util.FormatNumber(len(paths))+" files")
 }
 
 // Helper functions for formatting
 
 func formatFraction(a, b int) string {
-	return intToString(a) + "/" + intToString(b)
+	return util.IntToString(a) + "/" + util.IntToString(b)
 }
 
-func formatNumber(n int) string {
-	// Simple thousands separator
-	s := intToString(n)
-	if len(s) <= 3 {
-		return s
-	}
-
-	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && (len(s)-i)%3 == 0 {
-			result.WriteRune(',')
-		}
-		result.WriteRune(r)
-	}
-	return result.String()
-}
 
 func formatCurrency(amount float64) string {
 	// Format as $X.XX with proper rounding
@@ -1295,29 +1280,9 @@ func formatCurrency(amount float64) string {
 	totalCents := int(amount*100 + 0.5)
 	whole := totalCents / 100
 	cents := totalCents % 100
-	return "$" + formatNumber(whole) + "." + padLeft(intToString(cents), 2, '0')
+	return "$" + util.FormatNumber(whole) + "." + padLeft(util.IntToString(cents), 2, '0')
 }
 
-func intToString(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	if n < 0 {
-		return "-" + intToString(-n)
-	}
-	var result strings.Builder
-	for n > 0 {
-		result.WriteString(string(rune('0' + n%10)))
-		n /= 10
-	}
-	// Reverse
-	s := result.String()
-	runes := []rune(s)
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
-	}
-	return string(runes)
-}
 
 func padLeft(s string, length int, pad rune) string {
 	for len(s) < length {

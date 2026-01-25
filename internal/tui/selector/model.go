@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/flashingpumpkin/orbital/internal/session"
+	"github.com/flashingpumpkin/orbital/internal/util"
 )
 
 // Result contains the outcome of the session selection.
@@ -433,7 +434,7 @@ func formatSpecs(specs []string) string {
 		}
 		return path
 	}
-	return intToString(len(specs)) + " files"
+	return util.IntToString(len(specs)) + " files"
 }
 
 // formatTimeAgo formats a time as relative duration.
@@ -450,40 +451,19 @@ func formatTimeAgo(t time.Time) string {
 		if mins == 1 {
 			return "1 minute ago"
 		}
-		return intToString(mins) + " minutes ago"
+		return util.IntToString(mins) + " minutes ago"
 	}
 	if d < 24*time.Hour {
 		hours := int(d.Hours())
 		if hours == 1 {
 			return "1 hour ago"
 		}
-		return intToString(hours) + " hours ago"
+		return util.IntToString(hours) + " hours ago"
 	}
 	days := int(d.Hours() / 24)
 	if days == 1 {
 		return "1 day ago"
 	}
-	return intToString(days) + " days ago"
+	return util.IntToString(days) + " days ago"
 }
 
-// intToString converts an integer to string without strconv.
-func intToString(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	if n < 0 {
-		return "-" + intToString(-n)
-	}
-	var result strings.Builder
-	for n > 0 {
-		result.WriteString(string(rune('0' + n%10)))
-		n /= 10
-	}
-	// Reverse
-	s := result.String()
-	runes := []rune(s)
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
-	}
-	return string(runes)
-}

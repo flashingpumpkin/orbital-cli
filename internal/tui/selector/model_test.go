@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/flashingpumpkin/orbital/internal/session"
+	"github.com/flashingpumpkin/orbital/internal/util"
 )
 
 // sendKey simulates a key press and returns the updated model.
@@ -528,7 +529,7 @@ func TestIntToString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
-			result := intToString(tt.input)
+			result := util.IntToString(tt.input)
 			if result != tt.expected {
 				t.Errorf("expected '%s', got '%s'", tt.expected, result)
 			}

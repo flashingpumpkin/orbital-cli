@@ -2,6 +2,8 @@ package tui
 
 import (
 	"testing"
+
+	"github.com/flashingpumpkin/orbital/internal/util"
 )
 
 func TestRingBuffer_NewRingBuffer(t *testing.T) {
@@ -86,7 +88,7 @@ func TestRingBuffer_Push_OverflowMultiple(t *testing.T) {
 
 	// Push 6 items, should only keep last 3
 	for i := 0; i < 6; i++ {
-		rb.Push(intToString(i))
+		rb.Push(util.IntToString(i))
 	}
 
 	if rb.Len() != 3 {
@@ -267,7 +269,7 @@ func TestRingBuffer_MemoryBound(t *testing.T) {
 
 	// Push 50000 lines
 	for i := 0; i < 50000; i++ {
-		rb.Push("line " + intToString(i))
+		rb.Push("line " + util.IntToString(i))
 	}
 
 	if rb.Len() != 10000 {

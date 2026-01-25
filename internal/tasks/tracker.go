@@ -5,6 +5,8 @@ package tasks
 import (
 	"encoding/json"
 	"sync"
+
+	"github.com/flashingpumpkin/orbital/internal/util"
 )
 
 // Task represents a single task item.
@@ -98,7 +100,7 @@ func (t *Tracker) handleTaskCreate(input string) []Task {
 	defer t.mu.Unlock()
 
 	// Generate a simple ID based on order
-	id := intToString(len(t.order) + 1)
+	id := util.IntToString(len(t.order) + 1)
 
 	task := &Task{
 		ID:         id,
@@ -168,7 +170,7 @@ func (t *Tracker) handleTodoWrite(input string) []Task {
 			continue
 		}
 
-		id := intToString(i + 1)
+		id := util.IntToString(i + 1)
 		task := &Task{
 			ID:         id,
 			Content:    todo.Content,
@@ -246,18 +248,3 @@ func (t *Tracker) Clear() {
 	t.order = make([]string, 0)
 }
 
-// intToString converts an integer to a string without fmt dependency.
-func intToString(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	if n < 0 {
-		return "-" + intToString(-n)
-	}
-	var result []byte
-	for n > 0 {
-		result = append([]byte{byte('0' + n%10)}, result...)
-		n /= 10
-	}
-	return string(result)
-}

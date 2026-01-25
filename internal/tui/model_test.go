@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/flashingpumpkin/orbital/internal/util"
 )
 
 func TestNewModel(t *testing.T) {
@@ -208,9 +209,9 @@ func TestFormatNumber(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := formatNumber(tt.input)
+		got := util.FormatNumber(tt.input)
 		if got != tt.want {
-			t.Errorf("formatNumber(%d) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("util.FormatNumber(%d) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
@@ -443,7 +444,7 @@ func TestRenderScrollAreaRespectScrollState(t *testing.T) {
 
 		// Add many lines
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Ensure we're tailing (default)
@@ -469,7 +470,7 @@ func TestRenderScrollAreaRespectScrollState(t *testing.T) {
 
 		// Add many lines
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Set scroll to 0 (top)
@@ -498,7 +499,7 @@ func TestRenderScrollAreaRespectScrollState(t *testing.T) {
 
 		// Add many lines
 		for i := 0; i < 100; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Set scroll to middle
@@ -530,7 +531,7 @@ func TestRenderScrollAreaRespectScrollState(t *testing.T) {
 
 		// Add only 10 lines
 		for i := 0; i < 10; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Set scroll to invalid high value
@@ -585,7 +586,7 @@ func TestScrollUpOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling (more than viewport height)
 		for i := 0; i < 30; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Verify initial state: tailing is true
@@ -624,7 +625,7 @@ func TestScrollUpOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 30; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Scroll up once to unlock tailing
@@ -653,7 +654,7 @@ func TestScrollUpOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 30; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Manually set scroll to top
@@ -680,7 +681,7 @@ func TestScrollUpOutputTab(t *testing.T) {
 
 		// Add only a few lines (less than viewport)
 		for i := 0; i < 5; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Press up arrow
@@ -747,7 +748,7 @@ func TestScrollDownOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 30; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Verify initial state: tailing is true
@@ -781,7 +782,7 @@ func TestScrollDownOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 30; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Scroll up to unlock tailing
@@ -822,7 +823,7 @@ func TestScrollDownOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 30; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Scroll up to unlock tailing
@@ -856,7 +857,7 @@ func TestScrollDownOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 30; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Verify we're tailing
@@ -925,7 +926,7 @@ func TestScrollPageUpOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling (more than 2 pages)
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Verify initial state: tailing is true
@@ -967,7 +968,7 @@ func TestScrollPageUpOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Manually set scroll position near top
@@ -995,7 +996,7 @@ func TestScrollPageUpOutputTab(t *testing.T) {
 
 		// Add only a few lines (less than viewport)
 		for i := 0; i < 5; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Press page up
@@ -1058,7 +1059,7 @@ func TestScrollPageDownOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Verify initial state: tailing is true
@@ -1087,7 +1088,7 @@ func TestScrollPageDownOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 100; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Manually set scroll position near top
@@ -1124,7 +1125,7 @@ func TestScrollPageDownOutputTab(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Calculate max offset
@@ -1509,7 +1510,7 @@ func TestWindowResizeScrollClamping(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Scroll to a specific position
@@ -1542,7 +1543,7 @@ func TestWindowResizeScrollClamping(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Calculate max offset for initial size
@@ -1582,7 +1583,7 @@ func TestWindowResizeScrollClamping(t *testing.T) {
 
 		// Add only 10 lines (less than what will fit in larger terminal)
 		for i := 0; i < 10; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Scroll up to unlock tailing
@@ -1615,7 +1616,7 @@ func TestWindowResizeScrollClamping(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Verify we're tailing (default)
@@ -1722,7 +1723,7 @@ func TestWrappedLinesCaching(t *testing.T) {
 
 		// Add enough lines to enable scrolling
 		for i := 0; i < 50; i++ {
-			model.AppendOutput("Line " + intToString(i+1))
+			model.AppendOutput("Line " + util.IntToString(i+1))
 		}
 
 		// Get the wrapped lines
@@ -1840,7 +1841,7 @@ func TestWrappedLinesCaching(t *testing.T) {
 
 		// Add many lines
 		for i := 0; i < 5000; i++ {
-			model.AppendOutput("Line " + intToString(i+1) + " with some additional content to make it longer")
+			model.AppendOutput("Line " + util.IntToString(i+1) + " with some additional content to make it longer")
 		}
 
 		// Scroll up to unlock tailing

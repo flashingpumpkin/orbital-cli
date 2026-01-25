@@ -10,6 +10,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/flashingpumpkin/orbital/internal/output"
 	"github.com/flashingpumpkin/orbital/internal/tasks"
+	"github.com/flashingpumpkin/orbital/internal/util"
 )
 
 // Default message queue size. Large enough to handle bursts without blocking,
@@ -409,10 +410,7 @@ func formatResultLine(stats *output.OutputStats) string {
 
 // formatInt formats an integer with thousands separator.
 func formatInt(n int) string {
-	if n < 1000 {
-		return intToString(n)
-	}
-	return formatNumber(n)
+	return util.FormatNumber(n)
 }
 
 // formatFloat formats a float with 4 decimal places.
@@ -423,7 +421,7 @@ func formatFloat(f float64) string {
 	if frac < 0 {
 		frac = -frac
 	}
-	return intToString(whole) + "." + padLeft(intToString(frac), 4, '0')
+	return util.IntToString(whole) + "." + padLeft(util.IntToString(frac), 4, '0')
 }
 
 // GetParser returns the parser for external access to stats.
