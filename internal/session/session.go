@@ -1,31 +1,27 @@
-// Package session provides unified session management for orbital.
-// It abstracts over worktree and regular sessions, providing a common
-// interface for session discovery, validation, and selection.
+// Package session provides session management for orbital.
+// It provides an interface for session discovery, validation, and selection.
 package session
 
 import (
 	"time"
 
 	"github.com/flashingpumpkin/orbital/internal/state"
-	"github.com/flashingpumpkin/orbital/internal/worktree"
 )
 
 // SessionType distinguishes between session sources.
 type SessionType int
 
 const (
-	// SessionTypeRegular represents a non-worktree session.
+	// SessionTypeRegular represents a regular session.
 	SessionTypeRegular SessionType = iota
-	// SessionTypeWorktree represents a git worktree session.
-	SessionTypeWorktree
 )
 
-// Session represents a resumable orbital session (worktree or regular).
+// Session represents a resumable orbital session.
 type Session struct {
 	// ID is the Claude session ID for resumption.
 	ID string
 
-	// Type indicates whether this is a worktree or regular session.
+	// Type indicates the session type.
 	Type SessionType
 
 	// Name is a display name for the session.
@@ -43,10 +39,7 @@ type Session struct {
 	// InvalidReason explains why the session is invalid (if Valid is false).
 	InvalidReason string
 
-	// WorktreeState holds the underlying worktree state (if Type is SessionTypeWorktree).
-	WorktreeState *worktree.WorktreeState
-
-	// RegularState holds the underlying regular state (if Type is SessionTypeRegular).
+	// RegularState holds the underlying regular state.
 	RegularState *state.State
 }
 
@@ -55,33 +48,21 @@ func (s *Session) DisplayName() string {
 	if s.Name != "" {
 		return s.Name
 	}
-	if s.Type == SessionTypeWorktree {
-		return "Unnamed worktree"
-	}
 	return "Main session"
 }
 
-// TypeLabel returns "worktree" or "regular".
+// TypeLabel returns the session type label.
 func (s *Session) TypeLabel() string {
-	if s.Type == SessionTypeWorktree {
-		return "worktree"
-	}
 	return "regular"
 }
 
-// Branch returns the git branch name for worktree sessions, or empty string for regular sessions.
+// Branch returns an empty string (no branch for regular sessions).
 func (s *Session) Branch() string {
-	if s.Type == SessionTypeWorktree && s.WorktreeState != nil {
-		return s.WorktreeState.Branch
-	}
 	return ""
 }
 
 // Path returns the working directory path for the session.
 func (s *Session) Path() string {
-	if s.Type == SessionTypeWorktree && s.WorktreeState != nil {
-		return s.WorktreeState.Path
-	}
 	if s.RegularState != nil {
 		return s.RegularState.WorkingDir
 	}

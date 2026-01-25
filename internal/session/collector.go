@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/flashingpumpkin/orbital/internal/state"
-	"github.com/flashingpumpkin/orbital/internal/worktree"
 )
 
 // Collector gathers all available sessions from a working directory.
@@ -18,15 +17,8 @@ func NewCollector(workingDir string) *Collector {
 }
 
 // Collect returns all sessions (valid and invalid) from the working directory.
-// This includes both worktree sessions and regular sessions.
 func (c *Collector) Collect() ([]Session, error) {
 	var sessions []Session
-
-	// Collect worktree sessions
-	wtSessions, err := c.collectWorktreeSessions()
-	if err == nil {
-		sessions = append(sessions, wtSessions...)
-	}
 
 	// Collect regular session
 	regSession, err := c.collectRegularSession()
@@ -40,40 +32,6 @@ func (c *Collector) Collect() ([]Session, error) {
 		if queueSession != nil {
 			sessions = append(sessions, *queueSession)
 		}
-	}
-
-	return sessions, nil
-}
-
-// collectWorktreeSessions gathers all worktree-based sessions.
-func (c *Collector) collectWorktreeSessions() ([]Session, error) {
-	wtMgr := worktree.NewStateManager(c.workingDir)
-	worktrees, err := wtMgr.List()
-	if err != nil {
-		return nil, err
-	}
-
-	var sessions []Session
-	for i := range worktrees {
-		wt := worktrees[i]
-		s := Session{
-			ID:            wt.SessionID,
-			Type:          SessionTypeWorktree,
-			Name:          wt.Name,
-			SpecFiles:     wt.SpecFiles,
-			CreatedAt:     wt.CreatedAt,
-			WorktreeState: &wt,
-		}
-
-		// Validate the worktree
-		if err := worktree.ValidateWorktree(&wt); err != nil {
-			s.Valid = false
-			s.InvalidReason = err.Error()
-		} else {
-			s.Valid = true
-		}
-
-		sessions = append(sessions, s)
 	}
 
 	return sessions, nil

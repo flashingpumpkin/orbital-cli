@@ -6,7 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/flashingpumpkin/orbital/internal/session"
-	"github.com/flashingpumpkin/orbital/internal/worktree"
 )
 
 // sendKey simulates a key press and returns the updated model.
@@ -262,10 +261,7 @@ func TestCleanupDialogEsc(t *testing.T) {
 
 func TestCleanupDialogYesShortcut(t *testing.T) {
 	sessions := []session.Session{
-		{ID: "1", Name: "invalid-session", Valid: false, InvalidReason: "test",
-			Type:          session.SessionTypeWorktree,
-			WorktreeState: &worktree.WorktreeState{Path: "/test/path"},
-		},
+		{ID: "1", Name: "invalid-session", Valid: false, InvalidReason: "test"},
 	}
 	m := New(sessions)
 	m = sendWindowSize(m, 80, 24)
@@ -276,9 +272,6 @@ func TestCleanupDialogYesShortcut(t *testing.T) {
 
 	if m.showCleanup {
 		t.Error("expected cleanup dialog to be closed")
-	}
-	if len(m.result.CleanupPaths) != 1 {
-		t.Errorf("expected 1 cleanup path, got %d", len(m.result.CleanupPaths))
 	}
 	if len(m.sessions) != 0 {
 		t.Errorf("expected session to be removed, got %d sessions", len(m.sessions))
@@ -309,10 +302,7 @@ func TestCleanupDialogNoShortcut(t *testing.T) {
 
 func TestCleanupConfirmYes(t *testing.T) {
 	sessions := []session.Session{
-		{ID: "1", Name: "invalid-session", Valid: false, InvalidReason: "test",
-			Type:          session.SessionTypeWorktree,
-			WorktreeState: &worktree.WorktreeState{Path: "/test/path"},
-		},
+		{ID: "1", Name: "invalid-session", Valid: false, InvalidReason: "test"},
 		{ID: "2", Name: "valid-session", Valid: true},
 	}
 	m := New(sessions)
@@ -331,10 +321,6 @@ func TestCleanupConfirmYes(t *testing.T) {
 	}
 	if m.sessions[0].ID != "2" {
 		t.Errorf("expected remaining session to be '2', got '%s'", m.sessions[0].ID)
-	}
-	// Cleanup paths should contain the removed worktree path
-	if len(m.result.CleanupPaths) != 1 {
-		t.Errorf("expected 1 cleanup path, got %d", len(m.result.CleanupPaths))
 	}
 }
 
@@ -444,7 +430,7 @@ func TestViewSessionList(t *testing.T) {
 
 func TestViewCleanupDialog(t *testing.T) {
 	sessions := []session.Session{
-		{ID: "1", Name: "stale-session", Valid: false, InvalidReason: "Worktree not found"},
+		{ID: "1", Name: "stale-session", Valid: false, InvalidReason: "Session not found"},
 	}
 	m := New(sessions)
 	m = sendWindowSize(m, 80, 24)
@@ -458,7 +444,7 @@ func TestViewCleanupDialog(t *testing.T) {
 	if !containsString(view, "stale-session") {
 		t.Error("expected view to contain session name")
 	}
-	if !containsString(view, "Worktree not found") {
+	if !containsString(view, "Session not found") {
 		t.Error("expected view to contain invalid reason")
 	}
 	if !containsString(view, "Yes, remove") {

@@ -24,7 +24,6 @@ import (
 	"github.com/flashingpumpkin/orbital/internal/tasks"
 	"github.com/flashingpumpkin/orbital/internal/tui"
 	"github.com/flashingpumpkin/orbital/internal/workflow"
-	"github.com/flashingpumpkin/orbital/internal/worktree"
 	"golang.org/x/term"
 )
 
@@ -49,16 +48,11 @@ var (
 	agents              string
 	notesFile           string
 	contextFiles        []string
-	workflowFlag        string
-	minimal             bool
-	worktreeMode        bool
-	worktreeName        string
-	setupModel          string
-	mergeModel          string
-	continueWorktree    string
-	nonInteractive      bool
-	dangerous           bool
-	maxOutputSize       int
+	workflowFlag   string
+	minimal        bool
+	nonInteractive bool
+	dangerous      bool
+	maxOutputSize  int
 )
 
 var rootCmd = &cobra.Command{
@@ -94,7 +88,6 @@ func init() {
 	rootCmd.AddCommand(continueCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(worktreeCmd)
 
 	// Register persistent flags (inherited by subcommands like 'continue')
 	rootCmd.PersistentFlags().IntVarP(&iterations, "iterations", "n", 50, "Maximum number of loop iterations")
@@ -118,11 +111,6 @@ func init() {
 	rootCmd.PersistentFlags().StringArrayVar(&contextFiles, "context", []string{}, "Additional context file (can be repeated)")
 	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: fast, spec-driven (default), reviewed, tdd")
 	rootCmd.PersistentFlags().BoolVar(&minimal, "minimal", false, "Use minimal output mode (no TUI)")
-	rootCmd.PersistentFlags().BoolVar(&worktreeMode, "worktree", false, "Enable worktree isolation mode")
-	rootCmd.PersistentFlags().StringVar(&worktreeName, "worktree-name", "", "Override Claude's worktree name choice")
-	rootCmd.PersistentFlags().StringVar(&setupModel, "setup-model", "haiku", "Model for worktree setup phase")
-	rootCmd.PersistentFlags().StringVar(&mergeModel, "merge-model", "haiku", "Model for worktree merge phase")
-	rootCmd.PersistentFlags().StringVar(&continueWorktree, "continue-worktree", "", "Specify worktree name to resume (for continue command)")
 	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "Error if interactive selection would be needed")
 	rootCmd.PersistentFlags().BoolVar(&dangerous, "dangerous", false, "Enable --dangerously-skip-permissions for Claude CLI (allows execution without permission prompts)")
 	rootCmd.PersistentFlags().IntVar(&maxOutputSize, "max-output-size", config.DefaultMaxOutputSize, "Maximum output size in bytes to retain (0 = unlimited)")
@@ -256,87 +244,6 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to validate files: %w", err)
 	}
 
-	// Worktree mode: run setup phase and persist state
-	var wtState *worktree.WorktreeState
-	var wtStateManager *worktree.StateManager
-	var originalBranch string
-
-	if worktreeMode {
-		// Create formatter for setup phase output
-		setupFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
-
-		// Get original branch before setup
-		originalBranch, err = worktree.GetCurrentBranch(workingDir)
-		if err != nil {
-			return fmt.Errorf("failed to get current branch: %w", err)
-		}
-
-		// Print setup header
-		setupFormatter.PrintWorktreeSetupStart(output.WorktreeSetupConfig{
-			OriginalBranch: originalBranch,
-			Model:          setupModel,
-			SpecFile:       specPath,
-		})
-
-		// Start spinner
-		setupFormatter.StartWorktreeSetupSpinner()
-
-		// Read spec content for setup prompt
-		specContent := sp.BuildPrompt()
-
-		// Run setup phase
-		setupStart := time.Now()
-		setupResult, err := runWorktreeSetup(context.Background(), specContent, worktreeSetupOptions{
-			workingDir:   workingDir,
-			model:        setupModel,
-			worktreeName: worktreeName,
-		})
-		setupDuration := time.Since(setupStart)
-
-		if err != nil {
-			setupFormatter.PrintWorktreeSetupError(err)
-			return fmt.Errorf("worktree setup failed: %w", err)
-		}
-
-		// Print success
-		setupFormatter.PrintWorktreeSetupComplete(output.WorktreeSetupResult{
-			WorktreePath: setupResult.WorktreePath,
-			BranchName:   setupResult.BranchName,
-			Cost:         setupResult.CostUSD,
-			TokensIn:     setupResult.TokensIn,
-			TokensOut:    setupResult.TokensOut,
-			Duration:     setupDuration,
-		})
-
-		// Persist worktree state
-		// Extract the name from the worktree path (last segment after .orbital/worktrees/)
-		worktreeName := filepath.Base(setupResult.WorktreePath)
-		if worktreeName == "" || worktreeName == "." {
-			// Safety check: if filepath.Base returns unexpected value, clean up and fail
-			_ = worktree.RemoveWorktree(workingDir, setupResult.WorktreePath)
-			return fmt.Errorf("invalid worktree path: %s", setupResult.WorktreePath)
-		}
-		wtStateManager = worktree.NewStateManager(workingDir)
-		wtState = &worktree.WorktreeState{
-			Name:           worktreeName,
-			Path:           setupResult.WorktreePath,
-			Branch:         setupResult.BranchName,
-			OriginalBranch: originalBranch,
-			SpecFiles:      absFilePaths,
-		}
-		if err := wtStateManager.Add(*wtState); err != nil {
-			// CRITICAL: Clean up the worktree we just created to avoid orphans
-			cleanupErr := worktree.RemoveWorktree(workingDir, setupResult.WorktreePath)
-			if cleanupErr != nil {
-				return fmt.Errorf("failed to persist worktree state: %w (cleanup also failed: %v)", err, cleanupErr)
-			}
-			return fmt.Errorf("failed to persist worktree state: %w (worktree cleaned up)", err)
-		}
-
-		// Update working directory to worktree
-		cfg.WorkingDir = setupResult.WorktreePath
-	}
-
 	// Create completion detector
 	detector := completion.New(cfg.CompletionPromise)
 
@@ -372,19 +279,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			MaxIteration: cfg.MaxIterations,
 			Budget:       cfg.MaxBudget,
 		}
-		// Pass worktree info to New() if worktree mode is active.
-		// We must pass it at creation time rather than via SendWorktree
-		// because tea.Program.Send() blocks until the program is running,
-		// which would cause a deadlock.
-		if worktreeMode && wtState != nil {
-			tuiProgram = tui.New(session, progress, tui.WorktreeInfo{
-				Name:   wtState.Name,
-				Path:   wtState.Path,
-				Branch: wtState.Branch,
-			})
-		} else {
-			tuiProgram = tui.New(session, progress)
-		}
+		tuiProgram = tui.New(session, progress)
 		exec.SetStreamWriter(tuiProgram.Bridge())
 	} else if cfg.Verbose || cfg.ShowUnhandled || todosOnly {
 		// Minimal/verbose mode: formatted output
@@ -550,11 +445,6 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		// On error or interrupt, preserve state for resume
 		// State is already saved by iteration callback, so no action needed
-		if worktreeMode && wtState != nil {
-			// Preserve worktree on error/interrupt
-			wtFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
-			wtFormatter.PrintWorktreePreserved(wtState.Path)
-		}
 		switch err {
 		case loop.ErrMaxIterationsReached:
 			os.Exit(1)
@@ -569,63 +459,10 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 				summaryFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
 				printSummary(summaryFormatter, loopState)
 			}
-			if worktreeMode && wtState != nil {
-				wtFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
-				wtFormatter.PrintWorktreePreserved(wtState.Path)
-			}
 			fmt.Println("Session state preserved. Run 'orbital continue' to resume.")
 			os.Exit(130)
 		default:
 			os.Exit(4)
-		}
-	}
-
-	// Worktree mode: run merge phase and cleanup
-	if worktreeMode && wtState != nil {
-		mergeFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
-
-		// Print merge header
-		mergeFormatter.PrintWorktreeMergeStart(wtState.Path, wtState.Branch, wtState.OriginalBranch)
-
-		// Start spinner
-		mergeFormatter.StartWorktreeMergeSpinner()
-
-		// Run merge phase
-		mergeResult, mergeErr := runWorktreeMerge(ctx, worktreeMergeOptions{
-			model:          mergeModel,
-			worktreePath:   wtState.Path,
-			branchName:     wtState.Branch,
-			originalBranch: wtState.OriginalBranch,
-		})
-
-		mergeFormatter.StopSpinner()
-
-		if mergeErr != nil {
-			fmt.Fprintf(os.Stderr, "  ✗ Merge phase failed: %v\n", mergeErr)
-			mergeFormatter.PrintWorktreePreserved(wtState.Path)
-			os.Exit(4)
-		}
-
-		if !mergeResult.Success {
-			fmt.Fprintln(os.Stderr, "  ✗ Merge phase did not complete successfully.")
-			mergeFormatter.PrintWorktreePreserved(wtState.Path)
-			os.Exit(4)
-		}
-
-		// Print merge success
-		mergeFormatter.PrintWorktreeMergeComplete(mergeResult.CostUSD, mergeResult.TokensIn, mergeResult.TokensOut)
-
-		// Cleanup worktree and branch
-		cleanup := worktree.NewCleanup(workingDir)
-		if err := cleanup.Run(ctx, wtState.Path, wtState.Branch); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup worktree: %v\n", err)
-		} else {
-			mergeFormatter.PrintWorktreeCleanupComplete()
-		}
-
-		// Remove worktree state entry
-		if err := wtStateManager.Remove(wtState.Path); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to remove worktree state: %v\n", err)
 		}
 	}
 
@@ -1159,108 +996,4 @@ func runVerification(ctx context.Context, cfg *config.Config, specFiles []string
 		Cost:      result.CostUSD,
 		Tokens:    result.TokensIn + result.TokensOut,
 	}, nil
-}
-
-// worktreeExecutorAdapter adapts executor.Executor to worktree.Executor interface.
-type worktreeExecutorAdapter struct {
-	exec *executor.Executor
-}
-
-// Execute implements worktree.Executor.
-func (a *worktreeExecutorAdapter) Execute(ctx context.Context, prompt string) (*worktree.ExecutionResult, error) {
-	result, err := a.exec.Execute(ctx, prompt)
-	if err != nil {
-		return nil, err
-	}
-	return &worktree.ExecutionResult{
-		Output:    result.Output,
-		CostUSD:   result.CostUSD,
-		TokensIn:  result.TokensIn,
-		TokensOut: result.TokensOut,
-	}, nil
-}
-
-// runWorktreeSetup runs the worktree setup phase using local name generation.
-// This does NOT invoke Claude - it generates a name locally and creates the worktree directly.
-func runWorktreeSetup(ctx context.Context, specContent string, opts worktreeSetupOptions) (*worktree.SetupResult, error) {
-	// Check that we're in a git repository
-	if err := worktree.CheckGitRepository(opts.workingDir); err != nil {
-		return nil, fmt.Errorf("worktree mode requires a git repository: %w", err)
-	}
-
-	// Determine the worktree name
-	var name string
-	if opts.worktreeName != "" {
-		// Use the user-provided name
-		name = opts.worktreeName
-	} else {
-		// Generate a unique name locally
-		existingNames, err := worktree.ListWorktreeNames(opts.workingDir)
-		if err != nil {
-			// Non-fatal - just use an empty exclusion list
-			existingNames = nil
-		}
-		name = worktree.GenerateUniqueName(existingNames)
-	}
-
-	// Create the worktree using direct git commands
-	if err := worktree.CreateWorktree(opts.workingDir, name); err != nil {
-		return nil, fmt.Errorf("failed to create worktree: %w", err)
-	}
-
-	// CRITICAL: Convert to absolute path immediately after creation.
-	// The worktree path must be absolute to work correctly regardless of
-	// working directory changes during execution.
-	relPath := worktree.WorktreePath(name)
-	absPath, err := filepath.Abs(filepath.Join(opts.workingDir, relPath))
-	if err != nil {
-		// Clean up the worktree we just created since we can't use it
-		_ = worktree.RemoveWorktree(opts.workingDir, relPath)
-		return nil, fmt.Errorf("failed to get absolute worktree path: %w", err)
-	}
-
-	return &worktree.SetupResult{
-		WorktreePath: absPath,
-		BranchName:   worktree.BranchName(name),
-		// No cost since we don't invoke Claude
-		CostUSD:   0,
-		TokensIn:  0,
-		TokensOut: 0,
-	}, nil
-}
-
-// worktreeSetupOptions contains options for worktree setup.
-type worktreeSetupOptions struct {
-	workingDir   string
-	model        string
-	worktreeName string
-}
-
-// runWorktreeMerge runs the worktree merge phase.
-func runWorktreeMerge(ctx context.Context, opts worktreeMergeOptions) (*worktree.MergeResult, error) {
-	// Create executor for merge phase
-	mergeCfg := &config.Config{
-		Model:     opts.model,
-		MaxBudget: 10.0, // Reasonable budget for merge
-	}
-	mergeExec := executor.New(mergeCfg)
-	adapter := &worktreeExecutorAdapter{exec: mergeExec}
-
-	// Run merge
-	merge := worktree.NewMerge(adapter)
-	mergeOpts := worktree.MergeOptions{
-		WorktreePath:   opts.worktreePath,
-		BranchName:     opts.branchName,
-		OriginalBranch: opts.originalBranch,
-	}
-
-	return merge.Run(ctx, mergeOpts)
-}
-
-// worktreeMergeOptions contains options for worktree merge.
-type worktreeMergeOptions struct {
-	model          string
-	worktreePath   string
-	branchName     string
-	originalBranch string
 }

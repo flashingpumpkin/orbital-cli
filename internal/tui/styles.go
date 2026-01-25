@@ -7,16 +7,14 @@ import "github.com/charmbracelet/lipgloss"
 // These constants define the visual identity of the Orbital TUI.
 const (
 	// Primary colours
-	ColourAmber       = lipgloss.Color("214") // #FFB000 - Headers, active states, borders
-	ColourAmberDim    = lipgloss.Color("136") // #996600 - Inactive borders, separators
-	ColourAmberLight  = lipgloss.Color("222") // #FFD966 - Body text, values
-	ColourAmberFaded  = lipgloss.Color("178") // #B38F00 - Labels, secondary text
-	ColourBackground  = lipgloss.Color("0")   // #000000 - Terminal background
-	ColourSuccess     = lipgloss.Color("82")  // #00FF00 - Completed tasks, valid states
-	ColourWarning     = lipgloss.Color("208") // #FFAA00 - >80% budget/iterations
-	ColourError       = lipgloss.Color("196") // #FF3300 - Errors, invalid states
-	ColourWorktree    = lipgloss.Color("141") // Purple - Worktree label accent
-	ColourWorktreeVal = lipgloss.Color("183") // Light purple - Worktree values
+	ColourAmber      = lipgloss.Color("214") // #FFB000 - Headers, active states, borders
+	ColourAmberDim   = lipgloss.Color("136") // #996600 - Inactive borders, separators
+	ColourAmberLight = lipgloss.Color("222") // #FFD966 - Body text, values
+	ColourAmberFaded = lipgloss.Color("178") // #B38F00 - Labels, secondary text
+	ColourBackground = lipgloss.Color("0")   // #000000 - Terminal background
+	ColourSuccess    = lipgloss.Color("82")  // #00FF00 - Completed tasks, valid states
+	ColourWarning    = lipgloss.Color("208") // #FFAA00 - >80% budget/iterations
+	ColourError      = lipgloss.Color("196") // #FF3300 - Errors, invalid states
 )
 
 // Box drawing characters for the UI frame.
@@ -58,7 +56,6 @@ const (
 	IconError      = "✗"
 	IconValid      = "✓"
 	IconWarning    = "⚠"
-	IconWorktree   = "⎇"
 	IconBrand      = "◆"
 )
 
@@ -86,10 +83,6 @@ type Styles struct {
 	// Special areas
 	ScrollArea      lipgloss.Style
 	TooSmallMessage lipgloss.Style
-
-	// Worktree styling
-	WorktreeLabel lipgloss.Style
-	WorktreeValue lipgloss.Style
 
 	// Tab bar
 	TabActive   lipgloss.Style
@@ -129,10 +122,6 @@ func defaultStyles() Styles {
 		// Special areas
 		ScrollArea:      lipgloss.NewStyle(),
 		TooSmallMessage: lipgloss.NewStyle().Foreground(ColourWarning).Bold(true),
-
-		// Worktree styling
-		WorktreeLabel: lipgloss.NewStyle().Foreground(ColourWorktree).Bold(true),
-		WorktreeValue: lipgloss.NewStyle().Foreground(ColourWorktreeVal),
 
 		// Tab bar - active tab with amber background
 		TabActive:   lipgloss.NewStyle().Foreground(ColourBackground).Background(ColourAmber).Bold(true).Padding(0, 1),

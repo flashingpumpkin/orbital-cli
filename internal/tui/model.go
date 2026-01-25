@@ -71,7 +71,6 @@ type Model struct {
 	tasks       []Task
 	progress    ProgressInfo
 	session     SessionInfo
-	worktree    WorktreeInfo
 
 	// Tabs
 	tabs         []Tab             // List of tabs
@@ -168,7 +167,7 @@ func formatFileSize(size int64) string {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks), m.worktree.Path != "")
+		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks))
 		m.ready = true
 
 		// Invalidate wrapped lines cache since width may have changed
@@ -209,7 +208,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TasksMsg:
 		m.tasks = msg
 		if m.ready {
-			m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks), m.worktree.Path != "")
+			m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks))
 		}
 		return m, nil
 
@@ -223,13 +222,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Clamp activeTab to valid range if tabs changed
 		if m.activeTab >= len(m.tabs) {
 			m.activeTab = 0
-		}
-		return m, nil
-
-	case WorktreeMsg:
-		m.worktree = WorktreeInfo(msg)
-		if m.ready {
-			m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks), m.worktree.Path != "")
 		}
 		return m, nil
 
@@ -675,12 +667,6 @@ func (m Model) renderFull() string {
 
 	// Session info panel
 	sections = append(sections, m.renderSessionPanel())
-
-	// Worktree panel (if worktree mode is active)
-	if m.layout.WorktreePanelHeight > 0 {
-		sections = append(sections, RenderDoubleBorder(m.layout.Width, m.styles.Border))
-		sections = append(sections, m.renderWorktreePanel())
-	}
 
 	// Bottom border
 	sections = append(sections, RenderBottomBorder(m.layout.Width, m.styles.Border))
@@ -1253,46 +1239,6 @@ func (m Model) renderSessionPanel() string {
 	return line1 + "\n" + line2
 }
 
-// renderWorktreePanel renders the worktree info panel.
-func (m Model) renderWorktreePanel() string {
-	w := m.worktree
-	contentWidth := m.layout.ContentWidth()
-	border := m.styles.Border.Render(BoxVertical)
-
-	// Icon and label
-	icon := m.styles.WorktreeLabel.Render(IconWorktree)
-
-	// If name is available, show it prominently
-	var nameStr string
-	var nameWidth int
-	if w.Name != "" {
-		nameStr = m.styles.WorktreeLabel.Render(" Worktree: ") + m.styles.WorktreeValue.Render(w.Name)
-		nameWidth = len(" Worktree: ") + len(w.Name)
-	} else {
-		// Fallback to path if no name
-		path := w.Path
-		maxPathLen := 40
-		if len(path) > maxPathLen {
-			path = "..." + path[len(path)-maxPathLen+3:]
-		}
-		nameStr = m.styles.WorktreeLabel.Render(" Worktree: ") + m.styles.WorktreeValue.Render(path)
-		nameWidth = len(" Worktree: ") + len(path)
-	}
-
-	// Branch
-	branchLabel := m.styles.Label.Render(" " + InnerVertical + " Branch: ")
-	branchStr := m.styles.WorktreeValue.Render(w.Branch)
-
-	lineContent := " " + icon + nameStr + branchLabel + branchStr
-	lineWidth := 1 + 1 + nameWidth + len(" "+InnerVertical+" Branch: ") + len(w.Branch)
-	padding := contentWidth - lineWidth
-	if padding < 0 {
-		padding = 0
-	}
-
-	return border + lineContent + strings.Repeat(" ", padding) + border
-}
-
 // formatPath formats a single file path with truncation.
 func (m Model) formatPath(label, path string) string {
 	labelStr := m.styles.Label.Render(label + ": ")
@@ -1525,16 +1471,7 @@ func (m *Model) SetTasks(tasks []Task) {
 	m.tasks = tasks
 	// Recalculate layout with new task count
 	if m.ready {
-		m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(tasks), m.worktree.Path != "")
-	}
-}
-
-// SetWorktree updates the worktree information.
-func (m *Model) SetWorktree(w WorktreeInfo) {
-	m.worktree = w
-	// Recalculate layout when worktree info changes
-	if m.ready {
-		m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(m.tasks), w.Path != "")
+		m.layout = CalculateLayout(m.layout.Width, m.layout.Height, len(tasks))
 	}
 }
 

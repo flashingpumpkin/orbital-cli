@@ -15,11 +15,9 @@ type Program struct {
 	tracker *TaskTracker
 }
 
-// New creates a new TUI program with the given initial session, progress, and optional worktree info.
+// New creates a new TUI program with the given initial session and progress.
 // Returns the Program wrapper which provides access to both the tea.Program and Bridge.
-// Worktree info must be passed at creation time (not via SendWorktree) to avoid deadlock,
-// since tea.Program.Send() blocks until the program is running.
-func New(session SessionInfo, progress ProgressInfo, worktree ...WorktreeInfo) *Program {
+func New(session SessionInfo, progress ProgressInfo) *Program {
 	// Handle NO_COLOR environment variable
 	if os.Getenv("NO_COLOR") != "" {
 		lipgloss.SetColorProfile(termenv.Ascii)
@@ -30,9 +28,6 @@ func New(session SessionInfo, progress ProgressInfo, worktree ...WorktreeInfo) *
 	model.session = session
 	model.tabs = model.buildTabs()
 	model.progress = progress
-	if len(worktree) > 0 {
-		model.worktree = worktree[0]
-	}
 
 	// Create task tracker
 	tracker := NewTaskTracker()
@@ -83,13 +78,6 @@ func (p *Program) SendProgress(progress ProgressInfo) {
 // SendSession sends session info to the program.
 func (p *Program) SendSession(session SessionInfo) {
 	p.program.Send(SessionMsg(session))
-}
-
-// SendWorktree sends worktree info to the program.
-// NOTE: This should only be called after the program is running (after Run() is called
-// in a goroutine). For initial worktree setup, pass worktree info to New() instead.
-func (p *Program) SendWorktree(worktree WorktreeInfo) {
-	p.program.Send(WorktreeMsg(worktree))
 }
 
 // Kill forcefully terminates the program.

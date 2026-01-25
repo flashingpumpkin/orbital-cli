@@ -21,9 +21,6 @@ const (
 	// TaskPanelMaxHeight is the maximum height for the task list panel.
 	TaskPanelMaxHeight = 6
 
-	// WorktreePanelHeight is the height of the worktree info panel (path, branch).
-	WorktreePanelHeight = 1
-
 	// TabBarHeight is the height of the tab bar at the top.
 	TabBarHeight = 1
 
@@ -32,7 +29,7 @@ const (
 
 	// BorderHeight is the total height used by horizontal borders between panels.
 	// Includes: top border, after header, after tab bar, before tasks, after tasks,
-	// before progress, after progress, before session, before worktree (if active), bottom border.
+	// before progress, after progress, before session, bottom border.
 	BorderHeight = 6
 )
 
@@ -60,9 +57,6 @@ type Layout struct {
 	// SessionPanel is the file paths region
 	SessionPanelHeight int
 
-	// WorktreePanel is the worktree info region (shown when worktree mode active)
-	WorktreePanelHeight int
-
 	// HelpBar is the help text region at the bottom (outside main frame)
 	HelpBarHeight int
 
@@ -73,8 +67,8 @@ type Layout struct {
 	TooSmallMessage string
 }
 
-// CalculateLayout computes the layout based on terminal dimensions, task count, and worktree mode.
-func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
+// CalculateLayout computes the layout based on terminal dimensions and task count.
+func CalculateLayout(width, height, taskCount int) Layout {
 	layout := Layout{
 		Width:               width,
 		Height:              height,
@@ -83,11 +77,6 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 		ProgressPanelHeight: ProgressPanelHeight,
 		SessionPanelHeight:  SessionPanelHeight,
 		HelpBarHeight:       HelpBarHeight,
-	}
-
-	// Set worktree panel height if worktree mode is active
-	if hasWorktree {
-		layout.WorktreePanelHeight = WorktreePanelHeight
 	}
 
 	// Check minimum width
@@ -113,16 +102,13 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 		layout.TaskPanelHeight = TaskPanelMaxHeight + 1 // +1 for header with scroll indicator
 	}
 
-	// Calculate fixed panel total (add extra border for worktree panel if present)
+	// Calculate fixed panel total
 	borderCount := BorderHeight
-	if hasWorktree {
-		borderCount++ // Extra separator before worktree panel
-	}
 	// Add extra border if task panel is visible
 	if layout.TaskPanelHeight > 0 {
 		borderCount++
 	}
-	fixedHeight := layout.HeaderPanelHeight + layout.TabBarHeight + layout.TaskPanelHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + layout.HelpBarHeight + borderCount
+	fixedHeight := layout.HeaderPanelHeight + layout.TabBarHeight + layout.TaskPanelHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.HelpBarHeight + borderCount
 
 	// Remaining space goes to scroll area
 	layout.ScrollAreaHeight = height - fixedHeight
@@ -131,7 +117,7 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 	if layout.ScrollAreaHeight < 4 && layout.TaskPanelHeight > 0 {
 		layout.TaskPanelHeight = 0
 		borderCount-- // Remove task panel border
-		fixedHeight = layout.HeaderPanelHeight + layout.TabBarHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + layout.HelpBarHeight + borderCount
+		fixedHeight = layout.HeaderPanelHeight + layout.TabBarHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.HelpBarHeight + borderCount
 		layout.ScrollAreaHeight = height - fixedHeight
 	}
 

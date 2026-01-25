@@ -88,7 +88,7 @@ func TestCalculateLayout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			layout := CalculateLayout(tt.width, tt.height, tt.taskCount, false)
+			layout := CalculateLayout(tt.width, tt.height, tt.taskCount)
 
 			if layout.TooSmall != tt.wantTooSmall {
 				t.Errorf("TooSmall = %v, want %v", layout.TooSmall, tt.wantTooSmall)
@@ -113,7 +113,7 @@ func TestCalculateLayout(t *testing.T) {
 }
 
 func TestLayoutContentWidth(t *testing.T) {
-	layout := CalculateLayout(100, 40, 0, false)
+	layout := CalculateLayout(100, 40, 0)
 	if layout.ContentWidth() != 98 {
 		t.Errorf("ContentWidth() = %d, want 98", layout.ContentWidth())
 	}
@@ -133,7 +133,7 @@ func TestLayoutTasksVisible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			layout := CalculateLayout(120, 40, tt.taskCount, false)
+			layout := CalculateLayout(120, 40, tt.taskCount)
 			visible := layout.TasksVisible()
 			if visible != tt.wantVisible {
 				t.Errorf("TasksVisible() = %d, want %d", visible, tt.wantVisible)
@@ -156,77 +156,10 @@ func TestLayoutHasTaskOverflow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			layout := CalculateLayout(120, 40, tt.taskCount, false)
+			layout := CalculateLayout(120, 40, tt.taskCount)
 			overflow := layout.HasTaskOverflow(tt.taskCount)
 			if overflow != tt.wantOverflow {
 				t.Errorf("HasTaskOverflow(%d) = %v, want %v", tt.taskCount, overflow, tt.wantOverflow)
-			}
-		})
-	}
-}
-
-func TestCalculateLayoutWithWorktree(t *testing.T) {
-	// With worktree: adds WorktreePanel(1) + 1 extra border
-	tests := []struct {
-		name                    string
-		width                   int
-		height                  int
-		taskCount               int
-		hasWorktree             bool
-		wantTooSmall            bool
-		wantScrollHeight        int
-		wantWorktreePanelHeight int
-	}{
-		{
-			name:                    "standard terminal no worktree",
-			width:                   120,
-			height:                  40,
-			taskCount:               0,
-			hasWorktree:             false,
-			wantTooSmall:            false,
-			wantScrollHeight:        27, // 40 - 13
-			wantWorktreePanelHeight: 0,
-		},
-		{
-			name:                    "standard terminal with worktree",
-			width:                   120,
-			height:                  40,
-			taskCount:               0,
-			hasWorktree:             true,
-			wantTooSmall:            false,
-			wantScrollHeight:        25, // 40 - 13 - 1(worktree) - 1(extra border) = 25
-			wantWorktreePanelHeight: 1,
-		},
-		{
-			name:                    "with tasks and worktree",
-			width:                   120,
-			height:                  40,
-			taskCount:               3,
-			hasWorktree:             true,
-			wantTooSmall:            false,
-			wantScrollHeight:        20, // 40 - 13 - 4(tasks) - 1(task border) - 1(worktree) - 1(worktree border) = 20
-			wantWorktreePanelHeight: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			layout := CalculateLayout(tt.width, tt.height, tt.taskCount, tt.hasWorktree)
-
-			if layout.TooSmall != tt.wantTooSmall {
-				t.Errorf("TooSmall = %v, want %v", layout.TooSmall, tt.wantTooSmall)
-			}
-
-			if tt.wantTooSmall {
-				return
-			}
-
-			if layout.ScrollAreaHeight != tt.wantScrollHeight {
-				t.Errorf("ScrollAreaHeight = %d, want %d", layout.ScrollAreaHeight, tt.wantScrollHeight)
-			}
-
-			if layout.WorktreePanelHeight != tt.wantWorktreePanelHeight {
-				t.Errorf("WorktreePanelHeight = %d, want %d", layout.WorktreePanelHeight, tt.wantWorktreePanelHeight)
 			}
 		})
 	}

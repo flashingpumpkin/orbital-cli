@@ -11,13 +11,3 @@ type ProgressMsg ProgressInfo
 
 // SessionMsg represents session information (typically set once at startup).
 type SessionMsg SessionInfo
-
-// WorktreeInfo contains information about the active worktree.
-type WorktreeInfo struct {
-	Name   string
-	Path   string
-	Branch string
-}
-
-// WorktreeMsg represents worktree information update.
-type WorktreeMsg WorktreeInfo

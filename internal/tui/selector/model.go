@@ -269,14 +269,6 @@ func (m Model) renderSession(idx int, s session.Session) string {
 		}
 	}
 
-	// Session type indicator and name
-	var typeIcon string
-	if s.Type == session.SessionTypeWorktree {
-		typeIcon = "⎇ "
-	} else {
-		typeIcon = "  "
-	}
-
 	// Style based on validity
 	nameStyle := m.styles.SessionValid
 	labelStyle := m.styles.Label
@@ -300,9 +292,9 @@ func (m Model) renderSession(idx int, s session.Session) string {
 	b.WriteString("\n")
 
 	// Line 2: Name with status on right
-	nameLine := cursor + nameStyle.Render(typeIcon+s.DisplayName())
+	nameLine := cursor + nameStyle.Render(s.DisplayName())
 	// Right-align status
-	nameLen := 3 + 2 + len(s.DisplayName()) // cursor + icon + name
+	nameLen := 3 + len(s.DisplayName()) // cursor + name
 	statusLen := 5                          // "Valid" or "Stale"
 	padding := width - 2 - nameLen - statusLen - 2
 	if padding < 1 {
@@ -311,14 +303,7 @@ func (m Model) renderSession(idx int, s session.Session) string {
 	b.WriteString(m.styles.Border.Render(boxVertical) + nameLine + strings.Repeat(" ", padding) + statusStr + " " + m.styles.Border.Render(boxVertical))
 	b.WriteString("\n")
 
-	// Line 3: Branch (for worktrees)
-	if branch := s.Branch(); branch != "" {
-		branchLine := "       " + labelStyle.Render("Branch: ") + valueStyle.Render(branch)
-		b.WriteString(m.renderBorderedLine(branchLine, width))
-		b.WriteString("\n")
-	}
-
-	// Line 4: Spec files
+	// Line 3: Spec files
 	if len(s.SpecFiles) > 0 {
 		specs := formatSpecs(s.SpecFiles)
 		specLine := "       " + labelStyle.Render("Specs: ") + valueStyle.Render(specs)
@@ -379,10 +364,6 @@ func (m Model) viewCleanupDialog() string {
 
 	b.WriteString(m.renderBorderedLine("  "+m.styles.DialogText.Render("Remove this stale entry from state?"), width))
 	b.WriteString("\n")
-	if s.Type == session.SessionTypeWorktree {
-		b.WriteString(m.renderBorderedLine("  "+m.styles.Label.Render("This will delete the worktree-state.json entry."), width))
-		b.WriteString("\n")
-	}
 	b.WriteString(m.renderBorderedLine("", width))
 	b.WriteString("\n")
 

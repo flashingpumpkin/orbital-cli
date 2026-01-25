@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/flashingpumpkin/orbital/internal/state"
-	"github.com/flashingpumpkin/orbital/internal/worktree"
 )
 
 func TestSession_DisplayName(t *testing.T) {
@@ -14,22 +13,6 @@ func TestSession_DisplayName(t *testing.T) {
 		session  Session
 		expected string
 	}{
-		{
-			name: "named worktree session",
-			session: Session{
-				Type: SessionTypeWorktree,
-				Name: "swift-falcon",
-			},
-			expected: "swift-falcon",
-		},
-		{
-			name: "unnamed worktree session",
-			session: Session{
-				Type: SessionTypeWorktree,
-				Name: "",
-			},
-			expected: "Unnamed worktree",
-		},
 		{
 			name: "named regular session",
 			session: Session{
@@ -65,11 +48,6 @@ func TestSession_TypeLabel(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "worktree session",
-			session:  Session{Type: SessionTypeWorktree},
-			expected: "worktree",
-		},
-		{
 			name:     "regular session",
 			session:  Session{Type: SessionTypeRegular},
 			expected: "regular",
@@ -92,24 +70,6 @@ func TestSession_Branch(t *testing.T) {
 		session  Session
 		expected string
 	}{
-		{
-			name: "worktree with branch",
-			session: Session{
-				Type: SessionTypeWorktree,
-				WorktreeState: &worktree.WorktreeState{
-					Branch: "feature/new-thing",
-				},
-			},
-			expected: "feature/new-thing",
-		},
-		{
-			name: "worktree without state",
-			session: Session{
-				Type:          SessionTypeWorktree,
-				WorktreeState: nil,
-			},
-			expected: "",
-		},
 		{
 			name: "regular session",
 			session: Session{
@@ -136,16 +96,6 @@ func TestSession_Path(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "worktree session",
-			session: Session{
-				Type: SessionTypeWorktree,
-				WorktreeState: &worktree.WorktreeState{
-					Path: "/tmp/worktree-path",
-				},
-			},
-			expected: "/tmp/worktree-path",
-		},
-		{
 			name: "regular session",
 			session: Session{
 				Type: SessionTypeRegular,
@@ -154,14 +104,6 @@ func TestSession_Path(t *testing.T) {
 				},
 			},
 			expected: "/home/user/project",
-		},
-		{
-			name: "worktree without state",
-			session: Session{
-				Type:          SessionTypeWorktree,
-				WorktreeState: nil,
-			},
-			expected: "",
 		},
 		{
 			name: "regular without state",
@@ -184,11 +126,6 @@ func TestSession_Path(t *testing.T) {
 }
 
 func TestSessionType_Constants(t *testing.T) {
-	// Verify constants have distinct values
-	if SessionTypeRegular == SessionTypeWorktree {
-		t.Error("SessionTypeRegular and SessionTypeWorktree should have distinct values")
-	}
-
 	// Verify SessionTypeRegular is the zero value (first in iota)
 	var defaultType SessionType
 	if defaultType != SessionTypeRegular {
@@ -197,39 +134,33 @@ func TestSessionType_Constants(t *testing.T) {
 }
 
 func TestSession_FullSession(t *testing.T) {
-	// Test a fully populated worktree session
+	// Test a fully populated regular session
 	now := time.Now()
-	wtState := &worktree.WorktreeState{
-		Name:           "test-worktree",
-		Path:           "/tmp/test-path",
-		Branch:         "feature/test",
-		OriginalBranch: "main",
-		SpecFiles:      []string{"spec.md"},
-		SessionID:      "session-123",
-		CreatedAt:      now,
+	regState := &state.State{
+		SessionID:  "session-123",
+		WorkingDir: "/home/user/project",
 	}
 
 	s := Session{
-		ID:            "session-123",
-		Type:          SessionTypeWorktree,
-		Name:          "test-worktree",
-		SpecFiles:     []string{"spec.md"},
-		CreatedAt:     now,
-		Valid:         true,
-		InvalidReason: "",
-		WorktreeState: wtState,
+		ID:           "session-123",
+		Type:         SessionTypeRegular,
+		Name:         "Main session",
+		SpecFiles:    []string{"spec.md"},
+		CreatedAt:    now,
+		Valid:        true,
+		RegularState: regState,
 	}
 
-	if s.DisplayName() != "test-worktree" {
-		t.Errorf("DisplayName() = %q, want %q", s.DisplayName(), "test-worktree")
+	if s.DisplayName() != "Main session" {
+		t.Errorf("DisplayName() = %q, want %q", s.DisplayName(), "Main session")
 	}
-	if s.TypeLabel() != "worktree" {
-		t.Errorf("TypeLabel() = %q, want %q", s.TypeLabel(), "worktree")
+	if s.TypeLabel() != "regular" {
+		t.Errorf("TypeLabel() = %q, want %q", s.TypeLabel(), "regular")
 	}
-	if s.Branch() != "feature/test" {
-		t.Errorf("Branch() = %q, want %q", s.Branch(), "feature/test")
+	if s.Branch() != "" {
+		t.Errorf("Branch() = %q, want %q", s.Branch(), "")
 	}
-	if s.Path() != "/tmp/test-path" {
-		t.Errorf("Path() = %q, want %q", s.Path(), "/tmp/test-path")
+	if s.Path() != "/home/user/project" {
+		t.Errorf("Path() = %q, want %q", s.Path(), "/home/user/project")
 	}
 }
