@@ -256,7 +256,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ---
 
-### [ ] **Ticket: PERF-3 - Use strings.Builder for parser concatenation**
+### [x] **Ticket: PERF-3 - Use strings.Builder for parser concatenation**
 
 **As a** user processing large Claude responses
 **I want** efficient text accumulation
@@ -272,17 +272,17 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Apply same pattern to any other concatenation loops in parser
 
 **Acceptance Criteria**:
-- [ ] Given 1000 text blocks of 100 bytes each, when parsed, then completes in linear time
-- [ ] Given same input, when memory profiled, then allocations are O(n) not O(n^2)
-- [ ] Existing parser tests pass without modification
-- [ ] Output text content is identical to previous implementation
+- [x] Given 1000 text blocks of 100 bytes each, when parsed, then completes in linear time
+- [x] Given same input, when memory profiled, then allocations are O(n) not O(n^2)
+- [x] Existing parser tests pass without modification
+- [x] Output text content is identical to previous implementation
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] `parseAssistantMessage()` uses strings.Builder
-- [ ] Any other concatenation loops updated
-- [ ] Benchmark test comparing old vs new performance
-- [ ] All existing parser tests pass
+- [x] Feature complete in one atomic commit
+- [x] `parseAssistantMessage()` uses strings.Builder
+- [x] Any other concatenation loops updated
+- [x] Benchmark test comparing old vs new performance
+- [x] All existing parser tests pass
 
 **Dependencies**:
 - None
@@ -486,7 +486,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 **Should Have (Sprint 2):**
 - [x] PERF-2: Cache wrapped lines in TUI (UI responsiveness)
-- [ ] PERF-3: Use strings.Builder for parser concatenation (easy win)
+- [x] PERF-3: Use strings.Builder for parser concatenation (easy win)
 - [ ] PERF-4: Eliminate double parsing in executor (CPU efficiency)
 - [ ] PERF-6: Increase scanner buffer limit (prevents data loss)
 

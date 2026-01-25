@@ -163,10 +163,12 @@ func (p *Parser) parseAssistantMessage(raw map[string]json.RawMessage, event *St
 		return
 	}
 
+	// Use strings.Builder to avoid O(n²) string concatenation
+	var contentBuilder strings.Builder
 	for _, block := range msg.Content {
 		switch block.Type {
 		case "text":
-			event.Content += block.Text
+			contentBuilder.WriteString(block.Text)
 		case "tool_use":
 			event.ToolName = block.Name
 			event.ToolID = block.ID
@@ -177,6 +179,7 @@ func (p *Parser) parseAssistantMessage(raw map[string]json.RawMessage, event *St
 			}
 		}
 	}
+	event.Content = contentBuilder.String()
 
 	// Extract usage stats if present
 	// Assistant messages contain cumulative tokens within the current API call.

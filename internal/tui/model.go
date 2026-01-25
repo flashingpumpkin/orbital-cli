@@ -246,23 +246,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case OutputLineMsg:
 		m.outputLines.Push(string(msg))
-		// Update cache incrementally: append wrapped lines for the new line
-		if m.wrappedLinesCache != nil && m.cacheWidth == m.layout.ContentWidth() {
-			// Check if ring buffer wrapped (evicted old lines)
-			if m.outputLines.Len() == m.cacheLineCount+1 {
-				// Normal case: just append the new wrapped lines
-				wrapped := wrapLine(string(msg), m.cacheWidth)
-				m.wrappedLinesCache = append(m.wrappedLinesCache, wrapped...)
-				m.cacheLineCount = m.outputLines.Len()
-			} else {
-				// Ring buffer wrapped, need full rebuild
-				m.invalidateWrappedLinesCache()
-				m.updateWrappedLinesCache()
-			}
-		} else if m.ready {
-			// No cache yet, build it
-			m.updateWrappedLinesCache()
-		}
+		m.appendLineToCache(string(msg))
 		return m, nil
 
 	case TasksMsg:
@@ -1396,8 +1380,12 @@ func (m *Model) SetWorktree(w WorktreeInfo) {
 // This also updates the wrapped lines cache incrementally when possible.
 func (m *Model) AppendOutput(line string) {
 	m.outputLines.Push(line)
+	m.appendLineToCache(line)
+}
 
-	// Update cache incrementally if possible
+// appendLineToCache updates the wrapped lines cache after a new line is pushed.
+// It attempts incremental update if possible, otherwise rebuilds the cache.
+func (m *Model) appendLineToCache(line string) {
 	if m.wrappedLinesCache != nil && m.cacheWidth == m.layout.ContentWidth() {
 		// Check if ring buffer wrapped (evicted old lines)
 		if m.outputLines.Len() == m.cacheLineCount+1 {

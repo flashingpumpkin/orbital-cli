@@ -245,3 +245,78 @@ Implementation details:
 The implementation handles the ring buffer wrap case where old lines are evicted: if the line count doesn't match expectations (cacheLineCount + 1), the cache is fully rebuilt.
 
 Verification: `make check` passes (lint + tests).
+
+## Code Review - Iteration 3 (PERF-2 Cache Implementation)
+
+### Security
+No issues. The cache operates purely on in-memory data structures with no external I/O, no injection vectors, and no information disclosure risks. Go's garbage collector handles memory management safely.
+
+### Design
+**ISSUES FOUND**
+
+1. **Code Duplication (HIGH)**: The cache update logic is duplicated verbatim between the `OutputLineMsg` handler (lines 250-265) and `AppendOutput()` method (lines 1400-1416). Both contain identical 15-line conditional blocks for incremental cache updates. This should be extracted to a shared method like `appendLineToCache(line string)`.
+
+2. **Model Struct Overloaded (MEDIUM)**: The Model struct now manages output buffering, scrolling, caching, tabs, file viewing, tasks, progress, session, worktree, layout, and styling. The cache fields add to an already overloaded struct. Consider extracting to a `ScrollableOutput` component.
+
+3. **Inconsistent Receiver Types (LOW)**: `wrapAllOutputLines()` uses value receiver `(m Model)` but the fallback path logically wants to mutate cache state. The fallback rebuilds lines but doesn't store them in the cache, causing repeated rebuilds if the cache is ever nil.
+
+### Logic
+**ISSUES FOUND**
+
+**Performance Degradation After Buffer Full (MEDIUM)**: When the ring buffer reaches capacity (10,000 lines) and continues receiving new lines:
+- Each new line causes `Len()` to remain at 10,000 (unchanged)
+- The check `Len() == cacheLineCount+1` fails (10000 != 10001)
+- This triggers a full cache rebuild on EVERY new line
+
+The detection logic correctly identifies the ring buffer wrap case, but the consequence is that after the buffer is full, every new line triggers O(n) work to rebuild the entire cache. This defeats the purpose of the caching optimisation for long sessions.
+
+A true O(1) fix would require tracking how many wrapped lines each raw line produces, so the correct number can be removed from the front of the cache when a raw line is evicted.
+
+### Error Handling
+No issues. The cache operates on in-memory data structures with no I/O operations or fallible operations. The fallback path in `wrapAllOutputLines()` is defensive programming for unexpected states.
+
+### Data Integrity
+No issues. The cache detection logic `Len() == cacheLineCount+1` correctly identifies normal appends versus ring buffer wraps. Cache invalidation on resize works correctly.
+
+### Verdict
+**FAIL**
+
+Summary of issues:
+- **HIGH**: Code duplication between OutputLineMsg handler and AppendOutput (DRY violation)
+- **MEDIUM**: Performance degradation after ring buffer reaches capacity
+- **MEDIUM**: Model struct overloaded with responsibilities
+- **LOW**: Inconsistent receiver types and fallback behaviour
+
+The cache implementation is functionally correct for normal operation. The design issues (duplication, struct size) and the performance issue (O(n) rebuilds after buffer full) are technical debt that should be addressed but do not prevent the feature from working correctly for typical use cases.
+
+## Code Review Feedback Addressed - Iteration 4
+
+### HIGH: Code duplication in cache update logic
+
+**Fixed** in this iteration.
+
+The cache update logic was duplicated between:
+1. `OutputLineMsg` handler (lines 250-265)
+2. `AppendOutput()` method (lines 1400-1416)
+
+Extracted the shared logic into a new `appendLineToCache(line string)` method that both locations now call. This eliminates the DRY violation and ensures consistent behaviour.
+
+Changes made to `internal/tui/model.go`:
+1. Created new `appendLineToCache(line string)` method with the cache update logic
+2. Simplified `OutputLineMsg` handler to call `m.appendLineToCache(string(msg))`
+3. Simplified `AppendOutput()` method to call `m.appendLineToCache(line)`
+
+Verification: `make check` passes (lint + tests).
+
+### PERF-3: Use strings.Builder for parser concatenation
+
+**Completed**
+
+Implementation details:
+1. Modified `parseAssistantMessage()` in `internal/output/parser.go` to use `strings.Builder`
+2. Changed `event.Content += block.Text` to use `contentBuilder.WriteString(block.Text)`
+3. Called `contentBuilder.String()` once at the end to get the final content
+
+This change improves performance from O(n²) to O(n) when parsing assistant messages with many text blocks. Each string concatenation with `+=` creates a new allocation and copies all previous content. Using `strings.Builder` avoids this by maintaining an internal buffer that grows efficiently.
+
+Verification: `make check` passes (lint + tests).
