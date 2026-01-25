@@ -660,3 +660,100 @@ All "Could Have (Sprint 3)" items from the adversarial review have been complete
 - DESIGN-1: Add parser format validation and warnings
 
 Final verification: `make check` passes (lint + tests).
+
+## Code Review - Iteration 7 (Final Comprehensive Review)
+
+Files reviewed (all adversarial review fix changes):
+- cmd/orbital/continue.go
+- cmd/orbital/root.go
+- internal/config/config.go
+- internal/executor/executor.go
+- internal/output/parser.go
+- internal/state/queue.go
+- internal/tui/model.go
+- internal/tui/ringbuffer.go
+- internal/worktree/merge.go
+
+### Security
+No issues. The code follows secure practices:
+- Git commands use `exec.CommandContext` with argument arrays (not shell interpolation)
+- Worktree and branch names validated via strict regex patterns (`[a-zA-Z0-9/-]+`)
+- Output buffers bounded (10MB scanner limit, 10,000 line ring buffer)
+- Dangerous permissions flag requires explicit opt-in with warning
+- File locking prevents race conditions in state management
+- JSON parsing uses Go standard library safely
+
+### Design
+**ISSUES FOUND**
+
+1. **God Function (HIGH)**: `runOrbit()` in root.go is 508 lines handling configuration, worktree setup, TUI, state management, workflow, loop execution, and cleanup. Same issue in `runContinue()` (377 lines).
+
+2. **Code Duplication (HIGH)**: `runOrbit` and `runContinue` duplicate significant logic for config creation, dangerous mode handling, system prompt building, executor setup, and worktree merge.
+
+3. **Duplicate Command Definition (HIGH)**: `continue.go` defines the command twice (both `continueCmd` variable and `newContinueCmd()` function with identical content).
+
+4. **God Type (MEDIUM)**: `Model` struct in model.go handles 10+ concerns (output buffering, tabs, file viewing, scrolling, caching, layout, styling, progress, tasks, session, worktree).
+
+5. **Feature Envy (MEDIUM)**: Executor has duplicated truncation logic between streaming and non-streaming paths.
+
+6. **Mixed Responsibilities (MEDIUM)**: Parser conflates parsing, statistics accumulation, and validation.
+
+### Logic
+**ISSUES FOUND**
+
+1. **Division by Zero (HIGH)**: `renderHeader()` (line 707-708) divides by `MaxIteration` and `Budget` without zero guards. `formatCost()` (line 1202) has same issue.
+
+2. **Negative Currency Bug (MEDIUM)**: `formatCurrency()` produces malformed output like `$-1.-49` for negative amounts due to negative modulo.
+
+3. **UTF-8 Truncation Bugs (MEDIUM)**: Four locations use byte-length slicing instead of rune-length: `renderTask()` (line 1101), `formatPath()` (line 1299), `renderWorktreePanel()` (line 1274), `formatPaths()` (line 1314). Can produce invalid UTF-8 on multi-byte characters.
+
+4. **Potential Panic on Narrow Terminal (LOW)**: `renderTask()` can panic if `contentWidth <= 9` causing negative slice index.
+
+5. **Inconsistent Guard Ordering (LOW)**: Line 1152-1155 divides BEFORE checking for zero, then corrects the result. Division should be guarded first.
+
+### Error Handling
+**ISSUES FOUND**
+
+1. **Queue Pop Returns Files on Error (HIGH)**: `Pop()` in queue.go returns both files and error on save failure. Callers may process files then find error, causing duplicate processing on restart.
+
+2. **Swallowed Queue Load Error (HIGH)**: `continue.go` line 127-128 ignores `LoadQueue` errors, silently losing queued work.
+
+3. **Orphaned Worktree Cleanup Error Ignored (HIGH)**: `root.go` line 312-318 ignores cleanup error when worktree path is invalid, leaving orphaned worktrees.
+
+4. **Lost Error Context in extractStats (MEDIUM)**: Parser errors silently dropped; token/cost stats may be zero without warning.
+
+5. **Swallowed Stream Write Errors (MEDIUM)**: `executor.go` line 266-268 ignores write errors to stream writer.
+
+6. **Missing Temp File Cleanup (MEDIUM)**: `queue.go` line 72-82 does not clean up temp file if `Rename` fails.
+
+### Data Integrity
+**ISSUES FOUND**
+
+1. **Missing Config Validation (HIGH)**: `Config.Validate()` only checks `SpecPath`. Does not validate `MaxIterations`, `MaxBudget`, `IterationTimeout` for positive values, enabling division by zero.
+
+2. **Division by Zero (HIGH)**: Same as logic issues; `formatCost` and `renderHeader` can produce `+Inf`/`NaN`.
+
+3. **Non-Atomic Queue Pop (MEDIUM)**: If `save()` fails after clearing in-memory queue, files returned but disk still has old data. Causes duplicate processing.
+
+4. **Floating Point Precision (MEDIUM)**: `formatCurrency` adds 0.5 for rounding which over-rounds values like 99.999 to $100.00.
+
+5. **Integer Overflow in formatFileSize (MEDIUM)**: Casting `int64` to `int` on 32-bit systems overflows for files >2GB.
+
+6. **RingBuffer.Get Ambiguity (LOW)**: Returns empty string for out-of-bounds, indistinguishable from legitimate empty line.
+
+7. **UTF-8 Truncation (LOW)**: Same as logic issues; byte-length slicing corrupts multi-byte characters.
+
+### Verdict
+**FAIL**
+
+Summary by severity:
+- **HIGH**: 10 (god functions x2, code duplication, duplicate definition, division by zero x2, queue pop error handling, swallowed errors x2, missing config validation)
+- **MEDIUM**: 12 (god type, feature envy, mixed responsibilities, negative currency, UTF-8 truncation x4, lost error context, temp file cleanup, non-atomic queue, float precision, integer overflow)
+- **LOW**: 5 (panic on narrow terminal, inconsistent guard ordering, RingBuffer ambiguity, UTF-8 truncation overlap)
+
+Critical issues requiring immediate attention:
+1. Division by zero guards in `formatCost`, `renderHeader`, and add validation to `Config.Validate()`
+2. Queue.Pop() should return nil on error (not files)
+3. Handle queue load errors in continue.go
+
+Note: These are predominantly edge case, design, and hardening issues. The core adversarial review fixes (SEC-1, REL-1, REL-2, PERF-1 through PERF-6, DESIGN-1) are correctly implemented and work for normal operation. The issues identified are for future improvement, not blockers for the current implementation.
