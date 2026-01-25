@@ -948,6 +948,27 @@ func (m Model) renderScrollArea() string {
 	height := m.layout.ScrollAreaHeight
 	contentWidth := m.layout.ContentWidth()
 	wrappedLines := m.wrapAllOutputLines()
+	border := m.styles.Border.Render(BoxVertical)
+	emptyLine := border + strings.Repeat(" ", contentWidth) + border
+
+	// Empty state: show waiting message
+	if len(wrappedLines) == 0 {
+		var lines []string
+		midHeight := height / 2
+		for i := 0; i < midHeight-1; i++ {
+			lines = append(lines, emptyLine)
+		}
+		// Centred waiting message
+		waitMsg := m.styles.Label.Render("Waiting for output...")
+		waitWidth := ansi.StringWidth("Waiting for output...")
+		leftPad := (contentWidth - waitWidth) / 2
+		rightPad := contentWidth - waitWidth - leftPad
+		lines = append(lines, border+strings.Repeat(" ", leftPad)+waitMsg+strings.Repeat(" ", rightPad)+border)
+		for len(lines) < height {
+			lines = append(lines, emptyLine)
+		}
+		return strings.Join(lines, "\n")
+	}
 
 	// Determine start index based on scroll state
 	var startIdx int
@@ -974,7 +995,6 @@ func (m Model) renderScrollArea() string {
 	}
 
 	var lines []string
-	border := m.styles.Border.Render(BoxVertical)
 	for i := startIdx; i < len(wrappedLines) && len(lines) < height; i++ {
 		line := wrappedLines[i]
 		// Pad line to content width
@@ -987,14 +1007,12 @@ func (m Model) renderScrollArea() string {
 	}
 
 	// Pad with empty lines if needed
-	emptyLine := border + strings.Repeat(" ", contentWidth) + border
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
 
 	return strings.Join(lines, "\n")
 }
-
 
 // renderTaskPanel renders the task list panel.
 func (m Model) renderTaskPanel() string {

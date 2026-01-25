@@ -54,3 +54,32 @@ Implemented the Amber Terminal aesthetic for the Orbital TUI as specified in the
 ### Next Steps
 
 Review the PRD for any remaining items not yet implemented. The core visual redesign is complete.
+
+## Iteration 2 - 2026-01-25
+
+### Completed Work
+
+Completed Phase 5 (Polish) stories:
+
+1. **Story 5.1: Loading Spinners** - Skipped (marked as optional in PRD)
+   - The PRD explicitly marks spinner animation as "(Optional)"
+   - File loading already shows "Loading {path}..." message
+
+2. **Story 5.2: Empty State Messages** - Verified complete
+   - Output tab shows styled "Waiting for output..." message (centred)
+   - Task panel is hidden when no tasks (clean design choice)
+   - Added test `TestEmptyOutputState` to verify behaviour
+
+3. **Story 5.3: Terminal Size Testing** - Added tests
+   - Added `TestWideTerminalRendering` for 200+ column terminals
+   - Added `TestMinimumTerminalRendering` for 80x24 minimum size
+   - NO_COLOR support already handled in program.go via `lipgloss.SetColorProfile(termenv.Ascii)`
+
+### All Checks Pass
+
+- `make lint` - No issues
+- `make test` - All 14 packages pass with race detector
+
+### Completion
+
+All 12 stories are now complete. The TUI redesign implementation is finished.

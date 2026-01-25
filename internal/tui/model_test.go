@@ -1208,6 +1208,131 @@ func TestWrapAllOutputLines(t *testing.T) {
 	}
 }
 
+func TestWideTerminalRendering(t *testing.T) {
+	// Test that the TUI renders correctly with wide terminals (200+ columns)
+	m := NewModel()
+
+	// Set up with wide terminal dimensions
+	msg := tea.WindowSizeMsg{Width: 220, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set some data to render
+	model.SetProgress(ProgressInfo{
+		Iteration:    5,
+		MaxIteration: 50,
+		StepName:     "implement",
+		StepPosition: 2,
+		StepTotal:    4,
+		TokensIn:     100000,
+		TokensOut:    50000,
+		Cost:         5.50,
+		Budget:       100.00,
+	})
+
+	model.SetSession(SessionInfo{
+		SpecFiles:   []string{"docs/plans/very-long-filename-that-tests-truncation-behavior.md"},
+		NotesFile:   ".orbital/notes.md",
+		StateFile:   ".orbital/state.json",
+		ContextFile: "docs/context/long-context-file-path.md",
+	})
+
+	model.SetTasks([]Task{
+		{ID: "1", Content: "Complete a very long task description that should be handled correctly in wide terminals", Status: "completed"},
+		{ID: "2", Content: "Another long task that is currently in progress", Status: "in_progress"},
+	})
+
+	view := model.View()
+
+	// Verify key elements are present
+	if !strings.Contains(view, "ORBITAL") {
+		t.Error("expected 'ORBITAL' brand in view")
+	}
+
+	if !strings.Contains(view, "Iteration") {
+		t.Error("expected 'Iteration' in view")
+	}
+
+	if !strings.Contains(view, "implement") {
+		t.Error("expected step name 'implement' in view")
+	}
+
+	// Verify wide terminal doesn't break borders
+	if !strings.Contains(view, BoxTopLeft) {
+		t.Error("expected top-left border character")
+	}
+	if !strings.Contains(view, BoxTopRight) {
+		t.Error("expected top-right border character")
+	}
+
+	// Verify content width calculation
+	if model.layout.ContentWidth() != 218 { // 220 - 2 for borders
+		t.Errorf("expected content width 218, got %d", model.layout.ContentWidth())
+	}
+}
+
+func TestMinimumTerminalRendering(t *testing.T) {
+	// Test that the TUI renders correctly at minimum viable size (80x24)
+	m := NewModel()
+
+	// Set up with minimum terminal dimensions
+	msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	if model.layout.TooSmall {
+		t.Error("expected 80x24 to be viable, but TooSmall is true")
+	}
+
+	// Set some data to render
+	model.SetProgress(ProgressInfo{
+		Iteration:    5,
+		MaxIteration: 50,
+		StepName:     "implement",
+		StepPosition: 2,
+		StepTotal:    4,
+		TokensIn:     100000,
+		TokensOut:    50000,
+		Cost:         5.50,
+		Budget:       100.00,
+	})
+
+	view := model.View()
+
+	// Verify it renders without panic
+	if view == "" {
+		t.Error("expected non-empty view at minimum size")
+	}
+
+	// Verify key elements are present
+	if !strings.Contains(view, "ORBITAL") {
+		t.Error("expected 'ORBITAL' brand in view")
+	}
+
+	// Verify content width calculation
+	if model.layout.ContentWidth() != 78 { // 80 - 2 for borders
+		t.Errorf("expected content width 78, got %d", model.layout.ContentWidth())
+	}
+}
+
+func TestEmptyOutputState(t *testing.T) {
+	// Test that the empty output state displays correctly
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Don't add any output - test empty state
+	view := model.View()
+
+	// Verify the waiting message is shown
+	if !strings.Contains(view, "Waiting for output") {
+		t.Error("expected 'Waiting for output' message in empty state")
+	}
+}
+
 func TestWindowResizeScrollClamping(t *testing.T) {
 	t.Run("resize larger maintains scroll position", func(t *testing.T) {
 		m := NewModel()
