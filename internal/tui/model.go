@@ -304,9 +304,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
-		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
-			// Check if click is in tab bar area (first row)
-			if msg.Y == 0 {
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			return m.scrollUp()
+		case tea.MouseButtonWheelDown:
+			return m.scrollDown()
+		case tea.MouseButtonLeft:
+			if msg.Action == tea.MouseActionPress && msg.Y == 0 {
 				return m.handleTabClick(msg.X)
 			}
 		}
