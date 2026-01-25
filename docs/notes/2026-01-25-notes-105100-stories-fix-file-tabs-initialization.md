@@ -24,3 +24,31 @@ model.progress = progress
 - Build: Passed
 - Lint: Passed
 - Tests: All passed
+
+### Code Review (Iteration 2)
+
+**Reviewer:** Gate review step
+
+**Verdict:** PASS
+
+**Analysis:**
+
+1. **Correctness:** The fix correctly addresses the root cause. The `buildTabs()` method relies on `m.session` being populated (model.go:327, 336, 345), so placing the call immediately after setting `model.session` is correct.
+
+2. **Edge Cases Handled:**
+   - Empty session (no spec files): Returns only Output tab
+   - Multiple spec files: Each gets its own tab
+   - Context file separators: Handles both `,` and `, `
+   - Missing notes file: Guarded by empty string check
+
+3. **Code Quality:**
+   - One-line minimal change
+   - Follows existing pattern (same call in SessionMsg handler)
+   - Logical placement after session assignment
+
+4. **Test Coverage:**
+   - All existing tests pass
+   - No regressions detected
+   - Minor observation: No specific unit test verifies tabs built during New() but this is acceptable given the fix mirrors the SessionMsg handler pattern
+
+**Action Items:** None blocking. The fix is correct and complete.
