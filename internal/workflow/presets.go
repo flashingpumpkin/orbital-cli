@@ -54,6 +54,48 @@ func GetPreset(name PresetName) (*Workflow, error) {
 	}
 }
 
+// rigorousReviewPrompt is the shared review prompt used across all presets with review gates.
+const rigorousReviewPrompt = `You are conducting a rigorous code review. Your job is to FIND PROBLEMS, not to rubber-stamp code.
+
+First, identify all files changed in this iteration using git diff.
+
+Then spawn FIVE parallel review agents using the Task tool. Each agent reviews the SAME changed files but for different concerns:
+
+1. security-reviewer - vulnerabilities, injection, auth issues
+2. design-reviewer - architecture, SOLID, coupling
+3. logic-reviewer - bugs, edge cases, race conditions
+4. error-reviewer - exception safety, recovery, logging
+5. data-reviewer - validation, consistency, null safety
+
+Wait for ALL agents to complete. Collect their outputs.
+
+Aggregate the results in the notes file with this structure:
+## Code Review - Iteration N
+
+### Security
+[security-reviewer findings or "No issues"]
+
+### Design
+[design-reviewer findings or "No issues"]
+
+### Logic
+[logic-reviewer findings or "No issues"]
+
+### Error Handling
+[error-reviewer findings or "No issues"]
+
+### Data Integrity
+[data-reviewer findings or "No issues"]
+
+### Verdict
+[PASS or FAIL with summary]
+
+GATE DECISION:
+- If ANY agent found issues (output contains _ISSUES_FOUND), output <gate>FAIL</gate>
+- ONLY if ALL agents output _CLEAR, output <gate>PASS</gate>
+
+Be ruthless. A PASS means you are confident this code is production-ready.`
+
 // fastPreset returns the fast workflow that maximises work per iteration.
 func fastPreset() *Workflow {
 	return &Workflow{
@@ -74,14 +116,8 @@ Maximise throughput. Do not stop after one item.
 Do not output completion promise yet.`,
 			},
 			{
-				Name: "review",
-				Prompt: `Review all code changes made in this iteration.
-Check for: correctness, edge cases, code quality, test coverage.
-
-Write your findings to the notes file with clear action items if any issues found.
-
-If changes are acceptable with no blocking issues, output <gate>PASS</gate>
-If changes need work, output <gate>FAIL</gate>`,
+				Name:   "review",
+				Prompt: rigorousReviewPrompt,
 				Gate:   true,
 				OnFail: "implement",
 			},
@@ -121,14 +157,8 @@ Focus on the next incomplete item.
 Do not output completion promise yet.`,
 			},
 			{
-				Name: "review",
-				Prompt: `Review the code changes just made.
-Check for: correctness, edge cases, code quality, test coverage.
-
-Write your findings to the notes file with clear action items if any issues found.
-
-If changes are acceptable with no blocking issues, output <gate>PASS</gate>
-If changes need work, output <gate>FAIL</gate>`,
+				Name:   "review",
+				Prompt: rigorousReviewPrompt,
 				Gate:   true,
 				OnFail: "implement",
 			},
@@ -168,15 +198,8 @@ Run tests to confirm they still pass.
 Update notes: what refactoring was done.`,
 			},
 			{
-				Name: "review",
-				Prompt: `Read the notes file to understand the TDD cycle just completed.
-Review: test quality, implementation correctness, refactoring quality.
-
-Write detailed findings to the notes file.
-If issues found, write clear action items for the refactor step.
-
-If acceptable, output <gate>PASS</gate>
-If needs work, output <gate>FAIL</gate>`,
+				Name:   "review",
+				Prompt: rigorousReviewPrompt,
 				Gate:   true,
 				OnFail: "refactor",
 			},
