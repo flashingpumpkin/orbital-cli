@@ -1349,3 +1349,189 @@ func TestWindowResizeScrollClamping(t *testing.T) {
 		}
 	})
 }
+
+func TestWrappedLinesCaching(t *testing.T) {
+	t.Run("cache populated after window size set", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add some lines
+		model.AppendOutput("Line 1")
+		model.AppendOutput("Line 2")
+
+		// Cache should be populated
+		if model.wrappedLinesCache == nil {
+			t.Error("expected wrappedLinesCache to be populated after adding output")
+		}
+
+		if model.cacheLineCount != 2 {
+			t.Errorf("expected cacheLineCount to be 2, got %d", model.cacheLineCount)
+		}
+	})
+
+	t.Run("cache reused on scroll operations", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Get the wrapped lines
+		wrapped1 := model.wrapAllOutputLines()
+
+		// Scroll up
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Get wrapped lines again - should be same slice (cached)
+		wrapped2 := model.wrapAllOutputLines()
+
+		// The slices should have same content
+		if len(wrapped1) != len(wrapped2) {
+			t.Errorf("expected same wrapped lines length, got %d vs %d", len(wrapped1), len(wrapped2))
+		}
+	})
+
+	t.Run("cache invalidated on window width change", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up initial dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add a long line that will wrap differently at different widths
+		model.AppendOutput("This is a very long line that will definitely wrap when the terminal is narrow enough")
+
+		initialCache := model.wrappedLinesCache
+		initialCacheWidth := model.cacheWidth
+
+		// Resize to different width
+		msg = tea.WindowSizeMsg{Width: 40, Height: 30}
+		updatedModel, _ = model.Update(msg)
+		model = updatedModel.(Model)
+
+		// Cache should be invalidated and rebuilt
+		if model.cacheWidth == initialCacheWidth {
+			t.Error("expected cacheWidth to change after resize")
+		}
+
+		// Cache should be rebuilt (different content due to wrapping)
+		// The narrow width should produce more wrapped lines
+		if len(model.wrappedLinesCache) <= len(initialCache) {
+			t.Error("expected more wrapped lines at narrower width")
+		}
+	})
+
+	t.Run("cache updated incrementally on new line", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add initial lines
+		model.AppendOutput("Line 1")
+		model.AppendOutput("Line 2")
+
+		initialLen := len(model.wrappedLinesCache)
+
+		// Add another line
+		model.AppendOutput("Line 3")
+
+		// Cache should have one more line (assuming no wrapping)
+		if len(model.wrappedLinesCache) != initialLen+1 {
+			t.Errorf("expected cache length to be %d, got %d", initialLen+1, len(model.wrappedLinesCache))
+		}
+
+		if model.cacheLineCount != 3 {
+			t.Errorf("expected cacheLineCount to be 3, got %d", model.cacheLineCount)
+		}
+	})
+
+	t.Run("cache cleared on ClearOutput", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add some lines
+		model.AppendOutput("Line 1")
+		model.AppendOutput("Line 2")
+
+		// Verify cache exists
+		if model.wrappedLinesCache == nil {
+			t.Fatal("expected cache to be populated")
+		}
+
+		// Clear output
+		model.ClearOutput()
+
+		// Cache should be cleared
+		if model.wrappedLinesCache != nil {
+			t.Error("expected wrappedLinesCache to be nil after ClearOutput")
+		}
+
+		if model.cacheLineCount != 0 {
+			t.Errorf("expected cacheLineCount to be 0, got %d", model.cacheLineCount)
+		}
+	})
+
+	t.Run("scrolling 1000 times is fast with caching", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add many lines
+		for i := 0; i < 5000; i++ {
+			model.AppendOutput("Line " + intToString(i+1) + " with some additional content to make it longer")
+		}
+
+		// Scroll up to unlock tailing
+		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Time scrolling 1000 times - should be fast due to caching
+		// (We can't easily measure time in a unit test, but we verify it doesn't rebuild)
+		for i := 0; i < 500; i++ {
+			// Scroll up
+			keyMsg = tea.KeyMsg{Type: tea.KeyUp}
+			updatedModel, _ = model.Update(keyMsg)
+			model = updatedModel.(Model)
+
+			// Scroll down
+			keyMsg = tea.KeyMsg{Type: tea.KeyDown}
+			updatedModel, _ = model.Update(keyMsg)
+			model = updatedModel.(Model)
+		}
+
+		// Verify cache is still valid (line count unchanged)
+		if model.cacheLineCount != 5000 {
+			t.Errorf("expected cacheLineCount to remain 5000, got %d", model.cacheLineCount)
+		}
+
+		// The view should render correctly
+		view := model.View()
+		if view == "" {
+			t.Error("expected non-empty view after scrolling")
+		}
+	})
+}

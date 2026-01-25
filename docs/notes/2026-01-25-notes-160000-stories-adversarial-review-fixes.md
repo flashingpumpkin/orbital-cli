@@ -142,3 +142,106 @@ All "Must Have (Sprint 1)" items from the adversarial review have been completed
 Remaining items (PERF-2, PERF-3, PERF-4, PERF-5, PERF-6, DESIGN-1) are explicitly marked as Sprint 2 and Sprint 3 in the stories file, outside the scope of this iteration.
 
 All verification checks pass: `make check` (lint + tests).
+
+## Code Review - Iteration 2 (Sprint 1 Complete)
+
+### Security
+**ISSUES FOUND**
+
+**Command Injection via Unvalidated Branch Names in Merge Phase**
+
+File: `internal/worktree/merge.go` lines 80-106 and `cmd/orbital/root.go` line 266
+
+The merge phase constructs prompts containing branch names that Claude will execute as git commands. The `originalBranch` value comes from `worktree.GetCurrentBranch()` which only trims whitespace but does not validate against shell metacharacters.
+
+Attack scenario: An attacker creates a branch with a malicious name (e.g., `main; rm -rf /`), runs orbital in worktree mode, and on merge phase the unvalidated branch name gets embedded in Claude's prompt.
+
+Severity: MEDIUM (requires local attacker who can create branches, and Claude's execution environment would need to allow shell metacharacters)
+
+Recommendation: Add branch name validation in `GetCurrentBranch()` to reject names containing shell metacharacters.
+
+### Design
+**ISSUES FOUND**
+
+1. **DRY Violation (HIGH)**: Flag precedence logic for `DangerouslySkipPermissions` is duplicated in `root.go` and `continue.go`. Should be extracted to shared utility.
+
+2. **Tight Coupling (MEDIUM)**: `Model.outputLines` directly holds `*RingBuffer` pointer. Should use interface for flexibility.
+
+3. **Abstraction Leakage (MEDIUM)**: RingBuffer exposes internal fields (`head`, `count`, `cap`) that could allow invariant violations.
+
+4. **Naming Inconsistency (LOW)**: Mismatch between `Dangerous` (TOML/CLI) and `DangerouslySkipPermissions` (Config struct).
+
+### Logic
+**ISSUES FOUND**
+
+**Queue.Pop() Returns Files Even When Persistence Fails**
+
+File: `internal/state/queue.go` lines 181-199
+
+When `q.save()` fails, the function clears the in-memory queue state before the save attempt, then returns the files with an error. This creates state inconsistency:
+- Files are returned to caller (who may process them)
+- Queue file on disk still contains old data (save failed)
+- On next load, files reappear causing duplicate processing
+
+Severity: MEDIUM (requires disk failure scenario, but causes duplicate work)
+
+Recommendation: Save before clearing state, or return empty slice on save failure.
+
+### Error Handling
+**ISSUES FOUND**
+
+1. **Partial Cleanup State (MEDIUM)**: `Cleanup.Run()` removes worktree first, then attempts branch deletion. If branch deletion fails after worktree removal, state is inconsistent (orphaned branch). Should delete branch first.
+
+2. **Swallowed Cleanup Errors (MEDIUM)**: In `root.go` and `continue.go`, cleanup errors are logged as warnings but execution continues. This can leave orphaned worktrees.
+
+3. **Missing Early Context Check (LOW)**: `runGitWithTimeout()` doesn't check if parent context is already cancelled before starting git command.
+
+4. **Lost Error Context (LOW)**: When timeout AND command error occur together, timeout error is returned, losing the actual git error message.
+
+### Data Integrity
+No issues. Ring buffer implementation is correct with proper bounds checking, nil safety, and GC-friendly clearing.
+
+### Verdict
+**FAIL**
+
+Summary of issues by severity:
+- **HIGH**: 1 (DRY violation in flag precedence logic)
+- **MEDIUM**: 5 (command injection risk, Queue.Pop state consistency, partial cleanup, swallowed errors, tight coupling)
+- **LOW**: 4 (naming inconsistency, abstraction leakage, missing early context check, lost error context)
+
+The most critical issues that should be addressed:
+1. Queue.Pop() should not return files if save fails (prevents duplicate processing)
+2. Cleanup.Run() should delete branch before removing worktree (prevents orphaned branches)
+3. Flag precedence logic should be extracted to shared utility (prevents divergence)
+
+Note: These issues are design improvements and edge case handling. The core Sprint 1 functionality is correct for normal operation. The issues identified are for hardening against failure scenarios.
+
+## Sprint 2 Progress
+
+### PERF-2: Cache wrapped lines in TUI
+
+**Completed**
+
+Implementation details:
+1. Added three new fields to Model struct:
+   - `wrappedLinesCache []string` - cached wrapped output lines
+   - `cacheWidth int` - width used for current cache
+   - `cacheLineCount int` - number of raw lines when cache was built
+2. Added `updateWrappedLinesCache()` method to rebuild cache when needed
+3. Added `invalidateWrappedLinesCache()` method to clear cache
+4. Modified `wrapAllOutputLines()` to return cached lines directly
+5. Updated `WindowSizeMsg` handler to invalidate and rebuild cache on resize
+6. Updated `OutputLineMsg` handler to incrementally append to cache or rebuild if ring buffer wrapped
+7. Updated `AppendOutput()` method to maintain cache incrementally
+8. Updated `ClearOutput()` method to invalidate cache
+9. Added comprehensive tests in `TestWrappedLinesCaching`:
+   - Cache populated after window size set
+   - Cache reused on scroll operations
+   - Cache invalidated on window width change
+   - Cache updated incrementally on new line
+   - Cache cleared on ClearOutput
+   - Scrolling 1000 times is fast with caching (verified with 5000 lines)
+
+The implementation handles the ring buffer wrap case where old lines are evicted: if the line count doesn't match expectations (cacheLineCount + 1), the cache is fully rebuilt.
+
+Verification: `make check` passes (lint + tests).

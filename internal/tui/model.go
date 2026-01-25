@@ -83,6 +83,11 @@ type Model struct {
 	outputScroll  int  // Line offset from the top of the wrapped output buffer
 	outputTailing bool // Whether the output window is locked to the bottom (auto-scrolling)
 
+	// Wrapped lines cache for scroll performance
+	wrappedLinesCache []string // Cache of wrapped output lines
+	cacheWidth        int      // Width used for current cache (invalidate on change)
+	cacheLineCount    int      // Number of raw lines when cache was built
+
 	// Styles
 	styles Styles
 
@@ -209,6 +214,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks), m.worktree.Path != "")
 		m.ready = true
 
+		// Invalidate wrapped lines cache since width may have changed
+		m.invalidateWrappedLinesCache()
+		m.updateWrappedLinesCache()
+
 		// Clamp output scroll position if not tailing
 		if !m.outputTailing {
 			wrappedLines := m.wrapAllOutputLines()
@@ -237,6 +246,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case OutputLineMsg:
 		m.outputLines.Push(string(msg))
+		// Update cache incrementally: append wrapped lines for the new line
+		if m.wrappedLinesCache != nil && m.cacheWidth == m.layout.ContentWidth() {
+			// Check if ring buffer wrapped (evicted old lines)
+			if m.outputLines.Len() == m.cacheLineCount+1 {
+				// Normal case: just append the new wrapped lines
+				wrapped := wrapLine(string(msg), m.cacheWidth)
+				m.wrappedLinesCache = append(m.wrappedLinesCache, wrapped...)
+				m.cacheLineCount = m.outputLines.Len()
+			} else {
+				// Ring buffer wrapped, need full rebuild
+				m.invalidateWrappedLinesCache()
+				m.updateWrappedLinesCache()
+			}
+		} else if m.ready {
+			// No cache yet, build it
+			m.updateWrappedLinesCache()
+		}
 		return m, nil
 
 	case TasksMsg:
@@ -835,9 +861,16 @@ func (m Model) renderFileContent(path string) string {
 	return strings.Join(lines, "\n")
 }
 
-// wrapAllOutputLines wraps all output lines to fit within the current content width.
-// This function ensures consistent wrapping logic between scroll calculations and rendering.
+// wrapAllOutputLines returns the cached wrapped output lines.
+// The cache is maintained by updateWrappedLinesCache() which is called
+// during Update() when content or width changes.
 func (m Model) wrapAllOutputLines() []string {
+	// If cache exists and is valid, use it
+	if m.wrappedLinesCache != nil {
+		return m.wrappedLinesCache
+	}
+
+	// Fallback: rebuild if cache is nil (shouldn't happen in normal operation)
 	width := m.layout.ContentWidth()
 	var wrappedLines []string
 	m.outputLines.Iterate(func(_ int, line string) bool {
@@ -846,6 +879,37 @@ func (m Model) wrapAllOutputLines() []string {
 		return true
 	})
 	return wrappedLines
+}
+
+// updateWrappedLinesCache rebuilds or updates the wrapped lines cache.
+// Call this when content changes (new line) or width changes (resize).
+func (m *Model) updateWrappedLinesCache() {
+	width := m.layout.ContentWidth()
+	lineCount := m.outputLines.Len()
+
+	// Check if cache is still valid
+	if m.wrappedLinesCache != nil && m.cacheWidth == width && m.cacheLineCount == lineCount {
+		return
+	}
+
+	// Rebuild the cache
+	var wrappedLines []string
+	m.outputLines.Iterate(func(_ int, line string) bool {
+		wrapped := wrapLine(line, width)
+		wrappedLines = append(wrappedLines, wrapped...)
+		return true
+	})
+
+	m.wrappedLinesCache = wrappedLines
+	m.cacheWidth = width
+	m.cacheLineCount = lineCount
+}
+
+// invalidateWrappedLinesCache clears the cache, forcing a rebuild on next access.
+func (m *Model) invalidateWrappedLinesCache() {
+	m.wrappedLinesCache = nil
+	m.cacheWidth = 0
+	m.cacheLineCount = 0
 }
 
 // renderScrollArea renders the scrolling output region.
@@ -1329,11 +1393,31 @@ func (m *Model) SetWorktree(w WorktreeInfo) {
 
 // AppendOutput adds a line to the output buffer.
 // When the buffer is full, the oldest line is evicted automatically.
+// This also updates the wrapped lines cache incrementally when possible.
 func (m *Model) AppendOutput(line string) {
 	m.outputLines.Push(line)
+
+	// Update cache incrementally if possible
+	if m.wrappedLinesCache != nil && m.cacheWidth == m.layout.ContentWidth() {
+		// Check if ring buffer wrapped (evicted old lines)
+		if m.outputLines.Len() == m.cacheLineCount+1 {
+			// Normal case: just append the new wrapped lines
+			wrapped := wrapLine(line, m.cacheWidth)
+			m.wrappedLinesCache = append(m.wrappedLinesCache, wrapped...)
+			m.cacheLineCount = m.outputLines.Len()
+		} else {
+			// Ring buffer wrapped, need full rebuild
+			m.invalidateWrappedLinesCache()
+			m.updateWrappedLinesCache()
+		}
+	} else if m.ready {
+		// No valid cache, build it
+		m.updateWrappedLinesCache()
+	}
 }
 
-// ClearOutput clears the output buffer.
+// ClearOutput clears the output buffer and cache.
 func (m *Model) ClearOutput() {
 	m.outputLines.Clear()
+	m.invalidateWrappedLinesCache()
 }

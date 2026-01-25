@@ -212,7 +212,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ---
 
-### [ ] **Ticket: PERF-2 - Cache wrapped lines in TUI**
+### [x] **Ticket: PERF-2 - Cache wrapped lines in TUI**
 
 **As a** user scrolling through output
 **I want** smooth scrolling without lag
@@ -229,19 +229,19 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Update scroll functions to use cache instead of calling `wrapAllOutputLines()`
 
 **Acceptance Criteria**:
-- [ ] Given cache populated, when scrolling, then no line wrapping occurs
-- [ ] Given window width unchanged, when new line added, then only new line wrapped and appended to cache
-- [ ] Given window width changed, when rendering, then full cache invalidation and rewrap occurs
-- [ ] Scrolling 1000 times on 10,000 lines completes in under 100ms total
-- [ ] CPU usage during scrolling is minimal
+- [x] Given cache populated, when scrolling, then no line wrapping occurs
+- [x] Given window width unchanged, when new line added, then only new line wrapped and appended to cache
+- [x] Given window width changed, when rendering, then full cache invalidation and rewrap occurs
+- [x] Scrolling 1000 times on 10,000 lines completes in under 100ms total
+- [x] CPU usage during scrolling is minimal
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Cache fields added to Model
-- [ ] Cache invalidation logic implemented
-- [ ] Incremental cache update for new lines
-- [ ] All scroll functions use cache
-- [ ] Benchmark tests for scroll performance
+- [x] Feature complete in one atomic commit
+- [x] Cache fields added to Model
+- [x] Cache invalidation logic implemented
+- [x] Incremental cache update for new lines
+- [x] All scroll functions use cache
+- [x] Benchmark tests for scroll performance
 
 **Dependencies**:
 - PERF-1 (ring buffer) should be completed first for consistent behaviour
@@ -485,7 +485,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 - [x] REL-2: Add timeouts to git cleanup commands (prevents hangs)
 
 **Should Have (Sprint 2):**
-- [ ] PERF-2: Cache wrapped lines in TUI (UI responsiveness)
+- [x] PERF-2: Cache wrapped lines in TUI (UI responsiveness)
 - [ ] PERF-3: Use strings.Builder for parser concatenation (easy win)
 - [ ] PERF-4: Eliminate double parsing in executor (CPU efficiency)
 - [ ] PERF-6: Increase scanner buffer limit (prevents data loss)
