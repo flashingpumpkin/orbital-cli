@@ -159,20 +159,21 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	// to resume an existing Claude conversation. Don't use orbit's internal state ID.
 	// Use effectiveWorkingDir (worktree path if resuming worktree, else wd)
 	cfg := &config.Config{
-		SpecPath:          files[0],
-		MaxIterations:     iterations,
-		CompletionPromise: promise,
-		Model:             model,
-		CheckerModel:      checkerModel,
-		MaxBudget:         budget,
-		WorkingDir:        effectiveWorkingDir,
-		Verbose:           verbose,
-		Debug:             debug,
-		ShowUnhandled:     showUnhandled,
-		DryRun:            dryRun,
-		SessionID:         sessionID, // Only if user provided --session-id
-		IterationTimeout:  timeout,
-		MaxTurns:          maxTurns,
+		SpecPath:                   files[0],
+		MaxIterations:              iterations,
+		CompletionPromise:          promise,
+		Model:                      model,
+		CheckerModel:               checkerModel,
+		MaxBudget:                  budget,
+		WorkingDir:                 effectiveWorkingDir,
+		Verbose:                    verbose,
+		Debug:                      debug,
+		ShowUnhandled:              showUnhandled,
+		DryRun:                     dryRun,
+		SessionID:                  sessionID, // Only if user provided --session-id
+		IterationTimeout:           timeout,
+		MaxTurns:                   maxTurns,
+		DangerouslySkipPermissions: dangerous,
 	}
 
 	// Validate configuration
@@ -198,6 +199,17 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	}
 	if fileConfig != nil && fileConfig.Prompt != "" {
 		spec.PromptTemplate = fileConfig.Prompt
+	}
+
+	// Handle dangerous mode: CLI flag takes precedence over config file
+	// If neither is set, default is false (safe mode)
+	if !dangerous && fileConfig != nil && fileConfig.Dangerous {
+		cfg.DangerouslySkipPermissions = true
+	}
+
+	// Warn if dangerous mode is enabled
+	if cfg.DangerouslySkipPermissions {
+		fmt.Fprintln(os.Stderr, "WARNING: Running with --dangerous flag. Claude can execute commands without permission prompts.")
 	}
 
 	// Set completion promise for prompt template
