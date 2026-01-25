@@ -300,7 +300,7 @@ Consolidated list of outstanding work items verified against the codebase. Each 
 
 ---
 
-### [ ] **Ticket 3.5: Add worktree selection on resume**
+### [x] **Ticket 3.5: Add worktree selection on resume**
 
 **As a** developer with multiple active worktrees
 **I want** to choose which worktree to resume
@@ -313,25 +313,26 @@ Consolidated list of outstanding work items verified against the codebase. Each 
 **Implementation Requirements**:
 - Detect multiple worktrees in continue command
 - Display selection prompt with name, branch, spec files
-- Support `--worktree-name` flag for direct selection
+- Support `--continue-worktree` flag for direct selection
 - Support `--non-interactive` flag that errors if selection needed
 - Auto-select when only one worktree exists
 
 **Acceptance Criteria**:
-- [ ] Given multiple worktrees, when `orbital continue` runs, then user prompted to select
-- [ ] Given `--worktree-name` flag, when continue runs, then specified worktree used
-- [ ] Given one worktree, when continue runs, then auto-selected
-- [ ] Given `--non-interactive` with multiple, when continue runs, then error with list
+- [x] Given multiple worktrees, when `orbital continue` runs, then user prompted to select
+- [x] Given `--continue-worktree` flag, when continue runs, then specified worktree used
+- [x] Given one worktree, when continue runs, then auto-selected
+- [x] Given `--non-interactive` with multiple, when continue runs, then error with list
 
 **Definition of Done**:
-- [ ] Selection logic implemented in continue.go
-- [ ] Flag support for direct selection and non-interactive mode
-- [ ] Tests for selection logic
+- [x] Selection logic implemented in continue.go
+- [x] Flag support for direct selection and non-interactive mode
+- [x] Tests for selection logic
 
 **Dependencies**: Ticket 3.1 (for display format consistency), Ticket 3.4 (cleanup should exist for error messages)
 
 **Files to Modify**:
 - `cmd/orbital/continue.go`
+- `cmd/orbital/root.go`
 
 **Effort Estimate**: S
 
@@ -351,7 +352,7 @@ Consolidated list of outstanding work items verified against the codebase. Each 
 
 **Sprint 3 (Polish)**:
 - [x] Ticket 3.4: Add worktree cleanup command (M)
-- [ ] Ticket 3.5: Add worktree selection on resume (S)
+- [x] Ticket 3.5: Add worktree selection on resume (S)
 
 ## Total Effort
 

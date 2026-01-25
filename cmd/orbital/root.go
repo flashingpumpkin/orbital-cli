@@ -30,31 +30,33 @@ import (
 
 var (
 	// Flag variables
-	iterations    int
-	promise       string
-	model         string
-	checkerModel  string
-	budget        float64
-	workingDir    string
-	configFile    string
-	quiet         bool
-	debug         bool
-	showUnhandled bool
-	todosOnly     bool
-	dryRun        bool
-	sessionID     string
-	timeout       time.Duration
-	maxTurns      int
-	systemPrompt  string
-	agents        string
-	notesFile     string
-	contextFiles  []string
-	workflowFlag  string
-	minimal       bool
-	worktreeMode  bool
-	worktreeName  string
-	setupModel    string
-	mergeModel    string
+	iterations          int
+	promise             string
+	model               string
+	checkerModel        string
+	budget              float64
+	workingDir          string
+	configFile          string
+	quiet               bool
+	debug               bool
+	showUnhandled       bool
+	todosOnly           bool
+	dryRun              bool
+	sessionID           string
+	timeout             time.Duration
+	maxTurns            int
+	systemPrompt        string
+	agents              string
+	notesFile           string
+	contextFiles        []string
+	workflowFlag        string
+	minimal             bool
+	worktreeMode        bool
+	worktreeName        string
+	setupModel          string
+	mergeModel          string
+	continueWorktree    string
+	nonInteractive      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -118,6 +120,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&worktreeName, "worktree-name", "", "Override Claude's worktree name choice")
 	rootCmd.PersistentFlags().StringVar(&setupModel, "setup-model", "haiku", "Model for worktree setup phase")
 	rootCmd.PersistentFlags().StringVar(&mergeModel, "merge-model", "haiku", "Model for worktree merge phase")
+	rootCmd.PersistentFlags().StringVar(&continueWorktree, "continue-worktree", "", "Specify worktree name to resume (for continue command)")
+	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "Error if interactive selection would be needed")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {

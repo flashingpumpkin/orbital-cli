@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -64,15 +67,18 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	wtStateManager := worktree.NewStateManager(wd)
 	worktrees, err := wtStateManager.List()
 	if err == nil && len(worktrees) > 0 {
-		// For now, use the first worktree (could add TUI picker later)
-		wt := worktrees[0]
-
-		// Validate the worktree still exists and is valid
-		if err := worktree.ValidateWorktree(&wt); err != nil {
-			return fmt.Errorf("worktree validation failed: %w", err)
+		// Select worktree based on flags or user input
+		selectedWT, err := selectWorktree(cmd, worktrees)
+		if err != nil {
+			return err
 		}
 
-		wtState = &wt
+		// Validate the worktree still exists and is valid
+		if err := worktree.ValidateWorktree(selectedWT); err != nil {
+			return fmt.Errorf("worktree validation failed: %w\nRun 'orbital worktree cleanup' to remove stale entries", err)
+		}
+
+		wtState = selectedWT
 		fmt.Printf("Found worktree session: %s (branch: %s)\n", wtState.Path, wtState.Branch)
 	}
 
@@ -396,4 +402,81 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// selectWorktree handles worktree selection when multiple exist.
+// Priority:
+// 1. --continue-worktree flag specifies exact name
+// 2. Single worktree: auto-select
+// 3. Multiple worktrees: prompt user (unless --non-interactive)
+func selectWorktree(cmd *cobra.Command, worktrees []worktree.WorktreeState) (*worktree.WorktreeState, error) {
+	// If --continue-worktree flag provided, use that
+	if continueWorktree != "" {
+		for i := range worktrees {
+			if worktrees[i].Name == continueWorktree {
+				return &worktrees[i], nil
+			}
+		}
+		return nil, fmt.Errorf("worktree not found: %s\nAvailable: %s", continueWorktree, formatWorktreeNames(worktrees))
+	}
+
+	// Single worktree: auto-select
+	if len(worktrees) == 1 {
+		return &worktrees[0], nil
+	}
+
+	// Multiple worktrees: need selection
+	if nonInteractive {
+		return nil, fmt.Errorf("multiple worktrees found; specify one with --continue-worktree:\n%s", formatWorktreeList(worktrees))
+	}
+
+	// Interactive selection
+	return promptWorktreeSelection(cmd, worktrees)
+}
+
+// formatWorktreeNames returns a comma-separated list of worktree names.
+func formatWorktreeNames(worktrees []worktree.WorktreeState) string {
+	names := make([]string, len(worktrees))
+	for i, wt := range worktrees {
+		names[i] = wt.Name
+	}
+	return strings.Join(names, ", ")
+}
+
+// formatWorktreeList formats worktrees for display in error messages.
+func formatWorktreeList(worktrees []worktree.WorktreeState) string {
+	var sb strings.Builder
+	for i, wt := range worktrees {
+		sb.WriteString(fmt.Sprintf("  [%d] %s (branch: %s)\n", i+1, wt.Name, wt.Branch))
+		if len(wt.SpecFiles) > 0 {
+			sb.WriteString(fmt.Sprintf("      Specs: %s\n", strings.Join(wt.SpecFiles, ", ")))
+		}
+	}
+	return sb.String()
+}
+
+// promptWorktreeSelection prompts the user to select a worktree.
+func promptWorktreeSelection(cmd *cobra.Command, worktrees []worktree.WorktreeState) (*worktree.WorktreeState, error) {
+	out := cmd.OutOrStdout()
+	in := cmd.InOrStdin()
+
+	fmt.Fprintln(out, "Multiple worktrees found. Select one to resume:")
+	fmt.Fprintln(out)
+	fmt.Fprint(out, formatWorktreeList(worktrees))
+	fmt.Fprintln(out)
+	fmt.Fprint(out, "Enter number (1-", len(worktrees), "): ")
+
+	reader := bufio.NewReader(in)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
+
+	input = strings.TrimSpace(input)
+	num, err := strconv.Atoi(input)
+	if err != nil || num < 1 || num > len(worktrees) {
+		return nil, fmt.Errorf("invalid selection: %s", input)
+	}
+
+	return &worktrees[num-1], nil
 }
