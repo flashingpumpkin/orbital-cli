@@ -208,3 +208,85 @@ All 3 required fixes from Code Review - Iteration 2 have been addressed, plus 1 
 ### Verification
 
 All tests pass, lint passes, build succeeds.
+
+## Code Review - Iteration 3
+
+### Security
+No issues. The changes add defensive guards against division by zero and improve floating-point rounding precision. No injection risks, authentication issues, or data exposure vulnerabilities. The code is pure UI rendering with no external input vectors.
+
+### Design
+**_ISSUES_FOUND_**
+
+1. **Inconsistent Division-by-Zero Pattern** (model.go:1150-1153)
+   - The code at line 1150 divides BEFORE checking: `costRatio := p.Cost / p.Budget` then checks `if p.Budget == 0`
+   - This violates the defensive pattern established in `renderHeader()` (lines 694-701) where checks occur BEFORE division
+   - Creates inconsistency within the same file
+
+2. **Repeated Ratio Threshold Logic** (model.go:704, 709, 1125)
+   - The pattern `if p.MaxIteration > 0 && iterRatio > 0.8` is duplicated three times
+   - Violates DRY principle; threshold changes require updating multiple locations
+
+3. **Missing Abstraction for Safe Ratio Calculation** (model.go:696-698, 699-701, 1119-1121)
+   - The pattern `if denominator > 0 { ratio = numerator / denominator }` repeats three times
+   - Opportunity to extract a `safeRatio()` utility function
+
+### Logic
+**_ISSUES_FOUND_**
+
+1. **Critical: Division occurs before guard in `renderProgressPanel`** (model.go:1150-1153)
+   - Code: `costRatio := p.Cost / p.Budget` followed by `if p.Budget == 0 { costRatio = 0 }`
+   - When `p.Budget == 0` and `p.Cost > 0`, division produces `+Inf` BEFORE the check
+   - `RenderProgressBar(costRatio, ...)` at line 1154 receives infinity
+   - This is inconsistent with the correct pattern in `renderHeader()` (lines 699-701) where guard precedes division
+
+### Error Handling
+No issues. The changes are defensive programming improvements that prevent undefined numeric behaviour. No swallowed errors, missing error propagation, or resource leaks.
+
+### Data Integrity
+**_ISSUES_FOUND_**
+
+1. **Division by zero produces infinity before null check** (model.go:1150-1153)
+   - Same issue as Logic review
+   - When `p.Budget == 0`, the division `p.Cost / p.Budget` produces `+Inf`
+   - The subsequent check sets `costRatio = 0` but infinity has already been computed
+   - Data corruption risk: `RenderProgressBar()` receives infinity on line 1154
+
+### Verdict
+**FAIL**
+
+The changes in `renderHeader()` and `renderProgressPanel()` for `iterRatio` are correct, following the guard-before-division pattern. However, there is an existing bug at line 1150-1153 where `costRatio` division occurs BEFORE the budget check. This was not introduced by this iteration but remains unfixed while the same pattern was correctly applied elsewhere.
+
+**Required fixes before PASS:**
+1. Fix line 1150-1153 to match the defensive pattern:
+   ```go
+   var costRatio float64
+   if p.Budget > 0 {
+       costRatio = p.Cost / p.Budget
+   }
+   ```
+
+**Note:** This bug exists in existing code (not introduced by this iteration), but the review agents correctly identified that the same file now has inconsistent patterns after the fixes were applied to other locations.
+
+## Iteration 4 - 2026-01-25 (Review Fixes Round 3)
+
+### Task Selected
+Fix division-by-zero bug in `renderProgressPanel` at line 1150-1153.
+
+### Why Highest Leverage
+This was the sole required fix from Iteration 3's code review to achieve a PASS verdict. The bug caused division to happen before the guard check, producing `+Inf` when `p.Budget == 0`. Fixing this completes the defensive pattern consistently across all ratio calculations in `model.go`.
+
+### Key Decisions
+Applied the same guard-before-division pattern used in `renderHeader()`:
+```go
+var costRatio float64
+if p.Budget > 0 {
+    costRatio = p.Cost / p.Budget
+}
+```
+
+### Verification
+- `make check` passes (lint and tests)
+- `make build` succeeds
+
+### Outcome
+Fixed the inconsistent division-by-zero handling in `renderProgressPanel`. All ratio calculations in `model.go` now follow the same defensive pattern: guard before division.

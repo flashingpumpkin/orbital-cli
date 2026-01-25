@@ -1147,9 +1147,9 @@ func (m Model) renderProgressPanel() string {
 	}
 
 	// Line 2: Budget progress bar, tokens and cost
-	costRatio := p.Cost / p.Budget
-	if p.Budget == 0 {
-		costRatio = 0
+	var costRatio float64
+	if p.Budget > 0 {
+		costRatio = p.Cost / p.Budget
 	}
 	budgetBar := RenderProgressBar(costRatio, BarWidth, m.styles.Value, m.styles.Warning)
 	tokensStr := m.formatTokens(p.TokensIn, p.TokensOut)
