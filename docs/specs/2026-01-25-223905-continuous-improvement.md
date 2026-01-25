@@ -42,12 +42,21 @@ Reference: docs/plans/broken-tui-rendering.png
 - [x] Create docs/research/tui-rendering-patterns.md with findings and recommended approach
 
 #### Fixes (after research is complete)
+Reference screenshots: docs/plans/broken-tui-rendering.png, docs/plans/broken-tui-rendering-2.png
+
 - [x] Fix duplicate status bars appearing at bottom of TUI (cannot reproduce - layout tests pass, added regression tests)
-- [ ] Fix text truncation in Notes/State footer line (shows "...otes-223905-continuous-improvement.md" instead of full path)
+- [x] Fix text truncation in Notes/State footer line (fixed: formatPath now uses ANSI-aware truncation with truncateFromStart helper)
 - [x] Fix overlapping UI sections between main content area and footer (cannot reproduce - layout tests pass)
 - [x] Ensure footer height calculation accounts for all status lines (verified correct, added tests)
 - [x] Verify terminal resize handling doesn't cause layout corruption (existing tests pass)
 - [ ] Assess and fix any and all other rendering issues that lead to broken UI rendering
+
+#### Issues from broken-tui-rendering-2.png
+- [x] Fix Tasks panel content bleeding across multiple lines at bottom of TUI (fixed: renderTask now uses ansi.Truncate for ANSI-aware truncation)
+- [ ] Fix duplicate iteration/token counter lines (shows Iteration 4/50 then another token count below)
+- [ ] Fix box drawing character (│) misalignment with adjacent content
+- [ ] Fix numbered list and bullet point indentation inconsistency in content area
+- [ ] Investigate why footer sections (Tasks, progress, tokens) render as separate overlapping blocks
 
 ### Known Issues
 - [ ] Review TODO comments and address actionable items

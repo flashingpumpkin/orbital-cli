@@ -1093,8 +1093,12 @@ func (m Model) renderTask(task Task) string {
 
 	content := task.Content
 	maxLen := contentWidth - 6 // icon + spacing + borders
-	if len(content) > maxLen {
-		content = content[:maxLen-3] + "..."
+	if maxLen < 4 {
+		maxLen = 4 // Minimum space for "..."
+	}
+	if ansi.StringWidth(content) > maxLen {
+		// Use ANSI-aware truncation
+		content = ansi.Truncate(content, maxLen-3, "...")
 	}
 
 	taskContent := style.Render("  " + icon + " " + content)
@@ -1254,8 +1258,15 @@ func (m Model) renderSessionPanel() string {
 func (m Model) formatPath(label, path string) string {
 	labelStr := m.styles.Label.Render(label + ": ")
 	maxLen := 40
-	if len(path) > maxLen {
-		path = "..." + path[len(path)-maxLen+3:]
+	if ansi.StringWidth(path) > maxLen {
+		// Truncate from the start to show the filename
+		// Find how many characters to remove from the start
+		truncLen := maxLen - 3 // Reserve space for "..."
+		if truncLen < 1 {
+			truncLen = 1
+		}
+		// Walk backwards to find the right truncation point
+		path = truncateFromStart(path, truncLen)
 	}
 	return labelStr + m.styles.Value.Render(path)
 }
@@ -1269,8 +1280,13 @@ func (m Model) formatPaths(label string, paths []string) string {
 	if len(paths) == 1 {
 		path := paths[0]
 		maxLen := 60
-		if len(path) > maxLen {
-			path = "..." + path[len(path)-maxLen+3:]
+		if ansi.StringWidth(path) > maxLen {
+			// Truncate from the start to show the filename
+			truncLen := maxLen - 3
+			if truncLen < 1 {
+				truncLen = 1
+			}
+			path = truncateFromStart(path, truncLen)
 		}
 		return labelStr + m.styles.Value.Render(path)
 	}
@@ -1303,6 +1319,36 @@ func padLeft(s string, length int, pad rune) string {
 		s = string(pad) + s
 	}
 	return s
+}
+
+// truncateFromStart truncates a string from the beginning to fit within targetWidth,
+// prepending "..." to indicate truncation. Uses ANSI-aware width measurement.
+func truncateFromStart(s string, targetWidth int) string {
+	if targetWidth <= 0 {
+		return "..."
+	}
+
+	visWidth := ansi.StringWidth(s)
+	if visWidth <= targetWidth {
+		return s
+	}
+
+	// Walk through the string from the end to find where to start
+	// We want to keep the last targetWidth characters (by visible width)
+	runes := []rune(s)
+	width := 0
+	startIdx := len(runes)
+
+	for i := len(runes) - 1; i >= 0; i-- {
+		charWidth := ansi.StringWidth(string(runes[i]))
+		if width+charWidth > targetWidth {
+			break
+		}
+		width += charWidth
+		startIdx = i
+	}
+
+	return "..." + string(runes[startIdx:])
 }
 
 // wrapLine wraps a single line to fit within the given width, preserving ANSI codes.

@@ -412,6 +412,80 @@ func TestWrapLineContinuationIndent(t *testing.T) {
 	}
 }
 
+func TestTruncateFromStart(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		targetWidth int
+		wantPrefix  string // expected prefix ("..." for truncated)
+		wantSuffix  string // expected ending
+		wantWidth   int    // expected visible width (approximate)
+	}{
+		{
+			name:        "short string no truncation",
+			input:       "file.go",
+			targetWidth: 20,
+			wantPrefix:  "",
+			wantSuffix:  "file.go",
+			wantWidth:   7,
+		},
+		{
+			name:        "long path truncated",
+			input:       "/Users/test/Projects/orbital/internal/tui/model.go",
+			targetWidth: 30,
+			wantPrefix:  "...",
+			wantSuffix:  "model.go",
+			wantWidth:   30, // Should fill target width
+		},
+		{
+			name:        "exact fit no truncation",
+			input:       "exactly-thirty-characters.txt",
+			targetWidth: 30,
+			wantPrefix:  "",
+			wantSuffix:  ".txt",
+			wantWidth:   29,
+		},
+		{
+			name:        "zero width returns ellipsis",
+			input:       "test.go",
+			targetWidth: 0,
+			wantPrefix:  "...",
+			wantSuffix:  "...",
+			wantWidth:   3,
+		},
+		{
+			name:        "preserves filename",
+			input:       "docs/notes/2026-01-25-notes-223905-continuous-improvement.md",
+			targetWidth: 40,
+			wantPrefix:  "...",
+			wantSuffix:  "continuous-improvement.md",
+			wantWidth:   40,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := truncateFromStart(tt.input, tt.targetWidth)
+
+			// Check prefix
+			if tt.wantPrefix != "" && !strings.HasPrefix(result, tt.wantPrefix) {
+				t.Errorf("truncateFromStart() = %q, want prefix %q", result, tt.wantPrefix)
+			}
+
+			// Check suffix
+			if !strings.HasSuffix(result, tt.wantSuffix) {
+				t.Errorf("truncateFromStart() = %q, want suffix %q", result, tt.wantSuffix)
+			}
+
+			// Check width doesn't exceed target
+			width := ansi.StringWidth(result)
+			if tt.targetWidth > 0 && width > tt.targetWidth+3 { // Allow for "..." prefix
+				t.Errorf("truncateFromStart() width = %d, want <= %d", width, tt.targetWidth+3)
+			}
+		})
+	}
+}
+
 func TestRenderScrollAreaWrap(t *testing.T) {
 	m := NewModel()
 
