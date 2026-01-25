@@ -120,3 +120,91 @@ All 6 issues identified in the code review have been fixed:
 ### Verification
 
 All tests pass, lint passes, build succeeds.
+
+## Code Review - Iteration 2
+
+### Security
+No issues. The changes are defensive bug fixes to pure formatting functions. No external input vectors, no injection risks, no authentication concerns. The `math.MinInt` handling correctly addresses the two's complement overflow edge case.
+
+### Design
+No issues. The refactoring maintains good principles:
+- Single Responsibility: Each function maintains a single purpose
+- Correct placement of utility functions in shared package
+- Consistent pattern (recursive handling of negatives) applied across all formatting functions
+- No SOLID violations
+
+### Logic
+**_ISSUES_FOUND_**
+
+1. **Division by zero in `renderHeader`** (model.go:694-695)
+   - `iterRatio := float64(p.Iteration) / float64(p.MaxIteration)` produces `+Inf` when `MaxIteration` is 0
+   - `costRatio := p.Cost / p.Budget` produces `+Inf`/`NaN` when `Budget` is 0
+   - The fix was applied to `formatCost` (line 1193) but NOT to `renderHeader`
+
+2. **Division by zero in `renderProgressPanel`** (model.go:1111)
+   - Same issue: `iterRatio := float64(p.Iteration) / float64(p.MaxIteration)` when `MaxIteration` is 0
+   - Inconsistent with the budget guard added on line 1141
+
+3. **Floating point precision loss in `formatFloat`** (bridge.go:423-424)
+   - `formatFloat(1.2345)` returns `"1.2344"` due to truncation instead of rounding
+   - Uses `int()` truncation instead of rounding with `+0.5`
+
+4. **Integer overflow in `formatFloat` for large values** (bridge.go:417-425)
+   - When `f > math.MaxInt64`, `int(f)` overflows producing garbage output
+   - Low severity as costs won't reach these values in practice
+
+5. **Integer overflow in `formatCurrency` for large amounts** (model.go:1277-1288)
+   - When `amount > math.MaxInt64/100`, overflow produces incorrect results
+   - Low severity as budgets won't reach these values in practice
+
+### Error Handling
+No issues. The changes are to pure formatting functions with no failure modes requiring error handling.
+
+### Data Integrity
+**_ISSUES_FOUND_**
+
+Same issues as Logic review. Additionally:
+
+6. **Missing NaN/Inf handling** in `formatFloat` and `formatCurrency`
+   - If upstream parsing produces NaN/Inf, these functions will produce unpredictable output
+   - Low severity as this would indicate an upstream bug
+
+### Verdict
+**FAIL**
+
+The division by zero issues (1 and 2) represent incomplete fixes. The same pattern was fixed in `formatCost` but not in `renderHeader` and `renderProgressPanel`. This inconsistency suggests the fix was incomplete.
+
+**Required fixes before PASS:**
+1. Add `MaxIteration > 0` guard before division in `renderHeader` (line 694)
+2. Add `Budget > 0` guard before division in `renderHeader` (line 695)
+3. Add `MaxIteration > 0` guard before division in `renderProgressPanel` (line 1111)
+
+**Nice to have (low priority):**
+4. Add rounding (+0.5) in `formatFloat` fractional calculation
+5. Add overflow guards for extremely large values
+
+## Iteration 3 - 2026-01-25 (Review Fixes Round 2)
+
+### Issues Addressed
+
+All 3 required fixes from Code Review - Iteration 2 have been addressed, plus 1 optional improvement:
+
+1. **Division by zero in `renderHeader` (MaxIteration)** (model.go:694)
+   - **Fix**: Added guard `if p.MaxIteration > 0` before division and before checking `iterRatio > 0.8`
+   - **Why**: When MaxIteration is 0, division produces +Inf which causes incorrect warning styling
+
+2. **Division by zero in `renderHeader` (Budget)** (model.go:695)
+   - **Fix**: Added guard `if p.Budget > 0` before division and before checking `costRatio > 0.8`
+   - **Why**: When Budget is 0, division produces +Inf/NaN which causes incorrect styling
+
+3. **Division by zero in `renderProgressPanel` (MaxIteration)** (model.go:1111)
+   - **Fix**: Added guard `if p.MaxIteration > 0` before division and before checking `iterRatio > 0.8`
+   - **Why**: Same issue as renderHeader - inconsistent with the budget guard that was already present
+
+4. **Floating point precision loss in `formatFloat`** (bridge.go:423-424) - OPTIONAL
+   - **Fix**: Added rounding with `+0.5` before casting to int. Also added carry-over handling for edge case where rounding produces `frac >= 10000` (e.g., 1.99999 rounds to 2.0000)
+   - **Why**: Truncation with `int()` loses precision. For example, `formatFloat(1.2345)` would return `"1.2344"` instead of the correctly rounded `"1.2345"`
+
+### Verification
+
+All tests pass, lint passes, build succeeds.

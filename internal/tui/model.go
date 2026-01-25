@@ -691,16 +691,22 @@ func (m Model) renderHeader() string {
 	costStr := formatCurrency(p.Cost) + "/" + formatCurrency(p.Budget)
 
 	// Apply warning colour if thresholds exceeded
-	iterRatio := float64(p.Iteration) / float64(p.MaxIteration)
-	costRatio := p.Cost / p.Budget
+	// Guard against division by zero when MaxIteration or Budget is 0
+	var iterRatio, costRatio float64
+	if p.MaxIteration > 0 {
+		iterRatio = float64(p.Iteration) / float64(p.MaxIteration)
+	}
+	if p.Budget > 0 {
+		costRatio = p.Cost / p.Budget
+	}
 
 	var iterStyled, costStyled string
-	if iterRatio > 0.8 {
+	if p.MaxIteration > 0 && iterRatio > 0.8 {
 		iterStyled = m.styles.Warning.Render(iterStr)
 	} else {
 		iterStyled = m.styles.Value.Render(iterStr)
 	}
-	if costRatio > 0.8 {
+	if p.Budget > 0 && costRatio > 0.8 {
 		costStyled = m.styles.Warning.Render(costStr)
 	} else {
 		costStyled = m.styles.Value.Render(costStr)
@@ -1108,11 +1114,15 @@ func (m Model) renderProgressPanel() string {
 	border := m.styles.Border.Render(BoxVertical)
 
 	// Line 1: Iteration progress bar and step info
-	iterRatio := float64(p.Iteration) / float64(p.MaxIteration)
+	// Guard against division by zero when MaxIteration is 0
+	var iterRatio float64
+	if p.MaxIteration > 0 {
+		iterRatio = float64(p.Iteration) / float64(p.MaxIteration)
+	}
 	iterBar := RenderProgressBar(iterRatio, BarWidth, m.styles.Value, m.styles.Warning)
 	iterLabel := m.styles.Label.Render("Iteration ")
 	iterValue := m.styles.Value.Render(formatFraction(p.Iteration, p.MaxIteration))
-	if iterRatio > 0.8 {
+	if p.MaxIteration > 0 && iterRatio > 0.8 {
 		iterValue = m.styles.Warning.Render(formatFraction(p.Iteration, p.MaxIteration))
 	}
 

@@ -421,7 +421,13 @@ func formatFloat(f float64) string {
 		return "-" + formatFloat(-f)
 	}
 	whole := int(f)
-	frac := int((f - float64(whole)) * 10000)
+	// Use rounding (+0.5) instead of truncation for better precision
+	frac := int((f-float64(whole))*10000 + 0.5)
+	// Handle rounding that carries over to whole number (e.g., 1.99999 -> 2.0000)
+	if frac >= 10000 {
+		whole++
+		frac = 0
+	}
 	return util.IntToString(whole) + "." + padLeft(util.IntToString(frac), 4, '0')
 }
 
