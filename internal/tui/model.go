@@ -79,6 +79,10 @@ type Model struct {
 	fileContents map[string]string // Cached file contents by path
 	fileScroll   map[string]int    // Scroll offset per file
 
+	// Output scrolling
+	outputScroll  int  // Line offset from the top of the wrapped output buffer
+	outputTailing bool // Whether the output window is locked to the bottom (auto-scrolling)
+
 	// Styles
 	styles Styles
 
@@ -110,13 +114,15 @@ type Styles struct {
 // NewModel creates a new TUI model.
 func NewModel() Model {
 	return Model{
-		outputLines:  make([]string, 0),
-		tasks:        make([]Task, 0),
-		tabs:         []Tab{{Name: "Output", Type: TabOutput}},
-		activeTab:    0,
-		fileContents: make(map[string]string),
-		fileScroll:   make(map[string]int),
-		styles:       defaultStyles(),
+		outputLines:   make([]string, 0),
+		tasks:         make([]Task, 0),
+		tabs:          []Tab{{Name: "Output", Type: TabOutput}},
+		activeTab:     0,
+		fileContents:  make(map[string]string),
+		fileScroll:    make(map[string]int),
+		outputScroll:  0,
+		outputTailing: true,
+		styles:        defaultStyles(),
 		progress: ProgressInfo{
 			Iteration:    1,
 			MaxIteration: 50,
