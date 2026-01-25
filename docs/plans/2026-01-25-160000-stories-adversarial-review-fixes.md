@@ -50,20 +50,20 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Add warning message when dangerous mode is enabled
 
 **Acceptance Criteria**:
-- [ ] Given default config, when executor builds args, then `--dangerously-skip-permissions` is NOT included
-- [ ] Given `--dangerous` CLI flag, when executor builds args, then `--dangerously-skip-permissions` IS included
-- [ ] Given `dangerous = true` in TOML config, when executor builds args, then flag IS included
-- [ ] Given dangerous mode enabled, when session starts, then warning is printed to stderr
-- [ ] Existing tests updated to account for new default behaviour
+- [x] Given default config, when executor builds args, then `--dangerously-skip-permissions` is NOT included
+- [x] Given `--dangerous` CLI flag, when executor builds args, then `--dangerously-skip-permissions` IS included
+- [x] Given `dangerous = true` in TOML config, when executor builds args, then flag IS included
+- [x] Given dangerous mode enabled, when session starts, then warning is printed to stderr
+- [x] Existing tests updated to account for new default behaviour
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] `config.Config` updated with new field
-- [ ] `cmd/orbital/root.go` updated with new flag
-- [ ] `internal/executor/executor.go` conditionally includes flag
-- [ ] `internal/config/file.go` parses TOML option
-- [ ] Unit tests for executor.BuildArgs() updated
-- [ ] Unit tests for config parsing updated
+- [x] Feature complete in one atomic commit
+- [x] `config.Config` updated with new field
+- [x] `cmd/orbital/root.go` updated with new flag
+- [x] `internal/executor/executor.go` conditionally includes flag
+- [x] `internal/config/file.go` parses TOML option
+- [x] Unit tests for executor.BuildArgs() updated
+- [x] Unit tests for config parsing updated
 
 **Dependencies**:
 - None
@@ -97,17 +97,17 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Use file locking consistently with Add/Remove operations
 
 **Acceptance Criteria**:
-- [ ] Given save succeeds, when Pop() called, then files returned and no error
-- [ ] Given save fails (e.g., read-only filesystem), when Pop() called, then error returned
-- [ ] Given Pop() returns error, when caller handles it, then queue state is recoverable
-- [ ] All existing callers updated to handle error return
+- [x] Given save succeeds, when Pop() called, then files returned and no error
+- [x] Given save fails (e.g., read-only filesystem), when Pop() called, then error returned
+- [x] Given Pop() returns error, when caller handles it, then queue state is recoverable
+- [x] All existing callers updated to handle error return
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] `internal/state/queue.go` updated with new signature
-- [ ] All callers in codebase updated
-- [ ] Unit tests for Pop() error cases added
-- [ ] Integration test for save failure scenario
+- [x] Feature complete in one atomic commit
+- [x] `internal/state/queue.go` updated with new signature
+- [x] All callers in codebase updated
+- [x] Unit tests for Pop() error cases added
+- [x] Integration test for save failure scenario
 
 **Dependencies**:
 - None
@@ -139,18 +139,18 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Return clear error message when timeout occurs
 
 **Acceptance Criteria**:
-- [ ] Given git command completes normally, when cleanup runs, then success returned
-- [ ] Given git command hangs, when 30 seconds elapsed, then timeout error returned
-- [ ] Given timeout occurs, when error examined, then message indicates timeout
-- [ ] Context cancellation properly terminates git processes
+- [x] Given git command completes normally, when cleanup runs, then success returned
+- [x] Given git command hangs, when 30 seconds elapsed, then timeout error returned
+- [x] Given timeout occurs, when error examined, then message indicates timeout
+- [x] Context cancellation properly terminates git processes
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] `Cleanup.Run()` accepts context parameter
-- [ ] All git commands use `exec.CommandContext`
-- [ ] 30-second timeout applied consistently
-- [ ] Unit tests with mock commands added
-- [ ] Callers updated to pass context
+- [x] Feature complete in one atomic commit
+- [x] `Cleanup.Run()` accepts context parameter
+- [x] All git commands use `exec.CommandContext`
+- [x] 30-second timeout applied consistently
+- [x] Unit tests with mock commands added
+- [x] Callers updated to pass context
 
 **Dependencies**:
 - None
@@ -185,19 +185,19 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Ensure scroll position handling works with ring buffer
 
 **Acceptance Criteria**:
-- [ ] Given buffer at capacity, when new line added, then oldest line evicted
-- [ ] Given 50,000 lines added, when memory checked, then buffer holds exactly 10,000 lines
-- [ ] Given scrolling up in buffer, when at eviction boundary, then scroll stops at oldest available line
-- [ ] Given window resize, when buffer rewrapped, then all visible lines correct
-- [ ] Memory usage remains constant regardless of session length
+- [x] Given buffer at capacity, when new line added, then oldest line evicted
+- [x] Given 50,000 lines added, when memory checked, then buffer holds exactly 10,000 lines
+- [x] Given scrolling up in buffer, when at eviction boundary, then scroll stops at oldest available line
+- [x] Given window resize, when buffer rewrapped, then all visible lines correct
+- [x] Memory usage remains constant regardless of session length
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Ring buffer type implemented with tests
-- [ ] `internal/tui/model.go` updated to use ring buffer
-- [ ] Scroll logic updated for ring buffer semantics
-- [ ] Unit tests for ring buffer edge cases
-- [ ] Integration test for long session simulation
+- [x] Feature complete in one atomic commit
+- [x] Ring buffer type implemented with tests
+- [x] `internal/tui/model.go` updated to use ring buffer
+- [x] Scroll logic updated for ring buffer semantics
+- [x] Unit tests for ring buffer edge cases
+- [x] Integration test for long session simulation
 
 **Dependencies**:
 - None (but PERF-2 builds on this)
