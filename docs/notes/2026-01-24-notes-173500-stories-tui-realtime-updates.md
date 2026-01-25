@@ -62,3 +62,63 @@ All tests pass:
 - The 50ms startup delay is pragmatic but not ideal. A better approach would be implementing a ready signal via the TUI's Init() function.
 - The message queue drops messages when full. Consider adding a metric for dropped messages if users report missing updates.
 - The queue size (100) was chosen as a reasonable default. May need adjustment based on real-world usage patterns.
+
+## Code Review: 2026-01-24
+
+**Reviewer:** Gate Review Agent
+
+### Summary
+
+Changes implement the TUI Real-Time Updates epic. Six tickets covering real-time stats updates, workflow step notifications, iteration notifications, non-blocking message queue, TUI startup synchronisation, and parser stat accumulation fixes.
+
+### Correctness
+
+**Parser (`internal/output/parser.go`)**
+- Token tracking logic is sound: assistant tokens are replaced per message, result tokens accumulate across iterations
+- The combination logic (`stats.TokensIn = resultTokensIn + assistantTokensIn`) correctly shows intermediate progress during streaming
+- When a result arrives, assistant counters reset and result counters accumulate, preventing double-counting
+- Cost and duration accumulation is correct for budget tracking
+
+**Bridge (`internal/tui/bridge.go`)**
+- Non-blocking message queue implemented correctly with `select` and default clause
+- Proper use of `atomic.Bool` for closed state avoids race conditions
+- `Close()` is idempotent (uses `Swap` to check if already closed)
+- Message pump goroutine exits cleanly when channel is closed
+
+**Root command (`cmd/orbital/root.go`)**
+- Iteration and step start callbacks correctly send progress updates to TUI
+- 50ms startup delay is documented and justified
+
+### Edge Cases
+
+1. **Queue full handling**: Messages are dropped silently. Acceptable for real-time updates (tests verify this behaviour).
+2. **Nil program**: When `program` is nil, no pump goroutine starts. Tests cover this.
+3. **Close after close**: Idempotent, no panic. Tests verify.
+4. **Send after close**: Ignored gracefully via atomic check. Tests verify.
+
+### Code Quality
+
+- Clear comments explaining the stat accumulation strategy
+- Good separation of concerns between parser (data) and bridge (transport)
+- Tests are comprehensive with clear names and descriptions
+
+### Test Coverage
+
+New tests added:
+- `TestParseLine_AssistantThenResult_NoDoubleCount` - validates no double-counting
+- `TestParseLine_MultipleIterations_AccumulatesCorrectly` - validates cross-iteration accumulation
+- `TestBridgeMessageQueue` - tests queue behaviour under various conditions
+- `TestBridgeStatsMsg` - tests stats sending on different event types
+- `TestBridgeStatsMsgProgressive` - tests progressive stat updates
+
+All tests pass.
+
+### Minor Observations (Non-Blocking)
+
+1. **Bridge.Close() not called by Program**: The `tui.Program` struct creates a Bridge but has no cleanup method to call `bridge.Close()`. When the TUI exits, the message pump goroutine may remain alive (blocked on channel read). Since program exit follows shortly, this is not a practical issue, but adding a `Program.Close()` method that calls `bridge.Close()` would be cleaner for explicit resource management.
+
+2. **No metrics for dropped messages**: As noted in the implementation, there's no visibility into whether messages are being dropped. A debug counter could help diagnose issues if users report missing updates.
+
+### Verdict
+
+The implementation is correct, well-tested, and addresses all acceptance criteria. The minor observations above are not blockers and can be addressed in future work if desired.

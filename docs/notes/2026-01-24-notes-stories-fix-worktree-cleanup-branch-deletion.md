@@ -44,3 +44,30 @@ in separate events, the extracted text became `BRANCH_NAME: orbit/fix-todo-track
 All tests pass:
 - `go test ./...` passes
 - `go build ./...` succeeds
+
+### Code Review (Post-Implementation)
+
+**Reviewer Assessment**: All changes acceptable.
+
+**Correctness**:
+- `ExtractText` fix correctly appends newlines between events
+- The `HasSuffix` check prevents double newlines when content already ends with `\n`
+- `strings.Contains` in completion detector and marker detection tolerates trailing newlines
+
+**Edge Cases Covered**:
+- Single content event (gets trailing newline)
+- Multiple events concatenated (now properly separated)
+- Content already ending with newline (no double newline)
+- Marker followed by other text in separate events (key bug scenario)
+
+**Test Coverage**:
+- Parser tests updated to expect new behaviour
+- Three new regression tests for marker extraction added
+- Tests verify the specific bug scenario that caused the issue
+
+**Code Quality**:
+- Comments explain the purpose of the newline preservation
+- Error messages now include actionable debugging info (branch name, git output)
+- No unnecessary complexity added
+
+**No Issues Found**: Implementation is clean, well-tested, and correctly addresses the root cause.
