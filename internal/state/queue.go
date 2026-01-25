@@ -176,19 +176,27 @@ func (q *Queue) Remove(path string) error {
 
 // Pop returns and clears all queued files.
 // Returns an empty slice (not nil) if the queue is empty.
-func (q *Queue) Pop() []string {
-	// Copy files before clearing
-	files := make([]string, len(q.QueuedFiles))
-	copy(files, q.QueuedFiles)
+// Returns an error if the save fails, in which case the queue file
+// may still contain the old data and files may reappear on reload.
+func (q *Queue) Pop() ([]string, error) {
+	var files []string
+	err := q.withLock(func() error {
+		// Copy files before clearing
+		files = make([]string, len(q.QueuedFiles))
+		copy(files, q.QueuedFiles)
 
-	// Clear the queue
-	q.QueuedFiles = []string{}
-	q.AddedAt = make(map[string]time.Time)
+		// Clear the queue
+		q.QueuedFiles = []string{}
+		q.AddedAt = make(map[string]time.Time)
 
-	// Save the cleared state (ignore error for Pop simplicity)
-	_ = q.save()
+		return q.save()
+	})
 
-	return files
+	if err != nil {
+		return files, fmt.Errorf("failed to pop queue: %w", err)
+	}
+
+	return files, nil
 }
 
 // IsEmpty returns true if the queue has no files.

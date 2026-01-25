@@ -179,7 +179,10 @@ func TestQueue_Pop_ReturnsAndClearsAllFiles(t *testing.T) {
 	_ = q.Add("/path/to/spec1.md")
 	_ = q.Add("/path/to/spec2.md")
 
-	files := q.Pop()
+	files, err := q.Pop()
+	if err != nil {
+		t.Fatalf("Pop() returned unexpected error: %v", err)
+	}
 
 	if len(files) != 2 {
 		t.Errorf("Pop() returned %d files; want 2", len(files))
@@ -201,7 +204,10 @@ func TestQueue_Pop_ReturnsEmptySliceWhenEmpty(t *testing.T) {
 
 	q, _ := LoadQueue(stateDir)
 
-	files := q.Pop()
+	files, err := q.Pop()
+	if err != nil {
+		t.Fatalf("Pop() returned unexpected error: %v", err)
+	}
 
 	if files == nil {
 		t.Error("Pop() should return empty slice, not nil")
@@ -362,12 +368,46 @@ func TestQueue_Pop_PersistsToFile(t *testing.T) {
 
 	q1, _ := LoadQueue(stateDir)
 	_ = q1.Add("/path/to/spec.md")
-	_ = q1.Pop()
+	_, err := q1.Pop()
+	if err != nil {
+		t.Fatalf("Pop() returned unexpected error: %v", err)
+	}
 
 	// Load from a new queue instance
 	q2, _ := LoadQueue(stateDir)
 
 	if !q2.IsEmpty() {
 		t.Error("Pop() should persist to file, but new queue instance is not empty")
+	}
+}
+
+func TestQueue_Pop_ReturnsErrorWhenSaveFails(t *testing.T) {
+	tempDir := t.TempDir()
+	stateDir := filepath.Join(tempDir, ".orbital", "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+
+	q, _ := LoadQueue(stateDir)
+	_ = q.Add("/path/to/spec.md")
+
+	// Make the state directory read-only to cause save to fail
+	if err := os.Chmod(stateDir, 0555); err != nil {
+		t.Fatalf("failed to chmod state dir: %v", err)
+	}
+	// Restore permissions after test
+	defer func() {
+		_ = os.Chmod(stateDir, 0755)
+	}()
+
+	files, err := q.Pop()
+
+	// Pop should still return the files (they were copied before save attempt)
+	if len(files) != 1 {
+		t.Errorf("Pop() returned %d files; want 1", len(files))
+	}
+	// But it should also return an error
+	if err == nil {
+		t.Error("Pop() should return error when save fails")
 	}
 }

@@ -80,7 +80,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ## Epic 2: Reliability Improvements
 
-### [ ] **Ticket: REL-1 - Propagate errors from Queue.Pop()**
+### [x] **Ticket: REL-1 - Propagate errors from Queue.Pop()**
 
 **As a** developer debugging queue issues
 **I want** Queue.Pop() to return errors when save fails
@@ -481,7 +481,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 **Must Have (Sprint 1):**
 - [x] SEC-1: Make permission skip flag configurable (security critical)
 - [ ] PERF-1: Implement ring buffer for TUI output (prevents OOM)
-- [ ] REL-1: Propagate errors from Queue.Pop() (prevents silent data loss)
+- [x] REL-1: Propagate errors from Queue.Pop() (prevents silent data loss)
 - [ ] REL-2: Add timeouts to git cleanup commands (prevents hangs)
 
 **Should Have (Sprint 2):**

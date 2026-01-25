@@ -77,3 +77,17 @@ Changes made to `cmd/orbital/continue.go`:
 The fix mirrors the implementation in `root.go` exactly, ensuring consistent behaviour between `orbital <spec>` and `orbital continue` commands.
 
 Verification: `make check` passes (lint + tests).
+
+### REL-1: Propagate errors from Queue.Pop()
+
+**Completed**
+
+Implementation details:
+1. Changed `Pop()` signature from `func (q *Queue) Pop() []string` to `func (q *Queue) Pop() ([]string, error)`
+2. Wrapped the pop logic in `withLock()` for consistency with `Add()` and `Remove()` operations
+3. Return error from `save()` instead of ignoring it
+4. Updated callers in `cmd/orbital/root.go` and `cmd/orbital/continue.go` to handle the error
+5. Updated existing tests to handle the new return signature
+6. Added new test `TestQueue_Pop_ReturnsErrorWhenSaveFails` to verify error propagation
+
+The fix ensures that if the queue file cannot be saved (disk full, permissions), the error is propagated to callers. The files are still returned to allow the caller to decide how to handle the situation (proceed with warning or fail).

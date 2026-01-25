@@ -748,7 +748,10 @@ func (m *stateManagerAdapter) PopQueue() ([]string, error) {
 		return nil, err
 	}
 	m.queue = queue
-	files := queue.Pop()
+	files, err := queue.Pop()
+	if err != nil {
+		return nil, fmt.Errorf("failed to pop queued files: %w", err)
+	}
 	return files, nil
 }
 

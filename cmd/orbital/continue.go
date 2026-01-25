@@ -126,7 +126,10 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		stateDir := state.StateDir(wd)
 		queue, err := state.LoadQueue(stateDir)
 		if err == nil && !queue.IsEmpty() {
-			queuedFiles := queue.Pop()
+			queuedFiles, popErr := queue.Pop()
+			if popErr != nil {
+				return fmt.Errorf("failed to pop queued files: %w", popErr)
+			}
 			files = append(files, queuedFiles...)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d queued file(s)\n", len(queuedFiles))
 		}
