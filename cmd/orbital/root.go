@@ -547,6 +547,11 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			os.Exit(3)
 		case context.Canceled:
 			fmt.Println("\nInterrupted by user")
+			// Print summary on interrupt
+			if loopState != nil {
+				summaryFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
+				printSummary(summaryFormatter, loopState)
+			}
 			if worktreeMode && wtState != nil {
 				wtFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
 				wtFormatter.PrintWorktreePreserved(wtState.Path)
