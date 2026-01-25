@@ -208,6 +208,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks), m.worktree.Path != "")
 		m.ready = true
+
+		// Clamp output scroll position if not tailing
+		if !m.outputTailing {
+			wrappedLines := m.wrapAllOutputLines()
+			height := m.layout.ScrollAreaHeight
+			maxOffset := len(wrappedLines) - height
+			if maxOffset < 0 {
+				maxOffset = 0
+			}
+			// Clamp scroll to valid range
+			if m.outputScroll > maxOffset {
+				m.outputScroll = maxOffset
+			}
+			// If output now fits in viewport, optionally resume tailing
+			if maxOffset == 0 {
+				m.outputTailing = true
+				m.outputScroll = 0
+			}
+		}
 		return m, nil
 
 	case StatsMsg:

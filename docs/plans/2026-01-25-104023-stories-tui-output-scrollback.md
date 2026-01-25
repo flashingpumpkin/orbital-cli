@@ -218,17 +218,17 @@ Initialize both fields in `NewModel()` to default to auto-tail behaviour (curren
 - Ensure rendering uses same wrapping logic as scroll calculations (consistency critical)
 
 **Acceptance Criteria**:
-- [ ] Given `outputTailing == true`, when rendering, then the most recent lines are shown
-- [ ] Given `outputTailing == false` and `outputScroll == 0`, when rendering, then the first lines are shown
-- [ ] Given `outputTailing == false` and `outputScroll == 50`, when rendering, then lines starting at offset 50 are shown
-- [ ] Given terminal is resized, when `outputScroll` is invalid for new size, then it is clamped to valid range
-- [ ] Given output buffer is shorter than viewport, when rendering, then all output is shown with padding
+- [x] Given `outputTailing == true`, when rendering, then the most recent lines are shown
+- [x] Given `outputTailing == false` and `outputScroll == 0`, when rendering, then the first lines are shown
+- [x] Given `outputTailing == false` and `outputScroll == 50`, when rendering, then lines starting at offset 50 are shown
+- [x] Given terminal is resized, when `outputScroll` is invalid for new size, then it is clamped to valid range
+- [x] Given output buffer is shorter than viewport, when rendering, then all output is shown with padding
 
 **Definition of Done** (Single Commit):
-- [ ] `renderScrollArea()` updated to respect scroll state
-- [ ] Unit tests added for rendering with different scroll states
-- [ ] All existing tests pass
-- [ ] Manual verification: scrolling changes visible output
+- [x] `renderScrollArea()` updated to respect scroll state
+- [x] Unit tests added for rendering with different scroll states
+- [x] All existing tests pass
+- [x] Manual verification: scrolling changes visible output
 
 **Dependencies**:
 - Ticket 1 (scroll state must exist)
@@ -262,16 +262,16 @@ Initialize both fields in `NewModel()` to default to auto-tail behaviour (curren
 - If output now fits in viewport: optionally reset to tailing
 
 **Acceptance Criteria**:
-- [ ] Given user is scrolled and terminal is resized larger, when rendering, then scroll position is maintained or clamped
-- [ ] Given user is scrolled and terminal is resized smaller, when rendering, then scroll position is clamped to valid range
-- [ ] Given user is scrolled and terminal height increases enough to fit all output, when rendering, then output is shown (optionally resume tailing)
-- [ ] Given user is tailing and terminal is resized, when rendering, then tailing continues (no change)
+- [x] Given user is scrolled and terminal is resized larger, when rendering, then scroll position is maintained or clamped
+- [x] Given user is scrolled and terminal is resized smaller, when rendering, then scroll position is clamped to valid range
+- [x] Given user is scrolled and terminal height increases enough to fit all output, when rendering, then output is shown (optionally resume tailing)
+- [x] Given user is tailing and terminal is resized, when rendering, then tailing continues (no change)
 
 **Definition of Done** (Single Commit):
-- [ ] `tea.WindowSizeMsg` handler updated with scroll position clamping
-- [ ] Unit tests added for resize scenarios
-- [ ] All existing tests pass
-- [ ] Manual verification: resize during scroll maintains or clamps position gracefully
+- [x] `tea.WindowSizeMsg` handler updated with scroll position clamping
+- [x] Unit tests added for resize scenarios
+- [x] All existing tests pass
+- [x] Manual verification: resize during scroll maintains or clamps position gracefully
 
 **Dependencies**:
 - Ticket 1 (scroll state must exist)

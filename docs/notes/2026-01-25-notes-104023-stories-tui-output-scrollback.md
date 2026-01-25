@@ -77,3 +77,22 @@
 
 ### Next Steps
 - Ticket 5: Respect scroll state in renderScrollArea
+
+## 2026-01-25 - Iteration 5
+
+### Completed
+- Ticket 6: Handle terminal resize during scrollback
+  - Updated `tea.WindowSizeMsg` handler in `Update()` to clamp scroll position when not tailing
+  - When terminal is resized and user is scrolled, `outputScroll` is clamped to the new valid range
+  - If output now fits in viewport after resize, automatically resume tailing
+  - Tailing mode continues unaffected by resize
+  - Added unit tests: `TestWindowResizeScrollClamping` (4 subtests)
+  - All tests pass, build succeeds
+
+### Observations
+- The implementation reuses `wrapAllOutputLines()` helper which already accounts for the new terminal width
+- When output fits in viewport after resize, we automatically resume tailing for a smoother UX
+- The clamping logic is straightforward: calculate new maxOffset and clamp if needed
+
+### Next Steps
+- All tickets complete; verify all acceptance criteria are checked and commit

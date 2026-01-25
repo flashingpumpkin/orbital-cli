@@ -430,6 +430,148 @@ func TestRenderScrollAreaWrap(t *testing.T) {
 	}
 }
 
+func TestRenderScrollAreaRespectScrollState(t *testing.T) {
+	t.Run("tailing shows most recent lines", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add many lines
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Ensure we're tailing (default)
+		if !model.outputTailing {
+			t.Fatal("expected outputTailing to be true by default")
+		}
+
+		view := model.View()
+
+		// Should see the last line (Line 50)
+		if !strings.Contains(view, "Line 50") {
+			t.Error("expected tailing to show Line 50 (most recent)")
+		}
+	})
+
+	t.Run("scroll 0 shows first lines", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add many lines
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Set scroll to 0 (top)
+		model.outputTailing = false
+		model.outputScroll = 0
+
+		view := model.View()
+
+		// Should see the first line
+		if !strings.Contains(view, "Line 1") {
+			t.Error("expected scroll 0 to show Line 1")
+		}
+		// Should NOT see the last line (too far down)
+		if strings.Contains(view, "Line 50") {
+			t.Error("expected scroll 0 NOT to show Line 50")
+		}
+	})
+
+	t.Run("scroll offset shows lines from that position", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add many lines
+		for i := 0; i < 100; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Set scroll to middle
+		model.outputTailing = false
+		model.outputScroll = 50
+
+		view := model.View()
+
+		// Should see Line 51 (offset 50 is 0-indexed)
+		if !strings.Contains(view, "Line 51") {
+			t.Error("expected scroll 50 to show Line 51")
+		}
+		// Should NOT see first or last line
+		if strings.Contains(view, "Line 1") {
+			t.Error("expected scroll 50 NOT to show Line 1")
+		}
+		if strings.Contains(view, "Line 100") {
+			t.Error("expected scroll 50 NOT to show Line 100")
+		}
+	})
+
+	t.Run("scroll offset clamped when invalid", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add only 10 lines
+		for i := 0; i < 10; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Set scroll to invalid high value
+		model.outputTailing = false
+		model.outputScroll = 1000
+
+		// Should render without panic, showing available content
+		view := model.View()
+
+		// All lines should be visible since content is short
+		if !strings.Contains(view, "Line 1") {
+			t.Error("expected all content visible when scroll is clamped")
+		}
+		if !strings.Contains(view, "Line 10") {
+			t.Error("expected all content visible when scroll is clamped")
+		}
+	})
+
+	t.Run("short output with padding", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add only 3 lines
+		model.AppendOutput("First line")
+		model.AppendOutput("Second line")
+		model.AppendOutput("Third line")
+
+		// Render should succeed (with padding)
+		view := model.View()
+
+		if !strings.Contains(view, "First line") {
+			t.Error("expected short output to show all lines")
+		}
+		if !strings.Contains(view, "Third line") {
+			t.Error("expected short output to show all lines")
+		}
+	})
+}
+
 func TestScrollUpOutputTab(t *testing.T) {
 	t.Run("tailing unlocks and positions one line up from bottom", func(t *testing.T) {
 		m := NewModel()
@@ -1063,4 +1205,147 @@ func TestWrapAllOutputLines(t *testing.T) {
 	if len(wrappedLines) < 2 {
 		t.Errorf("expected at least 2 wrapped lines, got %d", len(wrappedLines))
 	}
+}
+
+func TestWindowResizeScrollClamping(t *testing.T) {
+	t.Run("resize larger maintains scroll position", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up initial dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Scroll to a specific position
+		model.outputTailing = false
+		model.outputScroll = 10
+
+		// Resize to larger terminal
+		msg = tea.WindowSizeMsg{Width: 80, Height: 40}
+		updatedModel, _ = model.Update(msg)
+		model = updatedModel.(Model)
+
+		// Scroll position should be maintained (still valid)
+		if model.outputScroll != 10 {
+			t.Errorf("expected outputScroll to remain 10, got %d", model.outputScroll)
+		}
+
+		// Should still not be tailing
+		if model.outputTailing {
+			t.Error("expected outputTailing to remain false")
+		}
+	})
+
+	t.Run("resize smaller clamps scroll position", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up initial dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 40}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Calculate max offset for initial size
+		wrappedLines := model.wrapAllOutputLines()
+		initialHeight := model.layout.ScrollAreaHeight
+		initialMaxOffset := len(wrappedLines) - initialHeight
+
+		// Set scroll near the max offset
+		model.outputTailing = false
+		model.outputScroll = initialMaxOffset - 2
+
+		// Resize to smaller terminal
+		msg = tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ = model.Update(msg)
+		model = updatedModel.(Model)
+
+		// Calculate new max offset
+		newHeight := model.layout.ScrollAreaHeight
+		newMaxOffset := len(wrappedLines) - newHeight
+		if newMaxOffset < 0 {
+			newMaxOffset = 0
+		}
+
+		// Scroll position should be clamped to new max
+		if model.outputScroll > newMaxOffset {
+			t.Errorf("expected outputScroll to be clamped to %d, got %d", newMaxOffset, model.outputScroll)
+		}
+	})
+
+	t.Run("resize larger fits all output resumes tailing", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up initial dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add only 10 lines (less than what will fit in larger terminal)
+		for i := 0; i < 10; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Scroll up to unlock tailing
+		model.outputTailing = false
+		model.outputScroll = 2
+
+		// Resize to much larger terminal where all content fits
+		msg = tea.WindowSizeMsg{Width: 80, Height: 50}
+		updatedModel, _ = model.Update(msg)
+		model = updatedModel.(Model)
+
+		// Should resume tailing since all content fits
+		if !model.outputTailing {
+			t.Error("expected outputTailing to be true when all content fits after resize")
+		}
+
+		// Scroll should be reset to 0
+		if model.outputScroll != 0 {
+			t.Errorf("expected outputScroll to be 0, got %d", model.outputScroll)
+		}
+	})
+
+	t.Run("tailing continues after resize", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up initial dimensions
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Verify we're tailing (default)
+		if !model.outputTailing {
+			t.Fatal("expected outputTailing to be true by default")
+		}
+
+		// Resize terminal
+		msg = tea.WindowSizeMsg{Width: 80, Height: 40}
+		updatedModel, _ = model.Update(msg)
+		model = updatedModel.(Model)
+
+		// Should still be tailing
+		if !model.outputTailing {
+			t.Error("expected outputTailing to remain true after resize")
+		}
+
+		// Verify view shows most recent content
+		view := model.View()
+		if !strings.Contains(view, "Line 50") {
+			t.Error("expected tailing to show Line 50 after resize")
+		}
+	})
 }
