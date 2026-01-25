@@ -431,7 +431,7 @@ func TestViewSessionList(t *testing.T) {
 
 	view := m.View()
 
-	if !containsString(view, "Select Session") {
+	if !containsString(view, "ORBITAL CONTINUE") {
 		t.Error("expected view to contain title")
 	}
 	if !containsString(view, "test-session") {

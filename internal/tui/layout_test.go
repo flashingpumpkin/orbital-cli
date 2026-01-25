@@ -3,6 +3,10 @@ package tui
 import "testing"
 
 func TestCalculateLayout(t *testing.T) {
+	// New layout calculation:
+	// Fixed elements: Header(1) + TabBar(1) + Progress(2) + Session(2) + HelpBar(1) + BorderHeight(6) = 13
+	// With tasks: + TaskPanel + 1 extra border
+	// So: ScrollAreaHeight = height - 13 - TaskPanel - (1 if tasks > 0)
 	tests := []struct {
 		name       string
 		width      int
@@ -18,7 +22,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        0,
 			wantTooSmall:     false,
-			wantScrollHeight: 30, // 40 - (1 + 0 + 2 + 2 + 5)
+			wantScrollHeight: 27, // 40 - (1 + 1 + 0 + 2 + 2 + 1 + 6) = 40 - 13
 			wantTaskHeight:   0,
 		},
 		{
@@ -27,7 +31,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        3,
 			wantTooSmall:     false,
-			wantScrollHeight: 26, // 40 - (1 + 4 + 2 + 2 + 5)
+			wantScrollHeight: 22, // 40 - (1 + 1 + 4 + 2 + 2 + 1 + 6 + 1) = 40 - 18
 			wantTaskHeight:   4,  // 3 tasks + 1 header
 		},
 		{
@@ -36,7 +40,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        6,
 			wantTooSmall:     false,
-			wantScrollHeight: 23, // 40 - (1 + 7 + 2 + 2 + 5)
+			wantScrollHeight: 19, // 40 - (1 + 1 + 7 + 2 + 2 + 1 + 6 + 1) = 40 - 21
 			wantTaskHeight:   7,  // 6 tasks + 1 header
 		},
 		{
@@ -45,7 +49,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        10,
 			wantTooSmall:     false,
-			wantScrollHeight: 23, // 40 - (1 + 7 + 2 + 2 + 5) - capped at max
+			wantScrollHeight: 19, // 40 - (1 + 1 + 7 + 2 + 2 + 1 + 6 + 1) capped at max
 			wantTaskHeight:   7,  // max 6 + 1 header
 		},
 		{
@@ -68,7 +72,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           24,
 			taskCount:        0,
 			wantTooSmall:     false,
-			wantScrollHeight: 14, // 24 - (1 + 0 + 2 + 2 + 5)
+			wantScrollHeight: 11, // 24 - 13
 			wantTaskHeight:   0,
 		},
 		{
@@ -77,8 +81,8 @@ func TestCalculateLayout(t *testing.T) {
 			height:           24,
 			taskCount:        6,
 			wantTooSmall:     false,
-			wantScrollHeight: 7, // 24 - (1 + 7 + 2 + 2 + 5)
-			wantTaskHeight:   7, // 6 tasks + 1 header
+			wantScrollHeight: 11, // Tasks collapsed because scroll area would be too small (24 - 21 = 3 < 4)
+			wantTaskHeight:   0,  // Collapsed
 		},
 	}
 
@@ -162,6 +166,7 @@ func TestLayoutHasTaskOverflow(t *testing.T) {
 }
 
 func TestCalculateLayoutWithWorktree(t *testing.T) {
+	// With worktree: adds WorktreePanel(1) + 1 extra border
 	tests := []struct {
 		name                    string
 		width                   int
@@ -179,7 +184,7 @@ func TestCalculateLayoutWithWorktree(t *testing.T) {
 			taskCount:               0,
 			hasWorktree:             false,
 			wantTooSmall:            false,
-			wantScrollHeight:        30, // 40 - (1 + 0 + 2 + 2 + 5)
+			wantScrollHeight:        27, // 40 - 13
 			wantWorktreePanelHeight: 0,
 		},
 		{
@@ -189,7 +194,7 @@ func TestCalculateLayoutWithWorktree(t *testing.T) {
 			taskCount:               0,
 			hasWorktree:             true,
 			wantTooSmall:            false,
-			wantScrollHeight:        28, // 40 - (1 + 0 + 2 + 2 + 1 + 6) - extra border + worktree panel
+			wantScrollHeight:        25, // 40 - 13 - 1(worktree) - 1(extra border) = 25
 			wantWorktreePanelHeight: 1,
 		},
 		{
@@ -199,7 +204,7 @@ func TestCalculateLayoutWithWorktree(t *testing.T) {
 			taskCount:               3,
 			hasWorktree:             true,
 			wantTooSmall:            false,
-			wantScrollHeight:        24, // 40 - (1 + 4 + 2 + 2 + 1 + 6)
+			wantScrollHeight:        20, // 40 - 13 - 4(tasks) - 1(task border) - 1(worktree) - 1(worktree border) = 20
 			wantWorktreePanelHeight: 1,
 		},
 	}

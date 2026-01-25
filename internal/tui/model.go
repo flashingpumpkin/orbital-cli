@@ -95,27 +95,6 @@ type Model struct {
 	ready bool
 }
 
-// Styles contains all lipgloss styles for the UI.
-type Styles struct {
-	Border          lipgloss.Style
-	BorderDim       lipgloss.Style
-	Label           lipgloss.Style
-	Value           lipgloss.Style
-	Warning         lipgloss.Style
-	Error           lipgloss.Style
-	Success         lipgloss.Style
-	TaskPending     lipgloss.Style
-	TaskInProgress  lipgloss.Style
-	TaskComplete    lipgloss.Style
-	ScrollArea      lipgloss.Style
-	TooSmallMessage lipgloss.Style
-	WorktreeLabel   lipgloss.Style
-	WorktreeValue   lipgloss.Style
-	TabActive       lipgloss.Style
-	TabInactive     lipgloss.Style
-	TabBar          lipgloss.Style
-}
-
 // NewModel creates a new TUI model.
 func NewModel() Model {
 	return Model{
@@ -135,28 +114,6 @@ func NewModel() Model {
 	}
 }
 
-// defaultStyles returns the default style configuration.
-func defaultStyles() Styles {
-	return Styles{
-		Border:          lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		BorderDim:       lipgloss.NewStyle().Foreground(lipgloss.Color("236")),
-		Label:           lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
-		Value:           lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
-		Warning:         lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
-		Error:           lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-		Success:         lipgloss.NewStyle().Foreground(lipgloss.Color("82")),
-		TaskPending:     lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
-		TaskInProgress:  lipgloss.NewStyle().Foreground(lipgloss.Color("214")),
-		TaskComplete:    lipgloss.NewStyle().Foreground(lipgloss.Color("82")),
-		ScrollArea:      lipgloss.NewStyle(),
-		TooSmallMessage: lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
-		WorktreeLabel:   lipgloss.NewStyle().Foreground(lipgloss.Color("141")).Bold(true),
-		WorktreeValue:   lipgloss.NewStyle().Foreground(lipgloss.Color("183")),
-		TabActive:       lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Background(lipgloss.Color("240")).Bold(true).Padding(0, 1),
-		TabInactive:     lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Padding(0, 1),
-		TabBar:          lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-	}
-}
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
@@ -691,45 +648,107 @@ func (m Model) renderTooSmall() string {
 func (m Model) renderFull() string {
 	var sections []string
 
-	// Tab bar at the top
+	// Top border
+	sections = append(sections, RenderTopBorder(m.layout.Width, m.styles.Border))
+
+	// Header panel with brand and metrics
+	sections = append(sections, m.renderHeader())
+	sections = append(sections, RenderDoubleBorder(m.layout.Width, m.styles.Border))
+
+	// Tab bar
 	sections = append(sections, m.renderTabBar())
-	sections = append(sections, m.renderSeparator())
+	sections = append(sections, RenderDoubleBorder(m.layout.Width, m.styles.Border))
 
 	// Main content area (output or file content)
 	sections = append(sections, m.renderMainContent())
-
-	// Horizontal separator
-	sections = append(sections, m.renderSeparator())
+	sections = append(sections, RenderDoubleBorder(m.layout.Width, m.styles.Border))
 
 	// Task panel (if tasks exist)
 	if m.layout.TaskPanelHeight > 0 {
 		sections = append(sections, m.renderTaskPanel())
-		sections = append(sections, m.renderSeparator())
+		sections = append(sections, RenderDoubleBorder(m.layout.Width, m.styles.Border))
 	}
 
 	// Progress panel
 	sections = append(sections, m.renderProgressPanel())
-
-	// Horizontal separator
-	sections = append(sections, m.renderSeparator())
+	sections = append(sections, RenderDoubleBorder(m.layout.Width, m.styles.Border))
 
 	// Session info panel
 	sections = append(sections, m.renderSessionPanel())
 
 	// Worktree panel (if worktree mode is active)
 	if m.layout.WorktreePanelHeight > 0 {
-		sections = append(sections, m.renderSeparator())
+		sections = append(sections, RenderDoubleBorder(m.layout.Width, m.styles.Border))
 		sections = append(sections, m.renderWorktreePanel())
 	}
+
+	// Bottom border
+	sections = append(sections, RenderBottomBorder(m.layout.Width, m.styles.Border))
+
+	// Help bar (outside the main frame)
+	sections = append(sections, m.renderHelpBar())
 
 	return strings.Join(sections, "\n")
 }
 
+// renderHeader renders the header panel with brand and key metrics.
+func (m Model) renderHeader() string {
+	width := m.layout.ContentWidth()
+	p := m.progress
+
+	// Left side: brand
+	brand := m.styles.Brand.Render(IconBrand + " ORBITAL")
+
+	// Right side: iteration and cost
+	iterStr := formatFraction(p.Iteration, p.MaxIteration)
+	costStr := formatCurrency(p.Cost) + "/" + formatCurrency(p.Budget)
+
+	// Apply warning colour if thresholds exceeded
+	iterRatio := float64(p.Iteration) / float64(p.MaxIteration)
+	costRatio := p.Cost / p.Budget
+
+	var iterStyled, costStyled string
+	if iterRatio > 0.8 {
+		iterStyled = m.styles.Warning.Render(iterStr)
+	} else {
+		iterStyled = m.styles.Value.Render(iterStr)
+	}
+	if costRatio > 0.8 {
+		costStyled = m.styles.Warning.Render(costStr)
+	} else {
+		costStyled = m.styles.Value.Render(costStr)
+	}
+
+	metrics := m.styles.Label.Render("Iteration ") + iterStyled +
+		m.styles.Label.Render("  " + InnerVertical + "  ") +
+		costStyled
+
+	// Calculate padding between brand and metrics
+	brandWidth := ansi.StringWidth(IconBrand + " ORBITAL")
+	metricsWidth := ansi.StringWidth("Iteration " + iterStr + "  " + InnerVertical + "  " + costStr)
+	padding := width - brandWidth - metricsWidth
+	if padding < 1 {
+		padding = 1
+	}
+
+	return m.styles.Border.Render(BoxVertical) + " " + brand + strings.Repeat(" ", padding) + metrics + " " + m.styles.Border.Render(BoxVertical)
+}
+
+// renderHelpBar renders the help text below the main frame.
+func (m Model) renderHelpBar() string {
+	help := "  " + m.styles.HelpKey.Render("↑/↓") + m.styles.HelpBar.Render(" scroll  ") +
+		m.styles.HelpKey.Render("←/→") + m.styles.HelpBar.Render(" tab  ") +
+		m.styles.HelpKey.Render("1-9") + m.styles.HelpBar.Render(" jump  ") +
+		m.styles.HelpKey.Render("r") + m.styles.HelpBar.Render(" reload  ") +
+		m.styles.HelpKey.Render("q") + m.styles.HelpBar.Render(" quit")
+	return help
+}
+
 // renderTabBar renders the tab bar with all tabs, truncating if needed.
 func (m Model) renderTabBar() string {
-	width := m.layout.Width
-	separator := m.styles.TabBar.Render("│")
-	sepWidth := ansi.StringWidth(separator)
+	contentWidth := m.layout.ContentWidth()
+	separator := m.styles.TabBar.Render(InnerVertical)
+	sepWidth := ansi.StringWidth(InnerVertical)
 
 	var tabs []string
 	currentWidth := 0
@@ -757,9 +776,9 @@ func (m Model) renderTabBar() string {
 			neededWidth += sepWidth
 		}
 
-		if currentWidth+neededWidth > width {
+		if currentWidth+neededWidth > contentWidth {
 			// Truncate: show "..." indicator and stop
-			if currentWidth+sepWidth+5 <= width { // 5 = "..." + minimal padding
+			if currentWidth+sepWidth+5 <= contentWidth { // 5 = "..." + minimal padding
 				tabs = append(tabs, m.styles.TabInactive.Render("..."))
 			}
 			break
@@ -769,7 +788,15 @@ func (m Model) renderTabBar() string {
 		currentWidth += neededWidth
 	}
 
-	return strings.Join(tabs, separator)
+	tabContent := strings.Join(tabs, separator)
+	// Pad to fill width
+	tabWidth := ansi.StringWidth(tabContent)
+	padding := contentWidth - tabWidth
+	if padding < 0 {
+		padding = 0
+	}
+
+	return m.styles.Border.Render(BoxVertical) + tabContent + strings.Repeat(" ", padding) + m.styles.Border.Render(BoxVertical)
 }
 
 // renderMainContent renders either the output stream or file content based on active tab.
@@ -789,13 +816,24 @@ func (m Model) renderMainContent() string {
 // renderFileContent renders the content of a file.
 func (m Model) renderFileContent(path string) string {
 	height := m.layout.ScrollAreaHeight
-	width := m.layout.ContentWidth()
+	contentWidth := m.layout.ContentWidth()
+	border := m.styles.Border.Render(BoxVertical)
 
 	content, ok := m.fileContents[path]
 	if !ok {
 		// File not loaded yet
-		lines := make([]string, height)
-		lines[0] = m.styles.Label.Render("  Loading " + path + "...")
+		var lines []string
+		loadingLine := m.styles.Label.Render("  Loading " + path + "...")
+		loadingWidth := ansi.StringWidth("  Loading " + path + "...")
+		padding := contentWidth - loadingWidth
+		if padding < 0 {
+			padding = 0
+		}
+		lines = append(lines, border+loadingLine+strings.Repeat(" ", padding)+border)
+		emptyLine := border + strings.Repeat(" ", contentWidth) + border
+		for len(lines) < height {
+			lines = append(lines, emptyLine)
+		}
 		return strings.Join(lines, "\n")
 	}
 
@@ -819,7 +857,8 @@ func (m Model) renderFileContent(path string) string {
 	for i := 0; i < height; i++ {
 		lineIdx := offset + i
 		if lineIdx >= len(fileLines) {
-			lines = append(lines, "")
+			emptyLine := border + strings.Repeat(" ", contentWidth) + border
+			lines = append(lines, emptyLine)
 			continue
 		}
 
@@ -831,15 +870,23 @@ func (m Model) renderFileContent(path string) string {
 		for len(numStr) < 5 {
 			numStr = " " + numStr
 		}
-		numStr = m.styles.Label.Render(numStr + "│")
+		numStr = m.styles.Label.Render(numStr + InnerVertical)
 
 		// Truncate long lines (ANSI-aware)
-		visibleWidth := width - 6 // Account for line number column
+		visibleWidth := contentWidth - 6 // Account for line number column
 		if ansi.StringWidth(line) > visibleWidth {
 			line = ansi.Truncate(line, visibleWidth-3, "...")
 		}
 
-		lines = append(lines, numStr+line)
+		// Pad line to content width
+		lineContent := numStr + line
+		lineWidth := ansi.StringWidth(numStr) + ansi.StringWidth(line)
+		padding := contentWidth - lineWidth
+		if padding < 0 {
+			padding = 0
+		}
+
+		lines = append(lines, border+lineContent+strings.Repeat(" ", padding)+border)
 	}
 
 	return strings.Join(lines, "\n")
@@ -899,6 +946,7 @@ func (m *Model) invalidateWrappedLinesCache() {
 // renderScrollArea renders the scrolling output region.
 func (m Model) renderScrollArea() string {
 	height := m.layout.ScrollAreaHeight
+	contentWidth := m.layout.ContentWidth()
 	wrappedLines := m.wrapAllOutputLines()
 
 	// Determine start index based on scroll state
@@ -926,33 +974,48 @@ func (m Model) renderScrollArea() string {
 	}
 
 	var lines []string
+	border := m.styles.Border.Render(BoxVertical)
 	for i := startIdx; i < len(wrappedLines) && len(lines) < height; i++ {
-		lines = append(lines, wrappedLines[i])
+		line := wrappedLines[i]
+		// Pad line to content width
+		lineWidth := ansi.StringWidth(line)
+		padding := contentWidth - lineWidth
+		if padding < 0 {
+			padding = 0
+		}
+		lines = append(lines, border+line+strings.Repeat(" ", padding)+border)
 	}
 
 	// Pad with empty lines if needed
+	emptyLine := border + strings.Repeat(" ", contentWidth) + border
 	for len(lines) < height {
-		lines = append(lines, "")
+		lines = append(lines, emptyLine)
 	}
 
 	return strings.Join(lines, "\n")
 }
 
-// renderSeparator renders a horizontal separator line.
-func (m Model) renderSeparator() string {
-	return m.styles.BorderDim.Render(strings.Repeat("─", m.layout.Width))
-}
 
 // renderTaskPanel renders the task list panel.
 func (m Model) renderTaskPanel() string {
 	var lines []string
+	contentWidth := m.layout.ContentWidth()
+	border := m.styles.Border.Render(BoxVertical)
 
 	// Header
-	header := m.styles.Label.Render("  Tasks")
+	headerText := m.styles.Header.Render("Tasks")
 	if m.layout.HasTaskOverflow(len(m.tasks)) {
-		header += m.styles.Label.Render(" (scroll)")
+		headerText += m.styles.Label.Render(" (scroll)")
 	}
-	lines = append(lines, header)
+	headerWidth := ansi.StringWidth("Tasks")
+	if m.layout.HasTaskOverflow(len(m.tasks)) {
+		headerWidth += ansi.StringWidth(" (scroll)")
+	}
+	padding := contentWidth - headerWidth - 2
+	if padding < 0 {
+		padding = 0
+	}
+	lines = append(lines, border+"  "+headerText+strings.Repeat(" ", padding)+border)
 
 	// Tasks
 	visible := m.layout.TasksVisible()
@@ -971,67 +1034,89 @@ func (m Model) renderTask(task Task) string {
 
 	switch task.Status {
 	case "completed":
-		icon = "✓"
+		icon = IconComplete
 		style = m.styles.TaskComplete
 	case "in_progress":
-		icon = "→"
+		icon = IconInProgress
 		style = m.styles.TaskInProgress
 	default:
-		icon = "○"
+		icon = IconPending
 		style = m.styles.TaskPending
 	}
 
+	contentWidth := m.layout.ContentWidth()
+	border := m.styles.Border.Render(BoxVertical)
+
 	content := task.Content
-	maxLen := m.layout.ContentWidth() - 6 // icon + spacing
+	maxLen := contentWidth - 6 // icon + spacing + borders
 	if len(content) > maxLen {
 		content = content[:maxLen-3] + "..."
 	}
 
-	return style.Render("  " + icon + " " + content)
+	taskContent := style.Render("  " + icon + " " + content)
+	taskWidth := ansi.StringWidth("  " + icon + " " + content)
+	padding := contentWidth - taskWidth
+	if padding < 0 {
+		padding = 0
+	}
+
+	return border + taskContent + strings.Repeat(" ", padding) + border
 }
 
 // renderProgressPanel renders the progress and metrics panel.
 func (m Model) renderProgressPanel() string {
 	p := m.progress
+	contentWidth := m.layout.ContentWidth()
+	border := m.styles.Border.Render(BoxVertical)
 
-	// Line 1: Iteration and step info
-	iterStr := m.formatIteration(p.Iteration, p.MaxIteration)
+	// Line 1: Iteration progress bar and step info
+	iterRatio := float64(p.Iteration) / float64(p.MaxIteration)
+	iterBar := RenderProgressBar(iterRatio, BarWidth, m.styles.Value, m.styles.Warning)
+	iterLabel := m.styles.Label.Render("Iteration ")
+	iterValue := m.styles.Value.Render(formatFraction(p.Iteration, p.MaxIteration))
+	if iterRatio > 0.8 {
+		iterValue = m.styles.Warning.Render(formatFraction(p.Iteration, p.MaxIteration))
+	}
+
 	stepStr := m.formatStep(p.StepName, p.StepPosition, p.StepTotal)
 	gateStr := ""
 	if p.GateRetries > 0 || p.MaxRetries > 0 {
 		gateStr = m.formatGateRetries(p.GateRetries, p.MaxRetries)
 	}
 
-	line1Parts := []string{iterStr}
+	line1Parts := []string{iterBar + " " + iterLabel + iterValue}
 	if stepStr != "" {
 		line1Parts = append(line1Parts, stepStr)
 	}
 	if gateStr != "" {
 		line1Parts = append(line1Parts, gateStr)
 	}
-	line1 := "  " + strings.Join(line1Parts, " │ ")
-
-	// Line 2: Tokens and cost
-	tokensStr := m.formatTokens(p.TokensIn, p.TokensOut)
-	costStr := m.formatCost(p.Cost, p.Budget)
-	line2 := "  " + tokensStr + " │ " + costStr
-
-	return line1 + "\n" + line2
-}
-
-// formatIteration formats the iteration counter with optional warning colour.
-func (m Model) formatIteration(current, max int) string {
-	label := m.styles.Label.Render("Iteration ")
-	ratio := float64(current) / float64(max)
-
-	var value string
-	if ratio > 0.8 {
-		value = m.styles.Warning.Render(formatFraction(current, max))
-	} else {
-		value = m.styles.Value.Render(formatFraction(current, max))
+	line1Content := " " + strings.Join(line1Parts, " "+InnerVertical+" ")
+	line1Width := ansi.StringWidth(line1Content)
+	line1Padding := contentWidth - line1Width
+	if line1Padding < 0 {
+		line1Padding = 0
 	}
 
-	return label + value
+	// Line 2: Budget progress bar, tokens and cost
+	costRatio := p.Cost / p.Budget
+	if p.Budget == 0 {
+		costRatio = 0
+	}
+	budgetBar := RenderProgressBar(costRatio, BarWidth, m.styles.Value, m.styles.Warning)
+	tokensStr := m.formatTokens(p.TokensIn, p.TokensOut)
+	costStr := m.formatCost(p.Cost, p.Budget)
+	line2Content := " " + budgetBar + " " + tokensStr + " " + InnerVertical + " " + costStr
+	line2Width := ansi.StringWidth(line2Content)
+	line2Padding := contentWidth - line2Width
+	if line2Padding < 0 {
+		line2Padding = 0
+	}
+
+	line1 := border + line1Content + strings.Repeat(" ", line1Padding) + border
+	line2 := border + line2Content + strings.Repeat(" ", line2Padding) + border
+
+	return line1 + "\n" + line2
 }
 
 // formatStep formats the step name and position.
@@ -1080,9 +1165,17 @@ func (m Model) formatCost(cost, budget float64) string {
 // renderSessionPanel renders the session info panel.
 func (m Model) renderSessionPanel() string {
 	s := m.session
+	contentWidth := m.layout.ContentWidth()
+	border := m.styles.Border.Render(BoxVertical)
 
 	// Line 1: Spec file(s)
 	specStr := m.formatPaths("Spec", s.SpecFiles)
+	line1Content := " " + specStr
+	line1Width := ansi.StringWidth(line1Content)
+	line1Padding := contentWidth - line1Width
+	if line1Padding < 0 {
+		line1Padding = 0
+	}
 
 	// Line 2: Notes and state files
 	var line2Parts []string
@@ -1096,8 +1189,15 @@ func (m Model) renderSessionPanel() string {
 		line2Parts = append(line2Parts, m.formatPath("Context", s.ContextFile))
 	}
 
-	line1 := "  " + specStr
-	line2 := "  " + strings.Join(line2Parts, " │ ")
+	line2Content := " " + strings.Join(line2Parts, " "+InnerVertical+" ")
+	line2Width := ansi.StringWidth(line2Content)
+	line2Padding := contentWidth - line2Width
+	if line2Padding < 0 {
+		line2Padding = 0
+	}
+
+	line1 := border + line1Content + strings.Repeat(" ", line1Padding) + border
+	line2 := border + line2Content + strings.Repeat(" ", line2Padding) + border
 
 	return line1 + "\n" + line2
 }
@@ -1105,14 +1205,18 @@ func (m Model) renderSessionPanel() string {
 // renderWorktreePanel renders the worktree info panel.
 func (m Model) renderWorktreePanel() string {
 	w := m.worktree
+	contentWidth := m.layout.ContentWidth()
+	border := m.styles.Border.Render(BoxVertical)
 
 	// Icon and label
-	icon := m.styles.WorktreeLabel.Render("⎇")
+	icon := m.styles.WorktreeLabel.Render(IconWorktree)
 
 	// If name is available, show it prominently
 	var nameStr string
+	var nameWidth int
 	if w.Name != "" {
 		nameStr = m.styles.WorktreeLabel.Render(" Worktree: ") + m.styles.WorktreeValue.Render(w.Name)
+		nameWidth = len(" Worktree: ") + len(w.Name)
 	} else {
 		// Fallback to path if no name
 		path := w.Path
@@ -1121,13 +1225,21 @@ func (m Model) renderWorktreePanel() string {
 			path = "..." + path[len(path)-maxPathLen+3:]
 		}
 		nameStr = m.styles.WorktreeLabel.Render(" Worktree: ") + m.styles.WorktreeValue.Render(path)
+		nameWidth = len(" Worktree: ") + len(path)
 	}
 
 	// Branch
-	branchLabel := m.styles.Label.Render(" │ Branch: ")
+	branchLabel := m.styles.Label.Render(" " + InnerVertical + " Branch: ")
 	branchStr := m.styles.WorktreeValue.Render(w.Branch)
 
-	return "  " + icon + nameStr + branchLabel + branchStr
+	lineContent := " " + icon + nameStr + branchLabel + branchStr
+	lineWidth := 1 + 1 + nameWidth + len(" "+InnerVertical+" Branch: ") + len(w.Branch)
+	padding := contentWidth - lineWidth
+	if padding < 0 {
+		padding = 0
+	}
+
+	return border + lineContent + strings.Repeat(" ", padding) + border
 }
 
 // formatPath formats a single file path with truncation.

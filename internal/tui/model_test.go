@@ -260,13 +260,14 @@ func TestModelRenderTaskWithIcons(t *testing.T) {
 	updatedModel, _ := m.Update(msg)
 	model := updatedModel.(Model)
 
+	// Updated icons from styles.go
 	tests := []struct {
 		task     Task
 		wantIcon string
 	}{
-		{Task{Status: "completed", Content: "Done task"}, "✓"},
-		{Task{Status: "in_progress", Content: "Working task"}, "→"},
-		{Task{Status: "pending", Content: "Pending task"}, "○"},
+		{Task{Status: "completed", Content: "Done task"}, IconComplete},  // ●
+		{Task{Status: "in_progress", Content: "Working task"}, IconInProgress}, // →
+		{Task{Status: "pending", Content: "Pending task"}, IconPending}, // ○
 	}
 
 	for _, tt := range tests {

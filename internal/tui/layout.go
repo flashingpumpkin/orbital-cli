@@ -9,6 +9,9 @@ const MinTerminalHeight = 24
 
 // Panel heights (number of lines)
 const (
+	// HeaderPanelHeight is the height of the header panel (brand + metrics).
+	HeaderPanelHeight = 1
+
 	// ProgressPanelHeight is the height of the progress bar panel (iteration, step, tokens, cost).
 	ProgressPanelHeight = 2
 
@@ -24,9 +27,13 @@ const (
 	// TabBarHeight is the height of the tab bar at the top.
 	TabBarHeight = 1
 
+	// HelpBarHeight is the height of the help bar at the bottom (outside main frame).
+	HelpBarHeight = 1
+
 	// BorderHeight is the total height used by horizontal borders between panels.
-	// Now includes the separator after tab bar.
-	BorderHeight = 5
+	// Includes: top border, after header, after tab bar, before tasks, after tasks,
+	// before progress, after progress, before session, before worktree (if active), bottom border.
+	BorderHeight = 6
 )
 
 // Layout represents the calculated dimensions for each UI region.
@@ -34,6 +41,9 @@ type Layout struct {
 	// Total terminal dimensions
 	Width  int
 	Height int
+
+	// HeaderPanel is the brand + metrics header
+	HeaderPanelHeight int
 
 	// TabBar is the tab bar region at the top
 	TabBarHeight int
@@ -53,6 +63,9 @@ type Layout struct {
 	// WorktreePanel is the worktree info region (shown when worktree mode active)
 	WorktreePanelHeight int
 
+	// HelpBar is the help text region at the bottom (outside main frame)
+	HelpBarHeight int
+
 	// TooSmall indicates the terminal is below minimum size
 	TooSmall bool
 
@@ -65,9 +78,11 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 	layout := Layout{
 		Width:               width,
 		Height:              height,
+		HeaderPanelHeight:   HeaderPanelHeight,
 		TabBarHeight:        TabBarHeight,
 		ProgressPanelHeight: ProgressPanelHeight,
 		SessionPanelHeight:  SessionPanelHeight,
+		HelpBarHeight:       HelpBarHeight,
 	}
 
 	// Set worktree panel height if worktree mode is active
@@ -103,7 +118,11 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 	if hasWorktree {
 		borderCount++ // Extra separator before worktree panel
 	}
-	fixedHeight := layout.TabBarHeight + layout.TaskPanelHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + borderCount
+	// Add extra border if task panel is visible
+	if layout.TaskPanelHeight > 0 {
+		borderCount++
+	}
+	fixedHeight := layout.HeaderPanelHeight + layout.TabBarHeight + layout.TaskPanelHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + layout.HelpBarHeight + borderCount
 
 	// Remaining space goes to scroll area
 	layout.ScrollAreaHeight = height - fixedHeight
@@ -111,7 +130,8 @@ func CalculateLayout(width, height, taskCount int, hasWorktree bool) Layout {
 	// If scroll area would be too small, collapse task panel
 	if layout.ScrollAreaHeight < 4 && layout.TaskPanelHeight > 0 {
 		layout.TaskPanelHeight = 0
-		fixedHeight = layout.TabBarHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + borderCount
+		borderCount-- // Remove task panel border
+		fixedHeight = layout.HeaderPanelHeight + layout.TabBarHeight + layout.ProgressPanelHeight + layout.SessionPanelHeight + layout.WorktreePanelHeight + layout.HelpBarHeight + borderCount
 		layout.ScrollAreaHeight = height - fixedHeight
 	}
 

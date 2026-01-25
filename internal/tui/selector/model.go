@@ -189,18 +189,28 @@ func (m Model) View() string {
 // viewSessionList renders the main session selection view.
 func (m Model) viewSessionList() string {
 	var b strings.Builder
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
 
-	// Title
-	b.WriteString(" ")
-	b.WriteString(m.styles.Title.Render("Orbital Continue - Select Session"))
+	// Top border
+	b.WriteString(RenderTopBorder(width, m.styles.Border))
 	b.WriteString("\n")
-	b.WriteString(m.renderSeparator())
+
+	// Header with brand
+	b.WriteString(m.renderBorderedLine("  "+m.styles.Brand.Render("◆ ORBITAL CONTINUE"), width))
+	b.WriteString("\n")
+	b.WriteString(RenderMidBorder(width, m.styles.Border))
 	b.WriteString("\n")
 
 	// Sessions
 	if len(m.sessions) == 0 {
+		b.WriteString(m.renderBorderedLine("", width))
 		b.WriteString("\n")
-		b.WriteString(m.styles.Warning.Render("   No sessions found"))
+		b.WriteString(m.renderBorderedLine("   "+m.styles.Warning.Render("No sessions found"), width))
+		b.WriteString("\n")
+		b.WriteString(m.renderBorderedLine("", width))
 		b.WriteString("\n")
 	} else {
 		for i, s := range m.sessions {
@@ -208,19 +218,46 @@ func (m Model) viewSessionList() string {
 		}
 	}
 
-	// Help bar
+	// Bottom border
+	b.WriteString(RenderMidBorder(width, m.styles.Border))
 	b.WriteString("\n")
-	b.WriteString(m.renderSeparator())
+
+	// Help bar (outside frame)
+	b.WriteString("  ")
+	b.WriteString(m.styles.HelpKey.Render("↑/↓"))
+	b.WriteString(m.styles.Help.Render(" navigate  "))
+	b.WriteString(m.styles.HelpKey.Render("enter"))
+	b.WriteString(m.styles.Help.Render(" select  "))
+	b.WriteString(m.styles.HelpKey.Render("q"))
+	b.WriteString(m.styles.Help.Render(" quit"))
+
+	// Final bottom border
 	b.WriteString("\n")
-	b.WriteString(m.styles.Help.Render(" up/down navigate  enter select  q quit"))
+	b.WriteString(RenderBottomBorder(width, m.styles.Border))
 
 	return b.String()
+}
+
+// renderBorderedLine renders a line with vertical borders.
+func (m Model) renderBorderedLine(content string, width int) string {
+	border := m.styles.Border.Render(boxVertical)
+	contentWidth := width - 2 // Account for borders
+	// Simple padding calculation (not fully ANSI-aware for brevity)
+	padding := contentWidth - len(content)
+	if padding < 0 {
+		padding = 0
+	}
+	return border + content + strings.Repeat(" ", padding) + border
 }
 
 // renderSession renders a single session entry.
 func (m Model) renderSession(idx int, s session.Session) string {
 	var b strings.Builder
 	isSelected := idx == m.cursor
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
 
 	// Cursor and session number
 	cursor := "   "
@@ -235,9 +272,9 @@ func (m Model) renderSession(idx int, s session.Session) string {
 	// Session type indicator and name
 	var typeIcon string
 	if s.Type == session.SessionTypeWorktree {
-		typeIcon = "wt "
+		typeIcon = "⎇ "
 	} else {
-		typeIcon = "   "
+		typeIcon = "  "
 	}
 
 	// Style based on validity
@@ -250,46 +287,56 @@ func (m Model) renderSession(idx int, s session.Session) string {
 		valueStyle = m.styles.ValueDim
 	}
 
-	// Line 1: Name
-	b.WriteString("\n")
-	b.WriteString(cursor)
-	b.WriteString(nameStyle.Render(typeIcon + s.DisplayName()))
-	if s.Type == session.SessionTypeWorktree {
-		b.WriteString(labelStyle.Render(" (worktree)"))
-	}
-	b.WriteString("\n")
-
-	// Line 2: Branch (for worktrees) or Specs
-	if branch := s.Branch(); branch != "" {
-		b.WriteString("       ")
-		b.WriteString(labelStyle.Render("Branch: "))
-		b.WriteString(valueStyle.Render(branch))
-		b.WriteString("\n")
-	}
-
-	// Line 3: Spec files
-	if len(s.SpecFiles) > 0 {
-		b.WriteString("       ")
-		b.WriteString(labelStyle.Render("Specs: "))
-		specs := formatSpecs(s.SpecFiles)
-		b.WriteString(valueStyle.Render(specs))
-		b.WriteString("\n")
-	}
-
-	// Line 4: Created time
-	b.WriteString("       ")
-	b.WriteString(labelStyle.Render("Created: "))
-	b.WriteString(valueStyle.Render(formatTimeAgo(s.CreatedAt)))
-	b.WriteString("\n")
-
-	// Line 5: Status indicator
-	b.WriteString("       ")
+	// Status indicator on same line as name
+	var statusStr string
 	if s.Valid {
-		b.WriteString(m.styles.Success.Render("v Valid"))
+		statusStr = m.styles.Success.Render("Valid")
 	} else {
-		b.WriteString(m.styles.Warning.Render("! " + s.InvalidReason))
+		statusStr = m.styles.Warning.Render("Stale")
 	}
+
+	// Line 1: Empty line for spacing
+	b.WriteString(m.renderBorderedLine("", width))
 	b.WriteString("\n")
+
+	// Line 2: Name with status on right
+	nameLine := cursor + nameStyle.Render(typeIcon+s.DisplayName())
+	// Right-align status
+	nameLen := 3 + 2 + len(s.DisplayName()) // cursor + icon + name
+	statusLen := 5                          // "Valid" or "Stale"
+	padding := width - 2 - nameLen - statusLen - 2
+	if padding < 1 {
+		padding = 1
+	}
+	b.WriteString(m.styles.Border.Render(boxVertical) + nameLine + strings.Repeat(" ", padding) + statusStr + " " + m.styles.Border.Render(boxVertical))
+	b.WriteString("\n")
+
+	// Line 3: Branch (for worktrees)
+	if branch := s.Branch(); branch != "" {
+		branchLine := "       " + labelStyle.Render("Branch: ") + valueStyle.Render(branch)
+		b.WriteString(m.renderBorderedLine(branchLine, width))
+		b.WriteString("\n")
+	}
+
+	// Line 4: Spec files
+	if len(s.SpecFiles) > 0 {
+		specs := formatSpecs(s.SpecFiles)
+		specLine := "       " + labelStyle.Render("Specs: ") + valueStyle.Render(specs)
+		b.WriteString(m.renderBorderedLine(specLine, width))
+		b.WriteString("\n")
+	}
+
+	// Line 5: Created time
+	createdLine := "       " + labelStyle.Render("Created: ") + valueStyle.Render(formatTimeAgo(s.CreatedAt))
+	b.WriteString(m.renderBorderedLine(createdLine, width))
+	b.WriteString("\n")
+
+	// Line 6: Invalid reason if applicable
+	if !s.Valid {
+		reasonLine := "       " + m.styles.Warning.Render("! "+s.InvalidReason)
+		b.WriteString(m.renderBorderedLine(reasonLine, width))
+		b.WriteString("\n")
+	}
 
 	return b.String()
 }
@@ -297,68 +344,83 @@ func (m Model) renderSession(idx int, s session.Session) string {
 // viewCleanupDialog renders the cleanup confirmation dialog.
 func (m Model) viewCleanupDialog() string {
 	var b strings.Builder
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
 
 	if m.cursor >= len(m.sessions) {
 		return ""
 	}
 	s := m.sessions[m.cursor]
 
-	// Title
-	b.WriteString(" ")
-	b.WriteString(m.styles.DialogTitle.Render("Remove Stale Session?"))
+	// Top border
+	b.WriteString(RenderTopBorder(width, m.styles.Border))
 	b.WriteString("\n")
-	b.WriteString(m.renderSeparator())
-	b.WriteString("\n\n")
+
+	// Title
+	b.WriteString(m.renderBorderedLine("  "+m.styles.DialogTitle.Render("Remove Stale Session?"), width))
+	b.WriteString("\n")
+	b.WriteString(RenderMidBorder(width, m.styles.Border))
+	b.WriteString("\n")
+
+	// Empty line
+	b.WriteString(m.renderBorderedLine("", width))
+	b.WriteString("\n")
 
 	// Explanation
-	b.WriteString(" ")
-	b.WriteString(m.styles.DialogText.Render("The session \""+s.DisplayName()+"\" cannot be resumed:"))
+	b.WriteString(m.renderBorderedLine("  "+m.styles.DialogText.Render("The session \""+s.DisplayName()+"\" cannot be resumed:"), width))
 	b.WriteString("\n")
-	b.WriteString(" ")
-	b.WriteString(m.styles.Warning.Render(s.InvalidReason))
-	b.WriteString("\n\n")
+	b.WriteString(m.renderBorderedLine("  "+m.styles.Warning.Render(s.InvalidReason), width))
+	b.WriteString("\n")
 
-	b.WriteString(" ")
-	b.WriteString(m.styles.DialogText.Render("Remove this stale entry from state?"))
+	b.WriteString(m.renderBorderedLine("", width))
+	b.WriteString("\n")
+
+	b.WriteString(m.renderBorderedLine("  "+m.styles.DialogText.Render("Remove this stale entry from state?"), width))
 	b.WriteString("\n")
 	if s.Type == session.SessionTypeWorktree {
-		b.WriteString(" ")
-		b.WriteString(m.styles.Label.Render("This will delete the worktree-state.json entry."))
+		b.WriteString(m.renderBorderedLine("  "+m.styles.Label.Render("This will delete the worktree-state.json entry."), width))
 		b.WriteString("\n")
 	}
+	b.WriteString(m.renderBorderedLine("", width))
 	b.WriteString("\n")
 
 	// Buttons
-	b.WriteString(" ")
+	var buttonLine string
 	if m.cleanupChoice == 0 {
-		b.WriteString(m.styles.ButtonActive.Render("Yes, remove"))
+		buttonLine = "  " + m.styles.ButtonActive.Render("Yes, remove") + "  " + m.styles.ButtonInactive.Render("No, go back")
 	} else {
-		b.WriteString(m.styles.ButtonInactive.Render("Yes, remove"))
+		buttonLine = "  " + m.styles.ButtonInactive.Render("Yes, remove") + "  " + m.styles.ButtonActive.Render("No, go back")
 	}
-	b.WriteString("  ")
-	if m.cleanupChoice == 1 {
-		b.WriteString(m.styles.ButtonActive.Render("No, go back"))
-	} else {
-		b.WriteString(m.styles.ButtonInactive.Render("No, go back"))
-	}
-	b.WriteString("\n\n")
-
-	// Help
-	b.WriteString(m.renderSeparator())
+	b.WriteString(m.renderBorderedLine(buttonLine, width))
 	b.WriteString("\n")
-	b.WriteString(m.styles.Help.Render(" left/right select  y/n quick choice  enter confirm  esc cancel"))
+
+	b.WriteString(m.renderBorderedLine("", width))
+	b.WriteString("\n")
+
+	// Bottom border
+	b.WriteString(RenderMidBorder(width, m.styles.Border))
+	b.WriteString("\n")
+
+	// Help bar (outside frame)
+	b.WriteString("  ")
+	b.WriteString(m.styles.HelpKey.Render("←/→"))
+	b.WriteString(m.styles.Help.Render(" select  "))
+	b.WriteString(m.styles.HelpKey.Render("y/n"))
+	b.WriteString(m.styles.Help.Render(" quick choice  "))
+	b.WriteString(m.styles.HelpKey.Render("enter"))
+	b.WriteString(m.styles.Help.Render(" confirm  "))
+	b.WriteString(m.styles.HelpKey.Render("esc"))
+	b.WriteString(m.styles.Help.Render(" cancel"))
+
+	// Final bottom border
+	b.WriteString("\n")
+	b.WriteString(RenderBottomBorder(width, m.styles.Border))
 
 	return b.String()
 }
 
-// renderSeparator renders a horizontal line.
-func (m Model) renderSeparator() string {
-	width := m.width
-	if width <= 0 {
-		width = 80 // Default width
-	}
-	return m.styles.Separator.Render(strings.Repeat("-", width))
-}
 
 // Result returns the selection result. Call after the model has quit.
 func (m Model) Result() Result {
