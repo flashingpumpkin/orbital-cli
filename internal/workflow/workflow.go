@@ -19,6 +19,10 @@ type Step struct {
 
 	// OnFail specifies the step name to return to if this gate fails.
 	OnFail string `toml:"on_fail" json:"on_fail,omitempty"`
+
+	// Deferred marks this step to be skipped during normal execution.
+	// Deferred steps only run when reached via a gate's OnFail jump.
+	Deferred bool `toml:"deferred" json:"deferred,omitempty"`
 }
 
 // Workflow represents a multi-step workflow configuration.
@@ -66,6 +70,19 @@ func (w *Workflow) Validate() error {
 			if !stepNames[step.OnFail] {
 				return fmt.Errorf("step %d (%s): on_fail references unknown step %q", i+1, step.Name, step.OnFail)
 			}
+		}
+	}
+
+	// Validate deferred steps are reachable via OnFail
+	onFailTargets := make(map[string]bool)
+	for _, step := range w.Steps {
+		if step.OnFail != "" {
+			onFailTargets[step.OnFail] = true
+		}
+	}
+	for i, step := range w.Steps {
+		if step.Deferred && !onFailTargets[step.Name] {
+			return fmt.Errorf("step %d (%s): deferred step is unreachable (not targeted by any on_fail)", i+1, step.Name)
 		}
 	}
 

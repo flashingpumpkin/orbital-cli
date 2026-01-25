@@ -131,9 +131,19 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 
 	stepIndex := 0
 	gateRetries := make(map[string]int)
+	arrivedViaOnFail := false
 
 	for stepIndex < len(r.workflow.Steps) {
 		step := r.workflow.Steps[stepIndex]
+
+		// Skip deferred steps unless we arrived via OnFail
+		if step.Deferred && !arrivedViaOnFail {
+			stepIndex++
+			continue
+		}
+
+		// Reset the flag after checking
+		arrivedViaOnFail = false
 
 		// Call start callback if set
 		if r.startCallback != nil {
@@ -216,6 +226,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 						return result, fmt.Errorf("step %q: on_fail target %q not found", step.Name, step.OnFail)
 					}
 					stepIndex = targetIndex
+					arrivedViaOnFail = true
 				}
 				// No on_fail specified, just retry this step
 				// Don't increment stepIndex

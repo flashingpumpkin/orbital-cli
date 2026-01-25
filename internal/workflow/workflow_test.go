@@ -87,6 +87,28 @@ func TestWorkflow_Validate(t *testing.T) {
 			},
 			wantErr: "step 1 (review): on_fail references unknown step \"nonexistent\"",
 		},
+		{
+			name: "valid deferred step targeted by on_fail",
+			workflow: Workflow{
+				Steps: []Step{
+					{Name: "implement", Prompt: "Do it"},
+					{Name: "fix", Prompt: "Fix it", Deferred: true},
+					{Name: "review", Prompt: "Review", Gate: true, OnFail: "fix"},
+				},
+			},
+			wantErr: "",
+		},
+		{
+			name: "deferred step not targeted by any on_fail",
+			workflow: Workflow{
+				Steps: []Step{
+					{Name: "implement", Prompt: "Do it"},
+					{Name: "fix", Prompt: "Fix it", Deferred: true},
+					{Name: "review", Prompt: "Review", Gate: true, OnFail: "implement"},
+				},
+			},
+			wantErr: "step 2 (fix): deferred step is unreachable (not targeted by any on_fail)",
+		},
 	}
 
 	for _, tt := range tests {

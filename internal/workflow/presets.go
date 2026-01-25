@@ -17,6 +17,10 @@ const (
 
 	// PresetTDD implements test-driven development with red-green-refactor cycle.
 	PresetTDD PresetName = "tdd"
+
+	// PresetAutonomous takes a self-directed approach: pick highest-leverage task,
+	// complete it, document, commit, and exit for the next iteration.
+	PresetAutonomous PresetName = "autonomous"
 )
 
 // DefaultPreset is the preset used when none is specified.
@@ -24,7 +28,7 @@ const DefaultPreset = PresetSpecDriven
 
 // ValidPresets returns all valid preset names.
 func ValidPresets() []PresetName {
-	return []PresetName{PresetFast, PresetSpecDriven, PresetReviewed, PresetTDD}
+	return []PresetName{PresetFast, PresetSpecDriven, PresetReviewed, PresetTDD, PresetAutonomous}
 }
 
 // IsValidPreset returns true if the given name is a valid preset.
@@ -49,6 +53,8 @@ func GetPreset(name PresetName) (*Workflow, error) {
 		return reviewedPreset(), nil
 	case PresetTDD:
 		return tddPreset(), nil
+	case PresetAutonomous:
+		return autonomousPreset(), nil
 	default:
 		return nil, fmt.Errorf("unknown preset: %s", name)
 	}
@@ -207,6 +213,52 @@ Update notes: what refactoring was done.`,
 	}
 }
 
+// autonomousPreset returns the autonomous workflow with self-directed task selection.
+func autonomousPreset() *Workflow {
+	return &Workflow{
+		Name:   string(PresetAutonomous),
+		Preset: string(PresetAutonomous),
+		Steps: []Step{
+			{
+				Name: "implement",
+				Prompt: `Study the spec file{{plural}} to understand the full scope:
+{{files}}
+
+If a plan exists in the same directory, study it to understand the approach.
+
+Pick the highest-leverage task: the one that unblocks the most work or provides the most value.
+
+Complete the task fully. Verify the outcome is correct.
+
+Document your work:
+- In the notes file, record: which task you chose, why it was highest leverage, key decisions made
+- Check off completed items in the spec file
+
+Commit all changes with a descriptive message.
+
+Do not output the completion promise. Exit so the next iteration can begin.`,
+			},
+			{
+				Name:     "fix",
+				Deferred: true,
+				Prompt: `Read the notes file for review feedback from the previous iteration.
+
+Address each issue raised by the reviewers. Verify the corrections are correct.
+
+Update the notes file with what was fixed and why.
+
+Commit all changes with a message describing the fixes.`,
+			},
+			{
+				Name:   "review",
+				Prompt: rigorousReviewPrompt,
+				Gate:   true,
+				OnFail: "fix",
+			},
+		},
+	}
+}
+
 // PresetDescriptions returns brief descriptions for each preset.
 func PresetDescriptions() map[PresetName]string {
 	return map[PresetName]string{
@@ -214,5 +266,6 @@ func PresetDescriptions() map[PresetName]string {
 		PresetSpecDriven: "Single implement step with completion check (default)",
 		PresetReviewed:   "Implement with review gate before completion",
 		PresetTDD:        "Red-green-refactor cycle with review gate",
+		PresetAutonomous: "Self-directed task selection with review gate",
 	}
 }

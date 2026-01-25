@@ -208,6 +208,7 @@ Placeholders:
 | `spec-driven` | implement | Single step, completion check (default) |
 | `reviewed` | implement, review (gate) | Review gate before completion |
 | `tdd` | red, green, refactor, review (gate) | TDD cycle |
+| `autonomous` | implement, fix (deferred), review (gate) | Self-directed task selection with review gate |
 
 ## Claude CLI Invocation
 

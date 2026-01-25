@@ -467,3 +467,127 @@ func TestRunner_Run_CallbackGateRetries(t *testing.T) {
 		t.Errorf("reviewRetries[2] = %d, want 2", reviewRetries[2])
 	}
 }
+
+func TestRunner_Run_DeferredStepSkipped(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Do it"},
+			{Name: "fix", Prompt: "Fix it", Deferred: true},
+			{Name: "review", Prompt: "Review", Gate: true, OnFail: "fix"},
+		},
+	}
+
+	exec := newMockExecutor()
+	exec.setResponse("implement", "Done!", 0.02, 200)
+	exec.setResponse("review", "Looks good!\n<gate>PASS</gate>", 0.01, 100)
+
+	runner := NewRunner(w, exec)
+	result, err := runner.Run(context.Background())
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if !result.CompletedAllSteps {
+		t.Error("CompletedAllSteps = false, want true")
+	}
+
+	// Should have skipped the fix step: implement -> review (pass)
+	if len(exec.calls) != 2 {
+		t.Errorf("calls = %v, want [implement review]", exec.calls)
+	}
+	if len(exec.calls) >= 1 && exec.calls[0] != "implement" {
+		t.Errorf("calls[0] = %q, want \"implement\"", exec.calls[0])
+	}
+	if len(exec.calls) >= 2 && exec.calls[1] != "review" {
+		t.Errorf("calls[1] = %q, want \"review\"", exec.calls[1])
+	}
+}
+
+func TestRunner_Run_DeferredStepRunsOnFail(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Do it"},
+			{Name: "fix", Prompt: "Fix it", Deferred: true},
+			{Name: "review", Prompt: "Review", Gate: true, OnFail: "fix"},
+		},
+	}
+
+	exec := newMockExecutor()
+
+	// Track call count to vary responses
+	callCount := 0
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		callCount++
+		if stepName == "review" {
+			if callCount <= 2 {
+				// First review fails
+				return &ExecutionResult{StepName: "review", Output: "Issues found\n<gate>FAIL</gate>", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+			}
+			// Second review passes
+			return &ExecutionResult{StepName: "review", Output: "All good\n<gate>PASS</gate>", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+		}
+		return &ExecutionResult{StepName: stepName, Output: "Done!", CostUSD: 0.02, TokensIn: 120, TokensOut: 80}, nil
+	}
+
+	runner := NewRunner(w, exec)
+	result, err := runner.Run(context.Background())
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if !result.CompletedAllSteps {
+		t.Error("CompletedAllSteps = false, want true")
+	}
+
+	// Should have: implement -> review (fail) -> fix -> review (pass)
+	if len(exec.calls) != 4 {
+		t.Errorf("calls = %v, want [implement review fix review]", exec.calls)
+	}
+	expectedCalls := []string{"implement", "review", "fix", "review"}
+	for i, expected := range expectedCalls {
+		if i < len(exec.calls) && exec.calls[i] != expected {
+			t.Errorf("calls[%d] = %q, want %q", i, exec.calls[i], expected)
+		}
+	}
+}
+
+func TestRunner_Run_MultipleDeferredStepsSkipped(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Do it"},
+			{Name: "fix1", Prompt: "Fix first", Deferred: true},
+			{Name: "fix2", Prompt: "Fix second", Deferred: true},
+			{Name: "review1", Prompt: "Review", Gate: true, OnFail: "fix1"},
+			{Name: "review2", Prompt: "Review", Gate: true, OnFail: "fix2"},
+		},
+	}
+
+	exec := newMockExecutor()
+	exec.setResponse("implement", "Done!", 0.02, 200)
+	exec.setResponse("review1", "Looks good!\n<gate>PASS</gate>", 0.01, 100)
+	exec.setResponse("review2", "Looks good!\n<gate>PASS</gate>", 0.01, 100)
+
+	runner := NewRunner(w, exec)
+	result, err := runner.Run(context.Background())
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if !result.CompletedAllSteps {
+		t.Error("CompletedAllSteps = false, want true")
+	}
+
+	// Should skip both deferred steps: implement -> review1 -> review2
+	if len(exec.calls) != 3 {
+		t.Errorf("calls = %v, want [implement review1 review2]", exec.calls)
+	}
+	expectedCalls := []string{"implement", "review1", "review2"}
+	for i, expected := range expectedCalls {
+		if i < len(exec.calls) && exec.calls[i] != expected {
+			t.Errorf("calls[%d] = %q, want %q", i, exec.calls[i], expected)
+		}
+	}
+}

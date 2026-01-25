@@ -14,6 +14,7 @@ func TestIsValidPreset(t *testing.T) {
 		{"spec-driven", true},
 		{"reviewed", true},
 		{"tdd", true},
+		{"autonomous", true},
 		{"invalid", false},
 		{"", false},
 		{"TDD", false}, // case sensitive
@@ -39,6 +40,7 @@ func TestGetPreset(t *testing.T) {
 		{PresetSpecDriven, 1, false},
 		{PresetReviewed, 2, false},
 		{PresetTDD, 4, false},
+		{PresetAutonomous, 3, false},
 		{"invalid", 0, true},
 	}
 
@@ -179,8 +181,8 @@ func TestTDDPreset(t *testing.T) {
 func TestValidPresets(t *testing.T) {
 	presets := ValidPresets()
 
-	if len(presets) != 4 {
-		t.Errorf("ValidPresets() returned %d presets, want 4", len(presets))
+	if len(presets) != 5 {
+		t.Errorf("ValidPresets() returned %d presets, want 5", len(presets))
 	}
 
 	expected := map[PresetName]bool{
@@ -188,6 +190,7 @@ func TestValidPresets(t *testing.T) {
 		PresetSpecDriven: true,
 		PresetReviewed:   true,
 		PresetTDD:        true,
+		PresetAutonomous: true,
 	}
 
 	for _, p := range presets {
@@ -204,5 +207,66 @@ func TestPresetDescriptions(t *testing.T) {
 		if _, ok := descs[p]; !ok {
 			t.Errorf("missing description for preset: %s", p)
 		}
+	}
+}
+
+func TestAutonomousPreset(t *testing.T) {
+	w := autonomousPreset()
+
+	if len(w.Steps) != 3 {
+		t.Errorf("autonomous should have 3 steps, got %d", len(w.Steps))
+	}
+
+	// Check implement step
+	impl := w.Steps[0]
+	if impl.Name != "implement" {
+		t.Errorf("first step name = %q, want \"implement\"", impl.Name)
+	}
+	if !strings.Contains(impl.Prompt, "{{files}}") {
+		t.Error("implement prompt should contain {{files}} placeholder")
+	}
+	if !strings.Contains(impl.Prompt, "highest-leverage") {
+		t.Error("implement prompt should mention highest-leverage task selection")
+	}
+	if impl.Deferred {
+		t.Error("implement step should not be deferred")
+	}
+
+	// Check fix step
+	fix := w.Steps[1]
+	if fix.Name != "fix" {
+		t.Errorf("second step name = %q, want \"fix\"", fix.Name)
+	}
+	if !fix.Deferred {
+		t.Error("fix step should be deferred")
+	}
+	if fix.Gate {
+		t.Error("fix step should not be a gate")
+	}
+	if !strings.Contains(fix.Prompt, "review feedback") {
+		t.Error("fix prompt should mention review feedback")
+	}
+
+	// Check review step
+	review := w.Steps[2]
+	if review.Name != "review" {
+		t.Errorf("third step name = %q, want \"review\"", review.Name)
+	}
+	if !review.Gate {
+		t.Error("review step should be a gate")
+	}
+	if review.OnFail != "fix" {
+		t.Errorf("review on_fail = %q, want \"fix\"", review.OnFail)
+	}
+	if !strings.Contains(review.Prompt, "<gate>PASS</gate>") {
+		t.Error("review prompt should contain gate pass tag")
+	}
+	if !strings.Contains(review.Prompt, "<gate>FAIL</gate>") {
+		t.Error("review prompt should contain gate fail tag")
+	}
+
+	// Validate the preset
+	if err := w.Validate(); err != nil {
+		t.Errorf("autonomous preset validation failed: %v", err)
 	}
 }
