@@ -153,6 +153,24 @@ func TestFormatToolSummary(t *testing.T) {
 			expected: " #1 -> completed",
 		},
 		{
+			name:     "Task tool with description",
+			toolName: "Task",
+			input:    `{"description": "Search for files", "prompt": "Find all Go files", "subagent_type": "Explore"}`,
+			expected: " Search for files",
+		},
+		{
+			name:     "Task tool with long description",
+			toolName: "Task",
+			input:    `{"description": "This is a very long description that exceeds fifty characters limit", "prompt": "Do something"}`,
+			expected: " This is a very long description that exceeds fifty...",
+		},
+		{
+			name:     "Task tool without description",
+			toolName: "Task",
+			input:    `{"prompt": "Do something", "subagent_type": "Explore"}`,
+			expected: "",
+		},
+		{
 			name:     "Unknown tool",
 			toolName: "Unknown",
 			input:    `{"foo": "bar"}`,

@@ -279,6 +279,13 @@ func formatToolSummary(toolName, input string) string {
 		}
 	case "TodoWrite":
 		return formatTodoWriteInput(input)
+	case "Task":
+		if desc := extractJSONField(input, "description"); desc != "" {
+			if len(desc) > 50 {
+				desc = desc[:50] + "..."
+			}
+			return " " + desc
+		}
 	}
 
 	return ""

@@ -58,6 +58,11 @@ Reference screenshots: docs/plans/broken-tui-rendering.png, docs/plans/broken-tu
 - [ ] Fix numbered list and bullet point indentation inconsistency in content area
 - [ ] Investigate why footer sections (Tasks, progress, tokens) render as separate overlapping blocks
 
+#### Sub-agent task parsing (from sub-agent-tasks.png)
+- [x] Fix task description not being parsed when sub-agents are spawned (shows just "Task" repeated instead of task descriptions)
+- [x] Parse and display the task description/prompt when Task tool is invoked
+- [ ] Show sub-agent progress or status alongside the task description
+
 ### Known Issues
 - [ ] Review TODO comments and address actionable items
 - [ ] Check for potential nil pointer dereferences

@@ -492,3 +492,94 @@ Found 3 locations using `len()` for width measurement:
 ### Verification
 - `make check` passes (lint and tests)
 - New test `TestTruncateFromStart` verifies truncation behaviour
+
+## Code Review - Iteration 7
+
+### Security
+No issues. The changes are pure string manipulation for display purposes with no external input vectors, no injection risks, no authentication concerns. The `ansi.StringWidth()` and `ansi.Truncate()` functions from charmbracelet/x/ansi are standard terminal display utilities. Paths are not processed for file system operations here.
+
+### Design
+**_ISSUES_FOUND_**
+
+1. **God file** (model.go at 1537 lines)
+   - Combines model state, input handling, view rendering, text utilities, caching
+   - Changes to truncation logic require touching the same file as tab navigation
+   - Pre-existing issue, not introduced by this iteration
+
+2. **Duplicated truncation logic** (lines 1258-1271 and 1281-1291)
+   - Identical pattern: `truncLen := maxLen - 3; if truncLen < 1 { truncLen = 1 }; path = truncateFromStart(path, truncLen)`
+   - Violates DRY; could extract `truncatePathForDisplay(path, maxLen)` helper
+
+3. **Magic numbers** (lines 1260, 1282)
+   - `maxLen := 40` in formatPath, `maxLen := 60` in formatPaths
+   - No explanation for why values differ; should be named constants
+
+4. **Inconsistent truncation strategy**
+   - `renderTask()` truncates from END using `ansi.Truncate()`
+   - `formatPath()` truncates from START using `truncateFromStart()`
+   - No abstraction to clarify when to use which approach
+
+### Logic
+No issues. The code is logically correct:
+- `maxLen` clamped to minimum 4 ensures `maxLen - 3 >= 1`
+- `truncLen` clamped to minimum 1 before calling `truncateFromStart`
+- `targetWidth <= 0` returns just "..." (safe fallback)
+- Callers guard against calling `truncateFromStart` when string already fits
+- Edge cases for empty strings, zero width, wide characters handled correctly
+
+### Error Handling
+No issues. All changed functions are view rendering code that transforms data for display. They do not perform I/O, network calls, or resource allocation. The Bubbletea TUI framework operates via message passing, not error returns. No panics possible in the changed code.
+
+### Data Integrity
+**_ISSUES_FOUND_**
+
+1. **Icon width assumption in renderTask** (line 1094)
+   - Code assumes icons are 1 cell wide (`contentWidth - 6` for "icon + spacing + borders")
+   - Icons like "●", "→", "○" may render as 1 or 2 cells depending on terminal/font
+   - Could cause visual overflow if icons render as 2 cells wide
+   - Low severity: icons are consistent ASCII-width characters in practice
+
+2. **Inconsistent maxLen values** (lines 1260 vs 1282)
+   - `formatPath` uses 40, `formatPaths` uses 60 for single path
+   - Creates visual inconsistency in session panel
+   - Pre-existing issue, not introduced by this iteration
+
+### Verdict
+**PASS**
+
+The ANSI-aware truncation fix is correct and addresses the root cause of text overflow issues. The changes properly:
+- Use `ansi.StringWidth()` for measurement (handles ANSI codes and Unicode)
+- Use `ansi.Truncate()` for end truncation (task content)
+- Implement `truncateFromStart()` for path truncation (preserves filename)
+- Add defensive bounds checking throughout
+
+The issues identified are:
+- Pre-existing design issues (god file, magic numbers, inconsistent maxLen) not introduced by this iteration
+- Low-severity data concerns (icon width assumption) that don't cause bugs in practice
+
+The new `TestTruncateFromStart` test provides adequate coverage for the new helper function.
+
+## Iteration 8 - 2026-01-25 (Sub-agent Task Parsing)
+
+### Task Selected
+Fix task description not being parsed when sub-agents are spawned.
+
+### Why Highest Leverage
+This is a user-visible bug from the spec's TUI rendering issues. When Claude Code spawns sub-agents using the Task tool, the TUI showed just "Task" repeated instead of the task descriptions. This made it difficult to understand what parallel agents were doing.
+
+### Root Cause
+The `formatToolSummary` function in `bridge.go` had cases for many tools (Read, Write, Glob, Grep, Bash, Skill, TodoWrite, etc.) but was missing a case for the "Task" tool. When no case matched, it returned an empty string, resulting in just the tool name "Task" being displayed.
+
+### Fix
+Added a case for the "Task" tool in `formatToolSummary` that extracts and displays the `description` field from the tool input JSON. The description is truncated to 50 characters with "..." suffix if too long, consistent with other tools like Bash.
+
+### Changes Made
+- `internal/tui/bridge.go`: Added case for "Task" tool in `formatToolSummary`
+- `internal/tui/bridge_test.go`: Added 3 test cases for Task tool parsing:
+  - Normal description
+  - Long description (truncation)
+  - Missing description (returns empty)
+
+### Verification
+- `make check` passes (lint and tests)
+- All 11 test cases in `TestFormatToolSummary` pass
