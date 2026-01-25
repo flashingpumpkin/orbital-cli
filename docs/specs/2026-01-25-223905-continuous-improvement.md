@@ -27,6 +27,28 @@ Explore the codebase to identify areas for improvement and add them to this spec
 
 ## Bug Fixes
 
+### TUI Rendering (HIGH PRIORITY)
+Reference: docs/plans/broken-tui-rendering.png
+
+#### Research (do this first)
+- [x] Study Bubbletea architecture: Model, Update, View cycle and how state flows
+- [x] Understand Lipgloss layout primitives: Place, JoinVertical, JoinHorizontal, and how dimensions are calculated
+- [x] Research Bubbletea best practices for fixed headers/footers with scrollable content
+- [x] Document how terminal resize events propagate through the model
+- [x] **Text rendering deep dive**: Research how Lipgloss handles text width, wrapping, truncation, and padding automatically. Goal: eliminate manual line width calculations and string formatting in favour of library primitives
+- [x] Investigate Lipgloss Width(), MaxWidth(), Inline(), and text measurement functions
+- [x] Research how to let Lipgloss handle Unicode, ANSI escape sequences, and wide characters without manual intervention
+- [x] Review existing internal/tui code to identify places where manual width/formatting calculations can be replaced with library functions
+- [x] Create docs/research/tui-rendering-patterns.md with findings and recommended approach
+
+#### Fixes (after research is complete)
+- [ ] Fix duplicate status bars appearing at bottom of TUI (multiple token/cost lines stacked)
+- [ ] Fix text truncation in Notes/State footer line (shows "...otes-223905-continuous-improvement.md" instead of full path)
+- [ ] Fix overlapping UI sections between main content area and footer
+- [ ] Ensure footer height calculation accounts for all status lines
+- [ ] Verify terminal resize handling doesn't cause layout corruption
+- [ ] Assess and fix any and all other rendering issues that lead to broken UI rendering
+
 ### Known Issues
 - [ ] Review TODO comments and address actionable items
 - [ ] Check for potential nil pointer dereferences
