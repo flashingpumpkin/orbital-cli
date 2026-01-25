@@ -57,4 +57,23 @@
 - Test for "new output auto-tails when in tail mode" required a larger terminal height (40 instead of 20) to ensure the scroll area had room to display the new line
 
 ### Next Steps
+- Ticket 5: Respect scroll state in renderScrollArea
+
+## 2026-01-25 - Iteration 4
+
+### Completed
 - Ticket 4: Add page up/down scrolling for output window
+  - Updated `scrollPageUp()` to handle output tab (activeTab == 0)
+  - Updated `scrollPageDown()` to handle output tab
+  - Page up: unlocks tail mode and jumps up by viewport height, clamping to 0
+  - Page down: jumps down by viewport height, re-locks to tail mode when reaching bottom
+  - File tab page scrolling continues to work as before
+  - Added unit tests: `TestScrollPageUpOutputTab` (4 subtests) and `TestScrollPageDownOutputTab` (4 subtests)
+  - All tests pass, build succeeds
+
+### Observations
+- Tests needed terminal height >= 24 (MinTerminalHeight) to properly calculate ScrollAreaHeight
+- When terminal is too small, ScrollAreaHeight defaults to 0, causing page scroll to be a no-op
+
+### Next Steps
+- Ticket 5: Respect scroll state in renderScrollArea

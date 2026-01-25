@@ -172,19 +172,19 @@ Initialize both fields in `NewModel()` to default to auto-tail behaviour (curren
 - Clamp scroll offset to valid range `[0, maxOffset]`
 
 **Acceptance Criteria**:
-- [ ] Given the output tab is active and tailing, when pressing `PgUp`, then scroll jumps up one page
-- [ ] Given the output tab is active and tailing, when pressing `PgUp`, then `outputTailing` becomes `false`
-- [ ] Given the output tab is active and scrolled, when pressing `PgUp` near top, then scroll clamps to 0
-- [ ] Given the output tab is active and scrolled, when pressing `PgDown`, then scroll jumps down one page
-- [ ] Given the output tab is active and scrolled, when pressing `PgDown` to reach bottom, then `outputTailing` becomes `true`
-- [ ] Given a file tab is active, when pressing `PgUp`/`PgDown`, then file tab scrolling works as before
+- [x] Given the output tab is active and tailing, when pressing `PgUp`, then scroll jumps up one page
+- [x] Given the output tab is active and tailing, when pressing `PgUp`, then `outputTailing` becomes `false`
+- [x] Given the output tab is active and scrolled, when pressing `PgUp` near top, then scroll clamps to 0
+- [x] Given the output tab is active and scrolled, when pressing `PgDown`, then scroll jumps down one page
+- [x] Given the output tab is active and scrolled, when pressing `PgDown` to reach bottom, then `outputTailing` becomes `true`
+- [x] Given a file tab is active, when pressing `PgUp`/`PgDown`, then file tab scrolling works as before
 
 **Definition of Done** (Single Commit):
-- [ ] `scrollPageUp()` updated to handle output tab
-- [ ] `scrollPageDown()` updated to handle output tab
-- [ ] Unit tests added for page scrolling
-- [ ] All existing tests pass
-- [ ] Manual verification: page scrolling jumps by viewport height
+- [x] `scrollPageUp()` updated to handle output tab
+- [x] `scrollPageDown()` updated to handle output tab
+- [x] Unit tests added for page scrolling
+- [x] All existing tests pass
+- [x] Manual verification: page scrolling jumps by viewport height
 
 **Dependencies**:
 - Ticket 1 (scroll state must exist)

@@ -513,9 +513,43 @@ func (m Model) scrollDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// scrollPageUp scrolls the current file tab up by a page.
+// scrollPageUp scrolls the current tab up by a page.
 func (m Model) scrollPageUp() (tea.Model, tea.Cmd) {
-	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+	// Handle output tab (tab 0)
+	if m.activeTab == 0 {
+		wrappedLines := m.wrapAllOutputLines()
+		height := m.layout.ScrollAreaHeight
+
+		// Calculate max scroll offset
+		maxOffset := len(wrappedLines) - height
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+
+		// Nothing to scroll if content fits in viewport
+		if maxOffset == 0 {
+			return m, nil
+		}
+
+		if m.outputTailing {
+			// Unlock tail mode and jump up one page from bottom
+			m.outputTailing = false
+			m.outputScroll = maxOffset - height
+			if m.outputScroll < 0 {
+				m.outputScroll = 0
+			}
+		} else {
+			// Already scrolling, move up one page
+			m.outputScroll -= height
+			if m.outputScroll < 0 {
+				m.outputScroll = 0
+			}
+		}
+		return m, nil
+	}
+
+	// Handle file tabs
+	if len(m.tabs) <= m.activeTab {
 		return m, nil
 	}
 
@@ -531,9 +565,38 @@ func (m Model) scrollPageUp() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// scrollPageDown scrolls the current file tab down by a page.
+// scrollPageDown scrolls the current tab down by a page.
 func (m Model) scrollPageDown() (tea.Model, tea.Cmd) {
-	if m.activeTab == 0 || len(m.tabs) <= m.activeTab {
+	// Handle output tab (tab 0)
+	if m.activeTab == 0 {
+		// If already tailing, nothing to do (already at bottom)
+		if m.outputTailing {
+			return m, nil
+		}
+
+		wrappedLines := m.wrapAllOutputLines()
+		height := m.layout.ScrollAreaHeight
+
+		// Calculate max scroll offset
+		maxOffset := len(wrappedLines) - height
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+
+		// Jump down by one page
+		m.outputScroll += height
+
+		// If we've reached or exceeded max offset, re-lock to tail mode
+		if m.outputScroll >= maxOffset {
+			m.outputScroll = maxOffset
+			m.outputTailing = true
+		}
+
+		return m, nil
+	}
+
+	// Handle file tabs
+	if len(m.tabs) <= m.activeTab {
 		return m, nil
 	}
 

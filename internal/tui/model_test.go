@@ -770,6 +770,281 @@ func TestScrollDownOutputTab(t *testing.T) {
 	})
 }
 
+func TestScrollPageUpOutputTab(t *testing.T) {
+	t.Run("tailing unlocks and jumps up one page", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions (must be >= 24 for minimum terminal height)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling (more than 2 pages)
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Verify initial state: tailing is true
+		if !model.outputTailing {
+			t.Error("expected outputTailing to be true initially")
+		}
+
+		// Press page up
+		keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Verify tailing is now false
+		if model.outputTailing {
+			t.Error("expected outputTailing to be false after page up")
+		}
+
+		// Verify scroll position is one page up from bottom
+		wrappedLines := model.wrapAllOutputLines()
+		height := model.layout.ScrollAreaHeight
+		maxOffset := len(wrappedLines) - height
+		expectedScroll := maxOffset - height
+		if expectedScroll < 0 {
+			expectedScroll = 0
+		}
+
+		if model.outputScroll != expectedScroll {
+			t.Errorf("expected outputScroll to be %d, got %d", expectedScroll, model.outputScroll)
+		}
+	})
+
+	t.Run("scrolled clamps to 0 near top", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions (must be >= 24 for minimum terminal height)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Manually set scroll position near top
+		model.outputTailing = false
+		model.outputScroll = 3 // Less than one page height
+
+		// Press page up
+		keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should clamp to 0
+		if model.outputScroll != 0 {
+			t.Errorf("expected outputScroll to clamp to 0, got %d", model.outputScroll)
+		}
+	})
+
+	t.Run("output fits in viewport does nothing", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions with large height
+		msg := tea.WindowSizeMsg{Width: 80, Height: 50}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add only a few lines (less than viewport)
+		for i := 0; i < 5; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Press page up
+		keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should still be tailing since content fits
+		if !model.outputTailing {
+			t.Error("expected outputTailing to remain true when content fits in viewport")
+		}
+	})
+
+	t.Run("file tab scrolling still works", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions (must be >= 24 for minimum terminal height)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Set up session with a spec file to create file tabs
+		model.SetSession(SessionInfo{
+			SpecFiles: []string{"/path/to/spec.md"},
+		})
+		model.tabs = model.buildTabs()
+
+		// Switch to file tab (tab 1)
+		model.activeTab = 1
+
+		// Set file content and initial scroll
+		model.fileContents["/path/to/spec.md"] = strings.Repeat("Line\n", 100)
+		model.fileScroll["/path/to/spec.md"] = 50
+
+		// Press page up
+		keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Verify file scroll moved up by page height
+		height := model.layout.ScrollAreaHeight
+		expectedScroll := 50 - height
+		if expectedScroll < 0 {
+			expectedScroll = 0
+		}
+		if model.fileScroll["/path/to/spec.md"] != expectedScroll {
+			t.Errorf("expected file scroll to be %d, got %d", expectedScroll, model.fileScroll["/path/to/spec.md"])
+		}
+	})
+}
+
+func TestScrollPageDownOutputTab(t *testing.T) {
+	t.Run("tailing does nothing", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions (must be >= 24 for minimum terminal height)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Verify initial state: tailing is true
+		if !model.outputTailing {
+			t.Error("expected outputTailing to be true initially")
+		}
+
+		// Press page down
+		keyMsg := tea.KeyMsg{Type: tea.KeyPgDown}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should still be tailing
+		if !model.outputTailing {
+			t.Error("expected outputTailing to remain true when already at bottom")
+		}
+	})
+
+	t.Run("scrolled jumps down one page", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions (must be >= 24 for minimum terminal height)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 100; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Manually set scroll position near top
+		model.outputTailing = false
+		model.outputScroll = 10
+
+		previousScroll := model.outputScroll
+		height := model.layout.ScrollAreaHeight
+
+		// Press page down
+		keyMsg := tea.KeyMsg{Type: tea.KeyPgDown}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should jump down by page height
+		expectedScroll := previousScroll + height
+		if model.outputScroll != expectedScroll {
+			t.Errorf("expected outputScroll to be %d, got %d", expectedScroll, model.outputScroll)
+		}
+
+		// Should not be tailing yet
+		if model.outputTailing {
+			t.Error("expected outputTailing to be false when not at bottom")
+		}
+	})
+
+	t.Run("reaching bottom re-locks to tail mode", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions (must be >= 24 for minimum terminal height)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Add enough lines to enable scrolling
+		for i := 0; i < 50; i++ {
+			model.AppendOutput("Line " + intToString(i+1))
+		}
+
+		// Calculate max offset
+		wrappedLines := model.wrapAllOutputLines()
+		height := model.layout.ScrollAreaHeight
+		maxOffset := len(wrappedLines) - height
+
+		// Set scroll position close to bottom (less than one page away)
+		model.outputTailing = false
+		model.outputScroll = maxOffset - (height / 2)
+
+		// Press page down
+		keyMsg := tea.KeyMsg{Type: tea.KeyPgDown}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Should re-lock to tail mode
+		if !model.outputTailing {
+			t.Error("expected outputTailing to be true after reaching bottom")
+		}
+
+		// Should be at max offset
+		if model.outputScroll != maxOffset {
+			t.Errorf("expected outputScroll to be %d, got %d", maxOffset, model.outputScroll)
+		}
+	})
+
+	t.Run("file tab scrolling still works", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up valid dimensions (must be >= 24 for minimum terminal height)
+		msg := tea.WindowSizeMsg{Width: 80, Height: 30}
+		updatedModel, _ := m.Update(msg)
+		model := updatedModel.(Model)
+
+		// Set up session with a spec file to create file tabs
+		model.SetSession(SessionInfo{
+			SpecFiles: []string{"/path/to/spec.md"},
+		})
+		model.tabs = model.buildTabs()
+
+		// Switch to file tab (tab 1)
+		model.activeTab = 1
+
+		// Set file content and initial scroll
+		model.fileContents["/path/to/spec.md"] = strings.Repeat("Line\n", 100)
+		model.fileScroll["/path/to/spec.md"] = 10
+
+		previousScroll := model.fileScroll["/path/to/spec.md"]
+		height := model.layout.ScrollAreaHeight
+
+		// Press page down
+		keyMsg := tea.KeyMsg{Type: tea.KeyPgDown}
+		updatedModel, _ = model.Update(keyMsg)
+		model = updatedModel.(Model)
+
+		// Verify file scroll moved down by page height
+		expectedScroll := previousScroll + height
+		if model.fileScroll["/path/to/spec.md"] != expectedScroll {
+			t.Errorf("expected file scroll to be %d, got %d", expectedScroll, model.fileScroll["/path/to/spec.md"])
+		}
+	})
+}
+
 func TestWrapAllOutputLines(t *testing.T) {
 	m := NewModel()
 
