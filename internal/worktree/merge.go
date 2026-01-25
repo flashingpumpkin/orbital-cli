@@ -10,6 +10,8 @@ import (
 	"github.com/flashingpumpkin/orbital/internal/output"
 )
 
+// Note: gitCommandTimeout is defined in git.go (30 seconds)
+
 // mergeSuccessPattern matches various formats of the merge success marker.
 // Handles: "MERGE_SUCCESS: true", "MERGE_SUCCESS:true", "merge_success: True", etc.
 var mergeSuccessPattern = regexp.MustCompile(`(?i)merge[_\s]*success\s*:\s*(true|false)`)
@@ -115,21 +117,20 @@ func NewCleanup(workingDir string) *Cleanup {
 }
 
 // Run removes the worktree and its branch.
-func (c *Cleanup) Run(worktreePath, branchName string) error {
-	// Remove the worktree
-	removeCmd := exec.Command("git", "-C", c.workingDir, "worktree", "remove", worktreePath, "--force")
-	removeOutput, err := removeCmd.CombinedOutput()
+// It accepts a context for cancellation and applies a 30-second timeout
+// to each git command to prevent indefinite hangs.
+func (c *Cleanup) Run(ctx context.Context, worktreePath, branchName string) error {
+	// Remove the worktree with timeout
+	removeOutput, err := c.runGitWithTimeout(ctx, "worktree", "remove", worktreePath, "--force")
 	if err != nil {
 		return fmt.Errorf("failed to remove worktree %q: %w\ngit output: %s", worktreePath, err, string(removeOutput))
 	}
 
-	// Delete the branch
-	branchCmd := exec.Command("git", "-C", c.workingDir, "branch", "-d", branchName)
-	branchOutput, err := branchCmd.CombinedOutput()
+	// Delete the branch with timeout
+	branchOutput, err := c.runGitWithTimeout(ctx, "branch", "-d", branchName)
 	if err != nil {
 		// Branch deletion might fail if it wasn't fully merged, try force delete
-		forceBranchCmd := exec.Command("git", "-C", c.workingDir, "branch", "-D", branchName)
-		forceOutput, forceErr := forceBranchCmd.CombinedOutput()
+		forceOutput, forceErr := c.runGitWithTimeout(ctx, "branch", "-D", branchName)
 		if forceErr != nil {
 			return fmt.Errorf("failed to delete branch %q: %w\ngit branch -d output: %s\ngit branch -D output: %s",
 				branchName, forceErr, string(branchOutput), string(forceOutput))
@@ -137,4 +138,24 @@ func (c *Cleanup) Run(worktreePath, branchName string) error {
 	}
 
 	return nil
+}
+
+// runGitWithTimeout runs a git command with a 30-second timeout.
+// The timeout is applied on top of any deadline in the parent context.
+func (c *Cleanup) runGitWithTimeout(parentCtx context.Context, args ...string) ([]byte, error) {
+	// Create a context with 30-second timeout
+	ctx, cancel := context.WithTimeout(parentCtx, gitCommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", c.workingDir}, args...)...)
+	output, err := cmd.CombinedOutput()
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return output, fmt.Errorf("git command timed out after %v: git %s", gitCommandTimeout, strings.Join(args, " "))
+	}
+	if parentCtx.Err() == context.Canceled {
+		return output, fmt.Errorf("git command cancelled: git %s", strings.Join(args, " "))
+	}
+
+	return output, err
 }

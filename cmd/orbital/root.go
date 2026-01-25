@@ -614,7 +614,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 
 		// Cleanup worktree and branch
 		cleanup := worktree.NewCleanup(workingDir)
-		if err := cleanup.Run(wtState.Path, wtState.Branch); err != nil {
+		if err := cleanup.Run(ctx, wtState.Path, wtState.Branch); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup worktree: %v\n", err)
 		} else {
 			mergeFormatter.PrintWorktreeCleanupComplete()

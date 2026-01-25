@@ -305,4 +305,31 @@ func TestCleanup(t *testing.T) {
 			t.Errorf("workingDir = %q; want %q", cleanup.workingDir, "/path/to/repo")
 		}
 	})
+
+	t.Run("Run accepts context parameter", func(t *testing.T) {
+		// This test verifies the method signature accepts context.
+		// We use a cancelled context to ensure it fails quickly.
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		cleanup := NewCleanup("/nonexistent/path")
+		err := cleanup.Run(ctx, "/nonexistent/worktree", "nonexistent-branch")
+
+		// The command should fail (either due to cancellation or because the path doesn't exist)
+		if err == nil {
+			t.Error("Run() should return error for cancelled context or nonexistent path")
+		}
+	})
+
+	t.Run("Run returns error for nonexistent worktree", func(t *testing.T) {
+		cleanup := NewCleanup("/nonexistent/path")
+		err := cleanup.Run(context.Background(), "/nonexistent/worktree", "nonexistent-branch")
+
+		if err == nil {
+			t.Error("Run() should return error for nonexistent worktree")
+		}
+		if !strings.Contains(err.Error(), "failed to remove worktree") {
+			t.Errorf("error should mention worktree removal failure: %v", err)
+		}
+	})
 }

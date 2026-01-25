@@ -122,7 +122,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ---
 
-### [ ] **Ticket: REL-2 - Add timeouts to git cleanup commands**
+### [x] **Ticket: REL-2 - Add timeouts to git cleanup commands**
 
 **As a** user running worktree cleanup
 **I want** git commands to timeout if they hang
@@ -482,7 +482,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 - [x] SEC-1: Make permission skip flag configurable (security critical)
 - [ ] PERF-1: Implement ring buffer for TUI output (prevents OOM)
 - [x] REL-1: Propagate errors from Queue.Pop() (prevents silent data loss)
-- [ ] REL-2: Add timeouts to git cleanup commands (prevents hangs)
+- [x] REL-2: Add timeouts to git cleanup commands (prevents hangs)
 
 **Should Have (Sprint 2):**
 - [ ] PERF-2: Cache wrapped lines in TUI (UI responsiveness)

@@ -91,3 +91,18 @@ Implementation details:
 6. Added new test `TestQueue_Pop_ReturnsErrorWhenSaveFails` to verify error propagation
 
 The fix ensures that if the queue file cannot be saved (disk full, permissions), the error is propagated to callers. The files are still returned to allow the caller to decide how to handle the situation (proceed with warning or fail).
+
+### REL-2: Add timeouts to git cleanup commands
+
+**Completed**
+
+Implementation details:
+1. Modified `Cleanup.Run()` to accept a `context.Context` parameter
+2. Added `runGitWithTimeout()` helper method that creates a 30-second timeout context
+3. Updated all git commands in cleanup to use `exec.CommandContext` with timeout
+4. Added proper timeout detection and error messages for timeouts
+5. Added cancellation handling for parent context
+6. Updated callers in `cmd/orbital/root.go` and `cmd/orbital/continue.go` to pass context
+7. Added tests for context parameter and error handling
+
+The fix uses the same 30-second timeout constant (`gitCommandTimeout`) from `git.go` to maintain consistency across all git operations in the worktree package.
