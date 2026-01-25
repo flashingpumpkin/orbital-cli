@@ -13,9 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/flashingpumpkin/orbital/internal/completion"
 	"github.com/flashingpumpkin/orbital/internal/config"
+	"github.com/flashingpumpkin/orbital/internal/daemon"
+	"github.com/flashingpumpkin/orbital/internal/dtui"
 	"github.com/flashingpumpkin/orbital/internal/executor"
 	"github.com/flashingpumpkin/orbital/internal/loop"
 	"github.com/flashingpumpkin/orbital/internal/output"
@@ -25,6 +26,7 @@ import (
 	"github.com/flashingpumpkin/orbital/internal/tui"
 	"github.com/flashingpumpkin/orbital/internal/workflow"
 	"github.com/flashingpumpkin/orbital/internal/worktree"
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
@@ -58,8 +60,8 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "orbital <spec-file>",
-	Short:   "Autonomous Claude Code iteration loop",
+	Use:   "orbital <spec-file>",
+	Short: "Autonomous Claude Code iteration loop",
 	Long: `Orbital implements the "Ralph Wiggum" method for autonomous Claude Code execution.
 
 It runs Claude Code in a loop, monitoring output for a completion promise string.
@@ -85,11 +87,17 @@ in the working directory. Use --config to specify a different path.`,
 	RunE:    runOrbit,
 }
 
+// Flag for daemon mode (send to daemon instead of running locally)
+var useDaemon bool
+
 func init() {
 	// Register subcommands
 	rootCmd.AddCommand(continueCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(connectCmd)
+	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(daemonCmd)
 
 	// Register persistent flags (inherited by subcommands like 'continue')
 	rootCmd.PersistentFlags().IntVarP(&iterations, "iterations", "n", 50, "Maximum number of loop iterations")
@@ -117,10 +125,16 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&worktreeName, "worktree-name", "", "Override Claude's worktree name choice")
 	rootCmd.PersistentFlags().StringVar(&setupModel, "setup-model", "haiku", "Model for worktree setup phase")
 	rootCmd.PersistentFlags().StringVar(&mergeModel, "merge-model", "haiku", "Model for worktree merge phase")
+	rootCmd.PersistentFlags().BoolVar(&useDaemon, "daemon", false, "Run via daemon (auto-starts daemon if needed)")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {
 	specPath := args[0]
+
+	// Check if daemon mode is requested
+	if useDaemon {
+		return runOrbitDaemon(specPath)
+	}
 
 	// Build list of all files: spec file + context files
 	allFiles := append([]string{specPath}, contextFiles...)
@@ -1219,4 +1233,56 @@ type worktreeMergeOptions struct {
 	worktreePath   string
 	branchName     string
 	originalBranch string
+}
+
+// runOrbitDaemon runs the session via the daemon.
+func runOrbitDaemon(specPath string) error {
+	// Ensure daemon is running
+	projectDir, err := ensureDaemonRunning(workingDir)
+	if err != nil {
+		return fmt.Errorf("failed to start daemon: %w", err)
+	}
+
+	fmt.Printf("Connected to daemon (project: %s)\n", projectDir)
+
+	// Create client
+	client := daemon.NewClient(projectDir)
+
+	// Resolve absolute paths for spec file
+	absSpecPath, err := filepath.Abs(specPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve spec path: %w", err)
+	}
+
+	// Create session request
+	req := daemon.StartSessionRequest{
+		SpecFiles:     []string{absSpecPath},
+		ContextFiles:  contextFiles,
+		NotesFile:     notesFile,
+		Worktree:      worktreeMode,
+		WorktreeName:  worktreeName,
+		Budget:        budget,
+		MaxIterations: iterations,
+		Model:         model,
+		CheckerModel:  checkerModel,
+		Workflow:      workflowFlag,
+		SystemPrompt:  systemPrompt,
+	}
+
+	// Start session
+	ctx := context.Background()
+	session, err := client.StartSession(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to start session: %w", err)
+	}
+
+	fmt.Printf("Started session %s\n", session.ID)
+	fmt.Printf("Spec: %s\n", specPath)
+	if session.Worktree != nil {
+		fmt.Printf("Worktree: %s (branch: %s)\n", session.Worktree.Path, session.Worktree.Branch)
+	}
+	fmt.Println()
+
+	// Launch the TUI to view the session
+	return dtui.Run(client, projectDir)
 }

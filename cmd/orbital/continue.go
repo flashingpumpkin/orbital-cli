@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/flashingpumpkin/orbital/internal/completion"
 	"github.com/flashingpumpkin/orbital/internal/config"
 	"github.com/flashingpumpkin/orbital/internal/executor"
@@ -16,6 +15,7 @@ import (
 	"github.com/flashingpumpkin/orbital/internal/spec"
 	"github.com/flashingpumpkin/orbital/internal/state"
 	"github.com/flashingpumpkin/orbital/internal/worktree"
+	"github.com/spf13/cobra"
 )
 
 var continueCmd = &cobra.Command{

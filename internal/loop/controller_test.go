@@ -46,10 +46,10 @@ func (m *mockExecutor) Execute(ctx context.Context, prompt string) (*executor.Ex
 	if idx >= len(m.results) {
 		// Return a default result if no more configured
 		return &executor.ExecutionResult{
-			Output:     "default output",
-			Completed:  true,
-			TokensIn: 60, TokensOut: 40,
-			CostUSD:    0.01,
+			Output:    "default output",
+			Completed: true,
+			TokensIn:  60, TokensOut: 40,
+			CostUSD: 0.01,
 		}, nil
 	}
 
@@ -84,10 +84,10 @@ func TestRun_CompletesOnFirstIteration(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Task done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 300, TokensOut: 200,
-		CostUSD:    0.05,
+		Output:    "Task done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  300, TokensOut: 200,
+		CostUSD: 0.05,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -130,23 +130,23 @@ func TestRun_CompletesOnThirdIteration(t *testing.T) {
 	exec := newMockExecutor()
 	// First two iterations without completion
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Working on it...",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Working on it...",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Still working...",
-		Completed:  true,
-		TokensIn: 90, TokensOut: 60,
-		CostUSD:    0.02,
+		Output:    "Still working...",
+		Completed: true,
+		TokensIn:  90, TokensOut: 60,
+		CostUSD: 0.02,
 	}, nil)
 	// Third iteration with completion
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 120, TokensOut: 80,
-		CostUSD:    0.03,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  120, TokensOut: 80,
+		CostUSD: 0.03,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -186,16 +186,16 @@ func TestRun_BudgetExceeded(t *testing.T) {
 	exec := newMockExecutor()
 	// Each iteration costs 0.03
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Working...",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.03,
+		Output:    "Working...",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.03,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Still working...",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.03,
+		Output:    "Still working...",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.03,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -230,10 +230,10 @@ func TestRun_MaxIterationsReached(t *testing.T) {
 	// None of the iterations complete
 	for i := 0; i < 3; i++ {
 		exec.addResult(&executor.ExecutionResult{
-			Output:     "Working...",
-			Completed:  true,
-			TokensIn: 60, TokensOut: 40,
-			CostUSD:    0.01,
+			Output:    "Working...",
+			Completed: true,
+			TokensIn:  60, TokensOut: 40,
+			CostUSD: 0.01,
 		}, nil)
 	}
 
@@ -324,10 +324,10 @@ func TestRun_PromptsPassedCorrectly(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "<promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "<promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -353,10 +353,10 @@ func TestRun_StartTimeSet(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "<promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "<promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -381,10 +381,10 @@ func TestRun_BudgetExactlyMet(t *testing.T) {
 	exec := newMockExecutor()
 	// Cost exactly equals budget
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Working...",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.05,
+		Output:    "Working...",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.05,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -432,24 +432,24 @@ func TestRun_CumulativeTokenTracking(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Step 1",
+		Output:   "Step 1",
 		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		CostUSD: 0.01,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Step 2",
+		Output:   "Step 2",
 		TokensIn: 120, TokensOut: 80,
-		CostUSD:    0.02,
+		CostUSD: 0.02,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Step 3",
+		Output:   "Step 3",
 		TokensIn: 180, TokensOut: 120,
-		CostUSD:    0.03,
+		CostUSD: 0.03,
 	}, nil)
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
+		Output:   "Done! <promise>COMPLETE</promise>",
 		TokensIn: 240, TokensOut: 160,
-		CostUSD:    0.04,
+		CostUSD: 0.04,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -581,17 +581,17 @@ func TestRun_ContinuesWithQueuedFiles(t *testing.T) {
 	exec := newMockExecutor()
 	// First iteration completes
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 	// Second iteration with new files, also completes
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done with queued files! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done with queued files! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -650,10 +650,10 @@ func TestRun_ExitsWhenQueueEmpty(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -699,10 +699,10 @@ func TestRun_BackwardCompatibleWithoutStateManager(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -731,10 +731,10 @@ func TestRun_PopQueueError(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -769,10 +769,10 @@ func TestRun_MergeFilesError(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -805,10 +805,10 @@ func TestRun_RebuildPromptError(t *testing.T) {
 
 	exec := newMockExecutor()
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -972,17 +972,17 @@ func TestRun_VerificationFailureContinuesLoop(t *testing.T) {
 	exec := newMockExecutor()
 	// First iteration: outputs promise but verification fails
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 	// Second iteration: outputs promise, verification passes
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Really done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Really done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")
@@ -1025,17 +1025,17 @@ func TestRun_VerificationErrorContinuesLoop(t *testing.T) {
 	exec := newMockExecutor()
 	// First iteration: outputs promise but verification errors
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 	// Second iteration: outputs promise, verification passes
 	exec.addResult(&executor.ExecutionResult{
-		Output:     "Really done! <promise>COMPLETE</promise>",
-		Completed:  true,
-		TokensIn: 60, TokensOut: 40,
-		CostUSD:    0.01,
+		Output:    "Really done! <promise>COMPLETE</promise>",
+		Completed: true,
+		TokensIn:  60, TokensOut: 40,
+		CostUSD: 0.01,
 	}, nil)
 
 	det := completion.New("<promise>COMPLETE</promise>")

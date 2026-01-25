@@ -237,11 +237,11 @@ func (p *Parser) parseUserMessage(raw map[string]json.RawMessage, event *StreamE
 //	{"type":"result","total_cost_usd":0.07,"duration_ms":2638,"usage":{"input_tokens":3,"cache_creation_input_tokens":10507,"cache_read_input_tokens":14155,"output_tokens":12}}
 //
 // Stat accumulation strategy:
-// - Cost: accumulates across result events (for budget tracking across iterations)
-// - Duration: accumulates across result events
-// - Tokens: result events contain the authoritative final counts for the API call,
-//   so they REPLACE any intermediate values from assistant messages. Token counts
-//   accumulate across multiple result events (iterations).
+//   - Cost: accumulates across result events (for budget tracking across iterations)
+//   - Duration: accumulates across result events
+//   - Tokens: result events contain the authoritative final counts for the API call,
+//     so they REPLACE any intermediate values from assistant messages. Token counts
+//     accumulate across multiple result events (iterations).
 func (p *Parser) parseResultStats(raw map[string]json.RawMessage) {
 	// Extract total_cost_usd (note: field is "total_cost_usd" not "cost_usd")
 	// Cost accumulates across iterations for budget tracking

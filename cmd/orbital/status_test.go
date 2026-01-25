@@ -8,7 +8,18 @@ import (
 	"time"
 
 	"github.com/flashingpumpkin/orbital/internal/state"
+	"github.com/spf13/cobra"
 )
+
+// createTestStatusCmd creates a fresh status command for testing.
+func createTestStatusCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:  "status",
+		RunE: runStatus,
+	}
+	cmd.Flags().BoolVar(&statusJSON, "json", false, "Output in JSON format")
+	return cmd
+}
 
 func TestStatusCmd_ShowsNoSessionWhenNoState(t *testing.T) {
 	tempDir := t.TempDir()
@@ -16,16 +27,22 @@ func TestStatusCmd_ShowsNoSessionWhenNoState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
 	}
+
+	// Save and restore global workingDir
+	originalWorkingDir := workingDir
 	defer func() {
+		workingDir = originalWorkingDir
 		if err := os.Chdir(originalWd); err != nil {
 			t.Errorf("failed to restore working directory: %v", err)
 		}
 	}()
+
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("failed to change to temp directory: %v", err)
 	}
+	workingDir = tempDir
 
-	cmd := newStatusCmd()
+	cmd := createTestStatusCmd()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
@@ -47,14 +64,19 @@ func TestStatusCmd_ShowsStoppedStateMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
 	}
+
+	originalWorkingDir := workingDir
 	defer func() {
+		workingDir = originalWorkingDir
 		if err := os.Chdir(originalWd); err != nil {
 			t.Errorf("failed to restore working directory: %v", err)
 		}
 	}()
+
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("failed to change to temp directory: %v", err)
 	}
+	workingDir = tempDir
 
 	// Create a stale state with a dead PID
 	st := state.NewState("session-123", tempDir, []string{"/path/spec.md"}, "", nil)
@@ -63,7 +85,7 @@ func TestStatusCmd_ShowsStoppedStateMessage(t *testing.T) {
 		t.Fatalf("failed to save state: %v", err)
 	}
 
-	cmd := newStatusCmd()
+	cmd := createTestStatusCmd()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
@@ -85,14 +107,19 @@ func TestStatusCmd_ShowsRunningInstanceStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
 	}
+
+	originalWorkingDir := workingDir
 	defer func() {
+		workingDir = originalWorkingDir
 		if err := os.Chdir(originalWd); err != nil {
 			t.Errorf("failed to restore working directory: %v", err)
 		}
 	}()
+
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("failed to change to temp directory: %v", err)
 	}
+	workingDir = tempDir
 
 	// Create a running instance state (with current PID so it's not stale)
 	st := state.NewState("session-abc123", tempDir, []string{"/path/spec1.md", "/path/spec2.md"}, "", nil)
@@ -103,7 +130,7 @@ func TestStatusCmd_ShowsRunningInstanceStatus(t *testing.T) {
 		t.Fatalf("failed to save state: %v", err)
 	}
 
-	cmd := newStatusCmd()
+	cmd := createTestStatusCmd()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
@@ -118,7 +145,7 @@ func TestStatusCmd_ShowsRunningInstanceStatus(t *testing.T) {
 	checks := []string{
 		"Orbital Status",
 		"session-abc123",
-		"5", // Iteration
+		"5",     // Iteration
 		"$1.23", // Cost
 		"/path/spec1.md",
 		"/path/spec2.md",
@@ -138,14 +165,19 @@ func TestStatusCmd_ShowsQueuedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
 	}
+
+	originalWorkingDir := workingDir
 	defer func() {
+		workingDir = originalWorkingDir
 		if err := os.Chdir(originalWd); err != nil {
 			t.Errorf("failed to restore working directory: %v", err)
 		}
 	}()
+
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("failed to change to temp directory: %v", err)
 	}
+	workingDir = tempDir
 
 	// Create a running instance state
 	st := state.NewState("session-123", tempDir, []string{"/path/spec.md"}, "", nil)
@@ -166,7 +198,7 @@ func TestStatusCmd_ShowsQueuedFiles(t *testing.T) {
 		t.Fatalf("failed to add file to queue: %v", err)
 	}
 
-	cmd := newStatusCmd()
+	cmd := createTestStatusCmd()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
@@ -196,14 +228,19 @@ func TestStatusCmd_ShowsNoQueuedFilesMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
 	}
+
+	originalWorkingDir := workingDir
 	defer func() {
+		workingDir = originalWorkingDir
 		if err := os.Chdir(originalWd); err != nil {
 			t.Errorf("failed to restore working directory: %v", err)
 		}
 	}()
+
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("failed to change to temp directory: %v", err)
 	}
+	workingDir = tempDir
 
 	// Create a running instance state with no queue
 	st := state.NewState("session-123", tempDir, []string{"/path/spec.md"}, "", nil)
@@ -211,7 +248,7 @@ func TestStatusCmd_ShowsNoQueuedFilesMessage(t *testing.T) {
 		t.Fatalf("failed to save state: %v", err)
 	}
 
-	cmd := newStatusCmd()
+	cmd := createTestStatusCmd()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
