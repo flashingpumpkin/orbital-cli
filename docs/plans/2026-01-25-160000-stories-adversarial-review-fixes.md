@@ -167,7 +167,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ## Epic 3: Performance Optimisations
 
-### [ ] **Ticket: PERF-1 - Implement ring buffer for TUI output**
+### [x] **Ticket: PERF-1 - Implement ring buffer for TUI output**
 
 **As a** user running long sessions
 **I want** memory usage to remain bounded regardless of output volume
@@ -480,7 +480,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 **Must Have (Sprint 1):**
 - [x] SEC-1: Make permission skip flag configurable (security critical)
-- [ ] PERF-1: Implement ring buffer for TUI output (prevents OOM)
+- [x] PERF-1: Implement ring buffer for TUI output (prevents OOM)
 - [x] REL-1: Propagate errors from Queue.Pop() (prevents silent data loss)
 - [x] REL-2: Add timeouts to git cleanup commands (prevents hangs)
 

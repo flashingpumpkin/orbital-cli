@@ -10,8 +10,8 @@ import (
 func TestNewModel(t *testing.T) {
 	m := NewModel()
 
-	if len(m.outputLines) != 0 {
-		t.Errorf("expected empty outputLines, got %d", len(m.outputLines))
+	if m.outputLines.Len() != 0 {
+		t.Errorf("expected empty outputLines, got %d", m.outputLines.Len())
 	}
 
 	if len(m.tasks) != 0 {
@@ -172,12 +172,12 @@ func TestModelAppendOutput(t *testing.T) {
 	m.AppendOutput("Line 1")
 	m.AppendOutput("Line 2")
 
-	if len(m.outputLines) != 2 {
-		t.Errorf("expected 2 output lines, got %d", len(m.outputLines))
+	if m.outputLines.Len() != 2 {
+		t.Errorf("expected 2 output lines, got %d", m.outputLines.Len())
 	}
 
-	if m.outputLines[0] != "Line 1" {
-		t.Errorf("expected 'Line 1', got %q", m.outputLines[0])
+	if m.outputLines.Get(0) != "Line 1" {
+		t.Errorf("expected 'Line 1', got %q", m.outputLines.Get(0))
 	}
 }
 
@@ -188,8 +188,8 @@ func TestModelClearOutput(t *testing.T) {
 	m.AppendOutput("Line 2")
 	m.ClearOutput()
 
-	if len(m.outputLines) != 0 {
-		t.Errorf("expected 0 output lines after clear, got %d", len(m.outputLines))
+	if m.outputLines.Len() != 0 {
+		t.Errorf("expected 0 output lines after clear, got %d", m.outputLines.Len())
 	}
 }
 

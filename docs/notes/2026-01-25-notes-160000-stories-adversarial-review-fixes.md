@@ -106,3 +106,26 @@ Implementation details:
 7. Added tests for context parameter and error handling
 
 The fix uses the same 30-second timeout constant (`gitCommandTimeout`) from `git.go` to maintain consistency across all git operations in the worktree package.
+
+### PERF-1: Implement ring buffer for TUI output
+
+**Completed**
+
+Implementation details:
+1. Created `RingBuffer` type in `internal/tui/ringbuffer.go` with configurable max size
+2. Default capacity is 10,000 lines (`DefaultMaxOutputLines` constant)
+3. Changed `Model.outputLines` from `[]string` to `*RingBuffer`
+4. Updated `NewModel()` to initialise ring buffer
+5. Updated `OutputLineMsg` handler to use `Push()` instead of `append()`
+6. Updated `wrapAllOutputLines()` to use `Iterate()` instead of range loop
+7. Updated `AppendOutput()` and `ClearOutput()` methods
+8. Updated tests in `model_test.go` to use ring buffer methods
+9. Added comprehensive tests in `ringbuffer_test.go`:
+   - Push below/at/over capacity
+   - Get with out-of-range index
+   - ToSlice for empty, partial, and wrapped buffers
+   - Clear and reuse
+   - Iterate with early termination
+   - Memory bound verification (50,000 pushes maintains exactly 10,000 lines)
+
+The ring buffer evicts the oldest lines when capacity is reached, ensuring memory usage remains bounded regardless of session length. Scroll position handling continues to work correctly because the scroll offset is always relative to the current buffer content.

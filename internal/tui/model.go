@@ -67,7 +67,7 @@ type Model struct {
 	layout Layout
 
 	// Content
-	outputLines []string
+	outputLines *RingBuffer // Ring buffer for bounded memory usage
 	tasks       []Task
 	progress    ProgressInfo
 	session     SessionInfo
@@ -114,7 +114,7 @@ type Styles struct {
 // NewModel creates a new TUI model.
 func NewModel() Model {
 	return Model{
-		outputLines:   make([]string, 0),
+		outputLines:   NewRingBuffer(DefaultMaxOutputLines),
 		tasks:         make([]Task, 0),
 		tabs:          []Tab{{Name: "Output", Type: TabOutput}},
 		activeTab:     0,
@@ -236,7 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case OutputLineMsg:
-		m.outputLines = append(m.outputLines, string(msg))
+		m.outputLines.Push(string(msg))
 		return m, nil
 
 	case TasksMsg:
@@ -840,10 +840,11 @@ func (m Model) renderFileContent(path string) string {
 func (m Model) wrapAllOutputLines() []string {
 	width := m.layout.ContentWidth()
 	var wrappedLines []string
-	for _, line := range m.outputLines {
+	m.outputLines.Iterate(func(_ int, line string) bool {
 		wrapped := wrapLine(line, width)
 		wrappedLines = append(wrappedLines, wrapped...)
-	}
+		return true
+	})
 	return wrappedLines
 }
 
@@ -1327,11 +1328,12 @@ func (m *Model) SetWorktree(w WorktreeInfo) {
 }
 
 // AppendOutput adds a line to the output buffer.
+// When the buffer is full, the oldest line is evicted automatically.
 func (m *Model) AppendOutput(line string) {
-	m.outputLines = append(m.outputLines, line)
+	m.outputLines.Push(line)
 }
 
 // ClearOutput clears the output buffer.
 func (m *Model) ClearOutput() {
-	m.outputLines = m.outputLines[:0]
+	m.outputLines.Clear()
 }
