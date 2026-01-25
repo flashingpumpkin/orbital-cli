@@ -111,17 +111,23 @@ After promise detection, verification runs using the checker model to confirm al
 ## Build Commands
 
 ```bash
-# Build
-go build ./cmd/orbital
+# Run lint and tests, then build (recommended)
+make
 
-# Test all packages
-go test ./...
+# Build only
+make build
 
-# Test with coverage
-go test -cover ./...
+# Run linter
+make lint
+
+# Run tests
+make test
+
+# Run lint and tests
+make check
 
 # Install to GOPATH/bin
-go install ./cmd/orbital
+make install
 ```
 
 ## Dependencies

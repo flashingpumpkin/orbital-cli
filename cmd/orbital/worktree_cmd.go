@@ -290,7 +290,7 @@ func runWorktreeRemove(cmd *cobra.Command, args []string) error {
 	if !forceRemove {
 		fmt.Fprintf(out, "Remove worktree %q? [y/N] ", name)
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response != "y" && response != "Y" {
 			fmt.Fprintln(out, "Cancelled.")
 			return nil
@@ -392,7 +392,7 @@ func runWorktreeCleanup(cmd *cobra.Command, args []string) error {
 	if !forceCleanup {
 		fmt.Fprint(out, "Clean up these orphans? [y/N] ")
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response != "y" && response != "Y" {
 			fmt.Fprintln(out, "Cancelled.")
 			return nil
@@ -495,7 +495,9 @@ func getBranchDivergence(repoDir, branch, baseBranch string) (ahead, behind int,
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to get ahead count: %w", err)
 	}
-	fmt.Sscanf(strings.TrimSpace(string(aheadOutput)), "%d", &ahead)
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(aheadOutput)), "%d", &ahead); err != nil {
+		return 0, 0, fmt.Errorf("failed to parse ahead count: %w", err)
+	}
 
 	// Get behind count
 	behindCmd := exec.Command("git", "rev-list", "--count", fmt.Sprintf("%s..%s", branch, baseBranch))
@@ -504,7 +506,9 @@ func getBranchDivergence(repoDir, branch, baseBranch string) (ahead, behind int,
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to get behind count: %w", err)
 	}
-	fmt.Sscanf(strings.TrimSpace(string(behindOutput)), "%d", &behind)
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(behindOutput)), "%d", &behind); err != nil {
+		return 0, 0, fmt.Errorf("failed to parse behind count: %w", err)
+	}
 
 	return ahead, behind, nil
 }

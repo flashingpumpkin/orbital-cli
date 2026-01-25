@@ -134,8 +134,8 @@ func TestWorktreeListEmpty(t *testing.T) {
 
 	// Save and restore working directory
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(origDir) }()
+	_ = os.Chdir(tmpDir)
 
 	// Run list command
 	var buf bytes.Buffer
@@ -165,8 +165,8 @@ func TestWorktreeListJSON(t *testing.T) {
 
 	// Save and restore working directory
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(origDir) }()
+	_ = os.Chdir(tmpDir)
 
 	// Run list command with JSON output
 	var buf bytes.Buffer
@@ -196,8 +196,8 @@ func TestWorktreeShowNotFound(t *testing.T) {
 
 	// Save and restore working directory
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(origDir) }()
+	_ = os.Chdir(tmpDir)
 
 	// Run show command for non-existent worktree
 	err = runWorktreeShow(worktreeShowCmd, []string{"nonexistent"})
@@ -219,8 +219,8 @@ func TestWorktreeRemoveNotFound(t *testing.T) {
 
 	// Save and restore working directory
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(origDir) }()
+	_ = os.Chdir(tmpDir)
 
 	// Run remove command for non-existent worktree
 	err = runWorktreeRemove(worktreeRemoveCmd, []string{"nonexistent"})
@@ -252,7 +252,7 @@ func TestGetWorktreeStatus(t *testing.T) {
 
 	t.Run("existing path not a worktree", func(t *testing.T) {
 		subDir := filepath.Join(tmpDir, "subdir")
-		os.MkdirAll(subDir, 0755)
+		_ = os.MkdirAll(subDir, 0755)
 
 		wt := &worktree.WorktreeState{
 			Name: "test",

@@ -293,14 +293,20 @@ orbital/
 ## Development
 
 ```bash
-# Run tests
-go test ./...
+# Run lint and tests, then build (recommended)
+make
 
-# Build
-go build ./cmd/orbital
+# Build only
+make build
+
+# Run linter
+make lint
+
+# Run tests
+make test
 
 # Install locally
-go install ./cmd/orbital
+make install
 ```
 
 ## References
