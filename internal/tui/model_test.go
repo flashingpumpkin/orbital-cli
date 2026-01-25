@@ -1690,6 +1690,50 @@ func TestRenderLineWidths(t *testing.T) {
 	}
 }
 
+func TestRenderTotalLineCount(t *testing.T) {
+	// Test that total rendered lines equals terminal height
+	m := NewModel()
+
+	// Set up valid dimensions
+	terminalHeight := 40
+	msg := tea.WindowSizeMsg{Width: 120, Height: terminalHeight}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set some data
+	model.SetProgress(ProgressInfo{
+		Iteration:    3,
+		MaxIteration: 50,
+		StepName:     "implement",
+		StepPosition: 2,
+		StepTotal:    4,
+		TokensIn:     45231,
+		TokensOut:    12847,
+		Cost:         2.34,
+		Budget:       10.00,
+	})
+
+	model.SetSession(SessionInfo{
+		SpecFiles: []string{"docs/plans/auth-feature.md"},
+		NotesFile: ".orbital/notes.md",
+		StateFile: ".orbital/state.json",
+	})
+
+	// Add some output
+	for i := 0; i < 10; i++ {
+		model.AppendOutput("Output line " + util.IntToString(i+1))
+	}
+
+	view := model.View()
+	lines := strings.Split(view, "\n")
+
+	// The total rendered lines should equal terminal height
+	if len(lines) != terminalHeight {
+		t.Errorf("Total rendered lines = %d, expected terminal height = %d", len(lines), terminalHeight)
+		t.Logf("View:\n%s", view)
+	}
+}
+
 func TestWrappedLinesCaching(t *testing.T) {
 	t.Run("cache populated after window size set", func(t *testing.T) {
 		m := NewModel()
@@ -1874,4 +1918,73 @@ func TestWrappedLinesCaching(t *testing.T) {
 			t.Error("expected non-empty view after scrolling")
 		}
 	})
+}
+
+func TestRenderFullLayoutConsistency(t *testing.T) {
+	// Test that renderFull produces the correct number of lines
+	// matching the layout calculation
+	tests := []struct {
+		name       string
+		width      int
+		height     int
+		taskCount  int
+		outputLines int
+	}{
+		{"no tasks no output", 120, 40, 0, 0},
+		{"no tasks with output", 120, 40, 0, 10},
+		{"3 tasks with output", 120, 40, 3, 10},
+		{"max tasks with output", 120, 40, 6, 10},
+		{"overflow tasks", 120, 40, 10, 10},
+		{"minimum terminal", 80, 24, 0, 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel()
+
+			msg := tea.WindowSizeMsg{Width: tt.width, Height: tt.height}
+			updatedModel, _ := m.Update(msg)
+			model := updatedModel.(Model)
+
+			// Add tasks
+			var tasks []Task
+			for i := 0; i < tt.taskCount; i++ {
+				tasks = append(tasks, Task{
+					ID:      util.IntToString(i + 1),
+					Content: "Task " + util.IntToString(i+1),
+					Status:  "pending",
+				})
+			}
+			model.SetTasks(tasks)
+
+			// Add output lines
+			for i := 0; i < tt.outputLines; i++ {
+				model.AppendOutput("Output line " + util.IntToString(i+1))
+			}
+
+			// Set session info
+			model.SetSession(SessionInfo{
+				SpecFiles: []string{"spec.md"},
+				NotesFile: "notes.md",
+				StateFile: "state.json",
+			})
+
+			view := model.View()
+			lines := strings.Split(view, "\n")
+
+			if len(lines) != tt.height {
+				t.Errorf("Rendered %d lines, expected %d (terminal height)", len(lines), tt.height)
+				
+				// Debug: print breakdown
+				t.Logf("Layout breakdown:")
+				t.Logf("  HeaderPanelHeight: %d", model.layout.HeaderPanelHeight)
+				t.Logf("  TabBarHeight: %d", model.layout.TabBarHeight)
+				t.Logf("  ScrollAreaHeight: %d", model.layout.ScrollAreaHeight)
+				t.Logf("  TaskPanelHeight: %d", model.layout.TaskPanelHeight)
+				t.Logf("  ProgressPanelHeight: %d", model.layout.ProgressPanelHeight)
+				t.Logf("  SessionPanelHeight: %d", model.layout.SessionPanelHeight)
+				t.Logf("  HelpBarHeight: %d", model.layout.HelpBarHeight)
+			}
+		})
+	}
 }

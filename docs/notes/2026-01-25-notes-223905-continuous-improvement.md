@@ -357,3 +357,57 @@ The TUI rendering issues are marked as HIGH PRIORITY in the spec and the researc
 
 ### Outcome
 Created `docs/research/tui-rendering-patterns.md` with comprehensive findings covering all 9 research items. All research tasks marked complete in spec.
+
+## Code Review - Iteration 5
+
+### Summary
+Commit 5df9c60 contains only documentation files:
+- `docs/notes/2026-01-25-notes-223905-continuous-improvement.md` (session notes)
+- `docs/research/tui-rendering-patterns.md` (research document)
+- `docs/specs/2026-01-25-223905-continuous-improvement.md` (spec file)
+
+No code files (`.go`, `.ts`, `.js`, `.py`, etc.) were modified in this commit.
+
+### Verdict
+**PASS** (documentation only - no code to review)
+
+## Iteration 6 - 2026-01-25 (TUI Fixes Investigation)
+
+### Task Selected
+Fix duplicate status bars appearing at bottom of TUI (HIGH PRIORITY item from spec).
+
+### Investigation Results
+
+After thorough investigation, the "duplicate status bars" issue **cannot be reproduced** in the current codebase:
+
+1. **Layout calculations are mathematically correct**
+   - `BorderHeight = 6` without tasks, +1 with tasks
+   - All fixed heights sum correctly
+   - `ScrollAreaHeight = height - fixedHeight` is correct
+
+2. **All rendering tests pass**
+   - `TestRenderLineWidths`: All lines have correct terminal width
+   - `TestRenderTotalLineCount`: Rendered lines equal terminal height
+   - `TestRenderFullLayoutConsistency`: Layout works across all scenarios
+
+3. **No rogue stdout writes**
+   - No `fmt.Print` calls in TUI package
+   - All `fmt.Printf` in root.go guarded by `if tuiProgram == nil`
+
+4. **Screenshot analysis**
+   - The screenshot shows content from the scroll area (yellow "Update" text)
+   - The `formatResultLine()` in bridge.go outputs stats as content
+   - This content looks similar to footer panels, creating visual confusion
+   - May be a Bubbletea race condition during rapid updates (cannot reproduce)
+
+### Key Decisions
+
+1. **Mark "duplicate status bars" as cannot reproduce** in current codebase
+2. **Added regression tests** to catch future layout issues:
+   - `TestRenderTotalLineCount`
+   - `TestRenderFullLayoutConsistency`
+3. **Move to next fix**: Path truncation which is clearly reproducible
+
+### Tests Added
+- `TestRenderTotalLineCount` - verifies total rendered lines equals terminal height
+- `TestRenderFullLayoutConsistency` - verifies layout across multiple scenarios
