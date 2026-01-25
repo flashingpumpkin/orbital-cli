@@ -583,3 +583,93 @@ Added a case for the "Task" tool in `formatToolSummary` that extracts and displa
 ### Verification
 - `make check` passes (lint and tests)
 - All 11 test cases in `TestFormatToolSummary` pass
+
+## Code Review - Iteration 8
+
+### Security
+No issues. The code extracts a "description" field from JSON input for display in a terminal UI. The input comes from Claude CLI stream-json output (tool input data), not user input. The output is used purely for terminal display via lipgloss/bubbletea, not for shell execution, SQL queries, file operations, or HTML rendering. JSON parsing uses Go's standard `json.Unmarshal` which safely decodes without executing code.
+
+### Design
+No issues. The change follows the exact same pattern used by other tool cases in `formatToolSummary`:
+- `Bash`: extracts "command" field, truncates to 50 chars
+- `TaskCreate`: extracts "subject" field
+- `Skill`: extracts "skill" field
+
+The new Task case mirrors the Bash case precisely in structure. Extracting a truncation helper would be premature with only two occurrences.
+
+### Logic
+**_ISSUES_FOUND_**
+
+1. **UTF-8 Character Corruption in String Truncation** (bridge.go:284-286)
+   - Code: `if len(desc) > 50 { desc = desc[:50] + "..." }`
+   - In Go, `len(string)` returns bytes, not Unicode code points (runes)
+   - Slicing `desc[:50]` slices by bytes, which can split multi-byte UTF-8 characters
+   - Example: A description with Japanese characters like `日本語` (3 bytes each) could be truncated mid-character, producing invalid UTF-8
+   - **Same bug exists in Bash case** (lines 260-261), so this is consistent with existing code but still a defect
+   - Fix: Use `utf8.RuneCountInString()` and `[]rune()` conversion
+
+### Error Handling
+No issues. The code follows the established pattern in `formatToolSummary`:
+- `extractJSONField` returns empty string on any error (invalid JSON, missing field)
+- Empty string case falls through to return ""
+- This is appropriate for display formatting where graceful degradation is preferred
+
+### Data Integrity
+**_ISSUES_FOUND_**
+
+1. **UTF-8 Character Corruption** (bridge.go:284-286)
+   - Same as Logic review issue
+   - When the 50th byte falls in the middle of a multi-byte UTF-8 character, the truncated string becomes invalid UTF-8
+   - Displays as replacement characters or mojibake
+
+2. **Same bug in Bash truncation** (bridge.go:260-261)
+   - Pre-existing identical issue
+
+3. **Same bug in TodoWrite truncation** (bridge.go:321-324)
+   - Uses 60 chars but same byte-based slicing
+
+### Verdict
+**FAIL**
+
+The logic and data reviewers identified a UTF-8 truncation bug. While the new code is **consistent with existing bugs** in the codebase (Bash and TodoWrite use the same flawed pattern), it introduces the same defect to the Task tool handling.
+
+When task descriptions contain multi-byte Unicode characters (emojis, non-ASCII text) near the 50-byte boundary, the truncation can produce invalid UTF-8 sequences.
+
+**Required fixes before PASS:**
+1. Change `len(desc) > 50` to `utf8.RuneCountInString(desc) > 50`
+2. Change `desc[:50]` to `string([]rune(desc)[:50])`
+
+**Note:** The same fix should ideally be applied to Bash (line 260) and TodoWrite (line 322), but those are pre-existing bugs outside the scope of this iteration's changes.
+
+## Iteration 9 - 2026-01-25 (UTF-8 Truncation Fix)
+
+### Task Selected
+Fix UTF-8 truncation bug in Task tool description handling.
+
+### Why Highest Leverage
+This was the sole required fix from Iteration 8's code review to achieve a PASS verdict. The bug caused byte-based truncation which corrupts multi-byte UTF-8 characters when the 50-byte boundary falls mid-character.
+
+### Issues Fixed
+
+1. **UTF-8 Character Corruption in Task tool truncation** (bridge.go:284-286)
+   - **Problem**: `len(desc) > 50` measures bytes, not characters. `desc[:50]` slices by bytes, which splits multi-byte UTF-8 characters.
+   - **Fix**: Changed to `utf8.RuneCountInString(desc) > 50` and `string([]rune(desc)[:50])`
+   - **Why**: Rune-based operations correctly handle Unicode characters regardless of byte width (ASCII: 1 byte, Japanese: 3 bytes, emoji: 4 bytes).
+
+2. **Added test case for UTF-8 truncation** (bridge_test.go)
+   - Added test "Task tool with UTF-8 description truncation" with 53 Japanese characters
+   - Verifies that truncation produces valid output with first 50 characters + "..."
+   - **Why**: Ensures the fix is covered by tests and prevents regressions.
+
+### Changes Made
+- `internal/tui/bridge.go`:
+  - Added `unicode/utf8` import
+  - Changed Task case: `len(desc) > 50` → `utf8.RuneCountInString(desc) > 50`
+  - Changed Task case: `desc[:50]` → `string([]rune(desc)[:50])`
+- `internal/tui/bridge_test.go`:
+  - Added test case for UTF-8 description truncation
+
+### Verification
+- `make check` passes (lint and tests)
+- `make build` succeeds
+- New test case "Task tool with UTF-8 description truncation" passes

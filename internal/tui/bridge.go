@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/fatih/color"
@@ -281,8 +282,8 @@ func formatToolSummary(toolName, input string) string {
 		return formatTodoWriteInput(input)
 	case "Task":
 		if desc := extractJSONField(input, "description"); desc != "" {
-			if len(desc) > 50 {
-				desc = desc[:50] + "..."
+			if utf8.RuneCountInString(desc) > 50 {
+				desc = string([]rune(desc)[:50]) + "..."
 			}
 			return " " + desc
 		}

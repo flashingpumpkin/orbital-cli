@@ -171,6 +171,14 @@ func TestFormatToolSummary(t *testing.T) {
 			expected: "",
 		},
 		{
+			name:     "Task tool with UTF-8 description truncation",
+			toolName: "Task",
+			// 53 Japanese characters - exceeds 50 rune limit, tests rune-based (not byte-based) truncation
+			input:    `{"description": "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキ", "prompt": "Test"}`,
+			// Expected: space + first 50 runes + "..."
+			expected: " あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエ...",
+		},
+		{
 			name:     "Unknown tool",
 			toolName: "Unknown",
 			input:    `{"foo": "bar"}`,
