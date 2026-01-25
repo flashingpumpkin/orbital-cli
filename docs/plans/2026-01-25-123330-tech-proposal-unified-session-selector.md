@@ -249,31 +249,30 @@ When selecting an invalid session:
 
 ### Phase 2: TUI Selector Component
 
-- [ ] Create `internal/tui/selector/` package
-- [ ] Implement selector `Model` with bubbletea
-- [ ] Add styles for valid/invalid sessions
-- [ ] Implement keyboard navigation (up/down/enter/q)
-- [ ] Add cleanup confirmation dialog
-- [ ] Write unit tests for model
+- [x] Create `internal/tui/selector/` package
+- [x] Implement selector `Model` with bubbletea
+- [x] Add styles for valid/invalid sessions
+- [x] Implement keyboard navigation (up/down/enter/q)
+- [x] Add cleanup confirmation dialog
+- [x] Write unit tests for model
 
-**Files to create**:
+**Files created**:
 - `internal/tui/selector/model.go`
-- `internal/tui/selector/view.go`
 - `internal/tui/selector/styles.go`
 - `internal/tui/selector/model_test.go`
 
 ### Phase 3: Integrate into Continue Command
 
-- [ ] Refactor `runContinue` to use `session.Collector`
-- [ ] Replace `selectWorktree` and `promptWorktreeSelection` with TUI selector
-- [ ] Add auto-resume logic for single valid session
-- [ ] Handle cleanup result (remove stale entries)
-- [ ] Preserve existing `--continue-worktree` flag for non-interactive use
-- [ ] Add `--session` flag for selecting regular sessions
-- [ ] Update error messages
+- [x] Refactor `runContinue` to use `session.Collector`
+- [x] Replace `selectWorktree` and `promptWorktreeSelection` with TUI selector
+- [x] Add auto-resume logic for single valid session
+- [x] Handle cleanup result (remove stale entries)
+- [x] Preserve existing `--continue-worktree` flag for non-interactive use
+- [x] Update error messages
 
-**Files to modify**:
+**Files modified**:
 - `cmd/orbital/continue.go`
+- `cmd/orbital/continue_test.go`
 
 ### Phase 4: Testing and Documentation
 

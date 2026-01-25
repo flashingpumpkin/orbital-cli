@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/flashingpumpkin/orbital/internal/session"
 	"github.com/flashingpumpkin/orbital/internal/state"
 	"github.com/flashingpumpkin/orbital/internal/worktree"
 )
@@ -34,7 +35,7 @@ func TestRunContinue_NoState(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when no state exists")
 	}
-	expected := "no session to continue in this directory (no active or queued files)"
+	expected := "no session to continue in this directory"
 	if err.Error() != expected {
 		t.Errorf("expected '%s' error, got: %v", expected, err)
 	}
@@ -50,6 +51,7 @@ func TestRunContinue_InstanceAlreadyRunning(t *testing.T) {
 		if err := os.Chdir(originalWd); err != nil {
 			t.Errorf("failed to restore working directory: %v", err)
 		}
+		nonInteractive = false // Reset flag
 	}()
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("failed to change to temp directory: %v", err)
@@ -62,6 +64,9 @@ func TestRunContinue_InstanceAlreadyRunning(t *testing.T) {
 		t.Fatalf("failed to save state: %v", err)
 	}
 
+	// Use non-interactive mode to avoid TUI
+	nonInteractive = true
+
 	cmd := newContinueCmd()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -71,15 +76,11 @@ func TestRunContinue_InstanceAlreadyRunning(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when instance already running")
 	}
-	// Error message should contain "already running" and the PID
+	// With the new unified session abstraction, a running session is marked as invalid
+	// and in non-interactive mode we get "no valid sessions to resume"
 	errStr := err.Error()
-	if errStr == "" {
-		t.Error("expected non-empty error message")
-	}
-	// The error message format is: "orbital instance already running (PID: NNNNN)"
-	expectedPrefix := "orbital instance already running"
-	if len(errStr) < len(expectedPrefix) || errStr[:len(expectedPrefix)] != expectedPrefix {
-		t.Errorf("expected error to start with '%s', got: %s", expectedPrefix, errStr)
+	if !strings.Contains(errStr, "no valid sessions") {
+		t.Errorf("expected error to contain 'no valid sessions', got: %s", errStr)
 	}
 }
 
@@ -239,175 +240,251 @@ func TestRunContinue_UsesActualWorkingDir(t *testing.T) {
 	}
 }
 
-func TestSelectWorktree_SingleWorktree(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "test-wt", Path: "/tmp/test", Branch: "orbital/test"},
+func TestSelectSession_SingleValidSession(t *testing.T) {
+	// Create a single valid session
+	wt := worktree.WorktreeState{Name: "test-wt", Path: t.TempDir(), Branch: "orbital/test"}
+	sessions := []session.Session{
+		{
+			ID:            "sess-1",
+			Type:          session.SessionTypeWorktree,
+			Name:          "test-wt",
+			Valid:         true,
+			WorktreeState: &wt,
+		},
 	}
 
-	cmd := newContinueCmd()
 	continueWorktree = "" // Reset flag
 	nonInteractive = false
+	collector := &mockCollector{validSessions: sessions}
 
-	selected, err := selectWorktree(cmd, worktrees)
+	selected, cleanupPaths, err := selectSession(sessions, collector)
 	if err != nil {
-		t.Fatalf("selectWorktree() error = %v", err)
+		t.Fatalf("selectSession() error = %v", err)
 	}
 	if selected.Name != "test-wt" {
 		t.Errorf("selected.Name = %q; want %q", selected.Name, "test-wt")
 	}
+	if len(cleanupPaths) != 0 {
+		t.Errorf("cleanupPaths = %v; want empty", cleanupPaths)
+	}
 }
 
-func TestSelectWorktree_WithFlag(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "wt-one", Path: "/tmp/one", Branch: "orbital/one"},
-		{Name: "wt-two", Path: "/tmp/two", Branch: "orbital/two"},
+func TestSelectSession_WithFlag(t *testing.T) {
+	// Create two valid worktree sessions
+	wt1 := worktree.WorktreeState{Name: "wt-one", Path: t.TempDir(), Branch: "orbital/one"}
+	wt2 := worktree.WorktreeState{Name: "wt-two", Path: t.TempDir(), Branch: "orbital/two"}
+	sessions := []session.Session{
+		{
+			ID:            "sess-1",
+			Type:          session.SessionTypeWorktree,
+			Name:          "wt-one",
+			Valid:         true,
+			WorktreeState: &wt1,
+		},
+		{
+			ID:            "sess-2",
+			Type:          session.SessionTypeWorktree,
+			Name:          "wt-two",
+			Valid:         true,
+			WorktreeState: &wt2,
+		},
 	}
 
-	cmd := newContinueCmd()
 	continueWorktree = "wt-two"
 	defer func() { continueWorktree = "" }()
+	collector := &mockCollector{validSessions: sessions}
 
-	selected, err := selectWorktree(cmd, worktrees)
+	selected, _, err := selectSession(sessions, collector)
 	if err != nil {
-		t.Fatalf("selectWorktree() error = %v", err)
+		t.Fatalf("selectSession() error = %v", err)
 	}
 	if selected.Name != "wt-two" {
 		t.Errorf("selected.Name = %q; want %q", selected.Name, "wt-two")
 	}
 }
 
-func TestSelectWorktree_FlagNotFound(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "wt-one", Path: "/tmp/one", Branch: "orbital/one"},
+func TestSelectSession_FlagNotFound(t *testing.T) {
+	wt := worktree.WorktreeState{Name: "wt-one", Path: t.TempDir(), Branch: "orbital/one"}
+	sessions := []session.Session{
+		{
+			ID:            "sess-1",
+			Type:          session.SessionTypeWorktree,
+			Name:          "wt-one",
+			Valid:         true,
+			WorktreeState: &wt,
+		},
 	}
 
-	cmd := newContinueCmd()
 	continueWorktree = "nonexistent"
 	defer func() { continueWorktree = "" }()
+	collector := &mockCollector{validSessions: sessions}
 
-	_, err := selectWorktree(cmd, worktrees)
+	_, _, err := selectSession(sessions, collector)
 	if err == nil {
-		t.Fatal("selectWorktree() should return error for nonexistent worktree")
+		t.Fatal("selectSession() should return error for nonexistent worktree")
 	}
 	if !strings.Contains(err.Error(), "worktree not found") {
 		t.Errorf("error should contain 'worktree not found', got: %v", err)
 	}
 }
 
-func TestSelectWorktree_NonInteractiveMultiple(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "wt-one", Path: "/tmp/one", Branch: "orbital/one"},
-		{Name: "wt-two", Path: "/tmp/two", Branch: "orbital/two"},
+func TestSelectSession_FlagSelectsInvalid(t *testing.T) {
+	wt := worktree.WorktreeState{Name: "bad-wt", Path: "/nonexistent", Branch: "orbital/bad"}
+	sessions := []session.Session{
+		{
+			ID:            "sess-1",
+			Type:          session.SessionTypeWorktree,
+			Name:          "bad-wt",
+			Valid:         false,
+			InvalidReason: "worktree directory not found",
+			WorktreeState: &wt,
+		},
 	}
 
-	cmd := newContinueCmd()
+	continueWorktree = "bad-wt"
+	defer func() { continueWorktree = "" }()
+	collector := &mockCollector{validSessions: nil}
+
+	_, _, err := selectSession(sessions, collector)
+	if err == nil {
+		t.Fatal("selectSession() should return error for invalid worktree")
+	}
+	if !strings.Contains(err.Error(), "is invalid") {
+		t.Errorf("error should contain 'is invalid', got: %v", err)
+	}
+}
+
+func TestSelectSession_NonInteractiveMultiple(t *testing.T) {
+	wt1 := worktree.WorktreeState{Name: "wt-one", Path: t.TempDir(), Branch: "orbital/one"}
+	wt2 := worktree.WorktreeState{Name: "wt-two", Path: t.TempDir(), Branch: "orbital/two"}
+	sessions := []session.Session{
+		{
+			ID:            "sess-1",
+			Type:          session.SessionTypeWorktree,
+			Name:          "wt-one",
+			Valid:         true,
+			WorktreeState: &wt1,
+		},
+		{
+			ID:            "sess-2",
+			Type:          session.SessionTypeWorktree,
+			Name:          "wt-two",
+			Valid:         true,
+			WorktreeState: &wt2,
+		},
+	}
+
 	continueWorktree = ""
 	nonInteractive = true
 	defer func() { nonInteractive = false }()
+	collector := &mockCollector{validSessions: sessions}
 
-	_, err := selectWorktree(cmd, worktrees)
+	_, _, err := selectSession(sessions, collector)
 	if err == nil {
-		t.Fatal("selectWorktree() should return error in non-interactive mode with multiple worktrees")
+		t.Fatal("selectSession() should return error in non-interactive mode with multiple sessions")
 	}
-	if !strings.Contains(err.Error(), "multiple worktrees found") {
-		t.Errorf("error should contain 'multiple worktrees found', got: %v", err)
+	if !strings.Contains(err.Error(), "multiple sessions found") {
+		t.Errorf("error should contain 'multiple sessions found', got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "--continue-worktree") {
 		t.Errorf("error should suggest --continue-worktree flag, got: %v", err)
 	}
 }
 
-func TestFormatWorktreeNames(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "alpha"},
-		{Name: "beta"},
-		{Name: "gamma"},
+func TestSelectSession_NoValidSessions_NonInteractive(t *testing.T) {
+	sessions := []session.Session{
+		{
+			ID:            "sess-1",
+			Type:          session.SessionTypeWorktree,
+			Name:          "bad-wt",
+			Valid:         false,
+			InvalidReason: "worktree directory not found",
+		},
 	}
 
-	result := formatWorktreeNames(worktrees)
-	expected := "alpha, beta, gamma"
-	if result != expected {
-		t.Errorf("formatWorktreeNames() = %q; want %q", result, expected)
+	continueWorktree = ""
+	nonInteractive = true
+	defer func() { nonInteractive = false }()
+	collector := &mockCollector{validSessions: nil}
+
+	_, _, err := selectSession(sessions, collector)
+	if err == nil {
+		t.Fatal("selectSession() should return error when no valid sessions")
+	}
+	if !strings.Contains(err.Error(), "no valid sessions") {
+		t.Errorf("error should contain 'no valid sessions', got: %v", err)
 	}
 }
 
-func TestFormatWorktreeList(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "wt-one", Branch: "orbital/one", SpecFiles: []string{"spec.md"}},
-		{Name: "wt-two", Branch: "orbital/two"},
+func TestFormatSessionNames(t *testing.T) {
+	sessions := []session.Session{
+		{Type: session.SessionTypeWorktree, Name: "alpha"},
+		{Type: session.SessionTypeWorktree, Name: "beta"},
+		{Type: session.SessionTypeRegular, Name: "Main session"}, // Should be excluded
+		{Type: session.SessionTypeWorktree, Name: "gamma"},
 	}
 
-	result := formatWorktreeList(worktrees)
+	result := formatSessionNames(sessions)
+	expected := "alpha, beta, gamma"
+	if result != expected {
+		t.Errorf("formatSessionNames() = %q; want %q", result, expected)
+	}
+}
+
+func TestFormatSessionNames_Empty(t *testing.T) {
+	sessions := []session.Session{
+		{Type: session.SessionTypeRegular, Name: "Main session"},
+	}
+
+	result := formatSessionNames(sessions)
+	expected := "(none)"
+	if result != expected {
+		t.Errorf("formatSessionNames() = %q; want %q", result, expected)
+	}
+}
+
+func TestFormatSessionList(t *testing.T) {
+	wt := worktree.WorktreeState{Name: "wt-one", Branch: "orbital/one"}
+	sessions := []session.Session{
+		{
+			Type:          session.SessionTypeWorktree,
+			Name:          "wt-one",
+			Valid:         true,
+			WorktreeState: &wt,
+		},
+		{
+			Type:          session.SessionTypeRegular,
+			Name:          "Main session",
+			Valid:         false,
+			InvalidReason: "Session is currently running",
+		},
+	}
+
+	result := formatSessionList(sessions)
 
 	// Check it contains expected info
 	if !strings.Contains(result, "[1] wt-one") {
-		t.Error("should contain numbered list with first worktree")
+		t.Errorf("should contain numbered list with first session, got: %s", result)
 	}
-	if !strings.Contains(result, "[2] wt-two") {
-		t.Error("should contain numbered list with second worktree")
+	if !strings.Contains(result, "(worktree)") {
+		t.Errorf("should contain worktree label, got: %s", result)
 	}
-	if !strings.Contains(result, "orbital/one") {
-		t.Error("should contain branch name")
+	if !strings.Contains(result, "Branch: orbital/one") {
+		t.Errorf("should contain branch name, got: %s", result)
 	}
-	if !strings.Contains(result, "spec.md") {
-		t.Error("should contain spec files")
+	if !strings.Contains(result, "[2] Main session") {
+		t.Errorf("should contain numbered list with second session, got: %s", result)
 	}
-}
-
-func TestPromptWorktreeSelection_ValidInput(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "wt-one", Path: "/tmp/one", Branch: "orbital/one"},
-		{Name: "wt-two", Path: "/tmp/two", Branch: "orbital/two"},
-	}
-
-	cmd := newContinueCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetIn(strings.NewReader("2\n"))
-
-	selected, err := promptWorktreeSelection(cmd, worktrees)
-	if err != nil {
-		t.Fatalf("promptWorktreeSelection() error = %v", err)
-	}
-	if selected.Name != "wt-two" {
-		t.Errorf("selected.Name = %q; want %q", selected.Name, "wt-two")
+	if !strings.Contains(result, "invalid") {
+		t.Errorf("should contain invalid status, got: %s", result)
 	}
 }
 
-func TestPromptWorktreeSelection_InvalidInput(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "wt-one", Path: "/tmp/one", Branch: "orbital/one"},
-	}
-
-	cmd := newContinueCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetIn(strings.NewReader("invalid\n"))
-
-	_, err := promptWorktreeSelection(cmd, worktrees)
-	if err == nil {
-		t.Fatal("promptWorktreeSelection() should return error for invalid input")
-	}
-	if !strings.Contains(err.Error(), "invalid selection") {
-		t.Errorf("error should contain 'invalid selection', got: %v", err)
-	}
+// mockCollector implements the ValidSessions method for testing.
+type mockCollector struct {
+	validSessions []session.Session
 }
 
-func TestPromptWorktreeSelection_OutOfRange(t *testing.T) {
-	worktrees := []worktree.WorktreeState{
-		{Name: "wt-one", Path: "/tmp/one", Branch: "orbital/one"},
-	}
-
-	cmd := newContinueCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetIn(strings.NewReader("5\n"))
-
-	_, err := promptWorktreeSelection(cmd, worktrees)
-	if err == nil {
-		t.Fatal("promptWorktreeSelection() should return error for out of range input")
-	}
-	if !strings.Contains(err.Error(), "invalid selection") {
-		t.Errorf("error should contain 'invalid selection', got: %v", err)
-	}
+func (m *mockCollector) ValidSessions(sessions []session.Session) []session.Session {
+	return m.validSessions
 }
