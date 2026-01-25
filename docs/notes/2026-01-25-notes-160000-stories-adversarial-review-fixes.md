@@ -129,3 +129,16 @@ Implementation details:
    - Memory bound verification (50,000 pushes maintains exactly 10,000 lines)
 
 The ring buffer evicts the oldest lines when capacity is reached, ensuring memory usage remains bounded regardless of session length. Scroll position handling continues to work correctly because the scroll offset is always relative to the current buffer content.
+
+## Sprint 1 Complete
+
+All "Must Have (Sprint 1)" items from the adversarial review have been completed:
+
+1. **SEC-1**: Make permission skip flag configurable (plus bug fix for continue.go from code review)
+2. **REL-1**: Propagate errors from Queue.Pop()
+3. **REL-2**: Add timeouts to git cleanup commands
+4. **PERF-1**: Implement ring buffer for TUI output
+
+Remaining items (PERF-2, PERF-3, PERF-4, PERF-5, PERF-6, DESIGN-1) are explicitly marked as Sprint 2 and Sprint 3 in the stories file, outside the scope of this iteration.
+
+All verification checks pass: `make check` (lint + tests).
