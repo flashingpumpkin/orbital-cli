@@ -673,3 +673,84 @@ This was the sole required fix from Iteration 8's code review to achieve a PASS 
 - `make check` passes (lint and tests)
 - `make build` succeeds
 - New test case "Task tool with UTF-8 description truncation" passes
+
+## Code Review - Iteration 9
+
+### Security
+No issues. The changes add UTF-8 safe string truncation for display purposes. No external input vectors, no injection risks, no authentication concerns. The code uses standard Go Unicode handling (`unicode/utf8` package) which is safe and well-tested.
+
+### Design
+**_ISSUES_FOUND_**
+
+1. **Inconsistent truncation implementations** (bridge.go lines 261-263, 285-286, 323-324)
+   - The Task tool now uses rune-based truncation (correct)
+   - The Bash tool still uses byte-based truncation (lines 261-263): `if len(cmd) > 50 { cmd = cmd[:50] + "..." }`
+   - The TodoWrite tool still uses byte-based truncation (lines 323-324): `if len(content) > 60 { content = content[:60] + "..." }`
+   - Violates DRY principle and creates inconsistent UTF-8 handling across the codebase
+   - Refactoring suggestion: Extract a `truncateString(s string, maxRunes int) string` utility function
+
+### Logic
+No issues. The rune-based truncation logic is correct:
+- `utf8.RuneCountInString(desc) > 50` correctly counts Unicode characters, not bytes
+- `string([]rune(desc)[:50])` correctly extracts first 50 characters regardless of byte width
+- The test case with 53 Japanese characters validates the fix works for multi-byte characters
+
+### Error Handling
+No issues. The code is display formatting with no failure modes requiring error handling. Empty strings and edge cases are handled gracefully by the existing `extractJSONField` function.
+
+### Data Integrity
+**_ISSUES_FOUND_**
+
+Same inconsistency as Design review:
+1. **Byte-based truncation in Bash tool** (line 261-263) can corrupt UTF-8 for commands with multi-byte characters
+2. **Byte-based truncation in TodoWrite tool** (line 323-324) can corrupt UTF-8 for task descriptions with multi-byte characters
+
+These are pre-existing bugs, not introduced by this iteration. The fix was correctly applied to the Task tool as required.
+
+### Verdict
+**PASS**
+
+The UTF-8 truncation fix for the Task tool is correct and complete. The change:
+- Uses rune-based counting (`utf8.RuneCountInString`) instead of byte-based (`len`)
+- Uses rune-based slicing (`[]rune(desc)[:50]`) instead of byte-based (`desc[:50]`)
+- Includes a test case that validates multi-byte Unicode handling
+- Follows the same pattern that should be applied to Bash and TodoWrite (noted as pre-existing issues)
+
+The design and data reviewers noted inconsistency with Bash and TodoWrite truncation, but these are pre-existing bugs outside the scope of this iteration's changes. The Task tool fix itself is correct and production-ready.
+
+## Iteration 10 - 2026-01-25 (Panel Line Truncation)
+
+### Task Selected
+Fix progress panel line overflow when content exceeds terminal width.
+
+### Why Highest Leverage
+This was the root cause of multiple reported TUI rendering issues from the screenshot `broken-tui-rendering-2.png`:
+1. Duplicate iteration/token counter lines
+2. Box drawing character misalignment
+3. Footer sections rendering as separate overlapping blocks
+
+All of these stemmed from the same bug: when panel line content exceeded the terminal width, lines would wrap instead of being truncated, causing visual corruption.
+
+### Root Cause Analysis
+The panel rendering functions (renderProgressPanel, renderHeader, renderSessionPanel, renderTaskPanel, renderTabBar) calculated padding to fill available width, but when content exceeded available width:
+- They set padding to 0
+- But still output the full content without truncation
+- This caused terminal wrapping, breaking the layout
+
+Example: With large token counts (999,999,999 in/out) on an 80-character terminal, the progress panel line would exceed width and wrap, showing the closing bracket `]` at the start of the next line.
+
+### Changes Made
+Added ANSI-aware truncation using `ansi.Truncate()` when content exceeds available width in:
+- `renderProgressPanel()`: lines 1149-1152, 1167-1170 (both progress lines)
+- `renderHeader()`: lines 726-729 (header content)
+- `renderSessionPanel()`: lines 1242-1246, 1261-1265 (both session lines)
+- `renderTaskPanel()`: lines 1068-1072 (header), lines 1119-1123 (task items)
+- `renderTabBar()`: lines 798-802 (tab content)
+
+### Tests Added
+- `TestRenderLineWidthsWithLargeValues`: Verifies that no line exceeds terminal width when using maximum/large values for all metrics on minimum terminal width (80 chars).
+
+### Verification
+- `make check` passes (lint and tests)
+- `make build` succeeds
+- New test validates truncation behaviour with extreme values

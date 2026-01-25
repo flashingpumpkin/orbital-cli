@@ -53,15 +53,24 @@ Reference screenshots: docs/plans/broken-tui-rendering.png, docs/plans/broken-tu
 
 #### Issues from broken-tui-rendering-2.png
 - [x] Fix Tasks panel content bleeding across multiple lines at bottom of TUI (fixed: renderTask now uses ansi.Truncate for ANSI-aware truncation)
-- [ ] Fix duplicate iteration/token counter lines (shows Iteration 4/50 then another token count below)
-- [ ] Fix box drawing character (│) misalignment with adjacent content
+- [x] Fix duplicate iteration/token counter lines (fixed: panel lines now truncate when content exceeds available width instead of wrapping)
+- [x] Fix box drawing character (│) misalignment with adjacent content (fixed: same root cause as line wrapping - truncation prevents misalignment)
 - [ ] Fix numbered list and bullet point indentation inconsistency in content area
-- [ ] Investigate why footer sections (Tasks, progress, tokens) render as separate overlapping blocks
+- [x] Investigate why footer sections (Tasks, progress, tokens) render as separate overlapping blocks (fixed: caused by line wrapping when content exceeded terminal width)
 
 #### Sub-agent task parsing (from sub-agent-tasks.png)
 - [x] Fix task description not being parsed when sub-agents are spawned (shows just "Task" repeated instead of task descriptions)
 - [x] Parse and display the task description/prompt when Task tool is invoked
 - [ ] Show sub-agent progress or status alongside the task description
+
+#### Acceptance testing for UI rendering
+- [ ] Research Bubbletea testing patterns (teatest package, golden file testing)
+- [ ] Create test harness that can render TUI to string for snapshot comparison
+- [ ] Add golden file tests for key UI states: empty, single task, multiple tasks, scrolling content
+- [ ] Add golden file tests for edge cases: long paths, Unicode content, ANSI sequences, narrow terminal
+- [ ] Add golden file tests for footer layout: progress bar, token counts, task panel combinations
+- [ ] Consider property-based tests: rendered output height should never exceed terminal height
+- [ ] Add CI integration to catch rendering regressions
 
 ### Known Issues
 - [ ] Review TODO comments and address actionable items

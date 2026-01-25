@@ -725,7 +725,14 @@ func (m Model) renderHeader() string {
 		padding = 1
 	}
 
-	return m.styles.Border.Render(BoxVertical) + " " + brand + strings.Repeat(" ", padding) + metrics + " " + m.styles.Border.Render(BoxVertical)
+	// Build the line content
+	content := " " + brand + strings.Repeat(" ", padding) + metrics + " "
+	// Truncate if content exceeds available width
+	if ansi.StringWidth(content) > width {
+		content = ansi.Truncate(content, width, "")
+	}
+
+	return m.styles.Border.Render(BoxVertical) + content + m.styles.Border.Render(BoxVertical)
 }
 
 // renderHelpBar renders the help text below the main frame.
@@ -787,6 +794,8 @@ func (m Model) renderTabBar() string {
 	tabWidth := ansi.StringWidth(tabContent)
 	padding := contentWidth - tabWidth
 	if padding < 0 {
+		// Content exceeds available width - truncate to fit
+		tabContent = ansi.Truncate(tabContent, contentWidth, "")
 		padding = 0
 	}
 
@@ -1055,11 +1064,14 @@ func (m Model) renderTaskPanel() string {
 	if m.layout.HasTaskOverflow(len(m.tasks)) {
 		headerWidth += ansi.StringWidth(" (scroll)")
 	}
+	headerContent := "  " + headerText
 	padding := contentWidth - headerWidth - 2
 	if padding < 0 {
+		// Content exceeds available width - truncate to fit
+		headerContent = ansi.Truncate(headerContent, contentWidth, "")
 		padding = 0
 	}
-	lines = append(lines, border+"  "+headerText+strings.Repeat(" ", padding)+border)
+	lines = append(lines, border+headerContent+strings.Repeat(" ", padding)+border)
 
 	// Tasks
 	visible := m.layout.TasksVisible()
@@ -1105,6 +1117,8 @@ func (m Model) renderTask(task Task) string {
 	taskWidth := ansi.StringWidth("  " + icon + " " + content)
 	padding := contentWidth - taskWidth
 	if padding < 0 {
+		// Content exceeds available width - truncate to fit
+		taskContent = ansi.Truncate(taskContent, contentWidth, "")
 		padding = 0
 	}
 
@@ -1147,6 +1161,8 @@ func (m Model) renderProgressPanel() string {
 	line1Width := ansi.StringWidth(line1Content)
 	line1Padding := contentWidth - line1Width
 	if line1Padding < 0 {
+		// Content exceeds available width - truncate to fit
+		line1Content = ansi.Truncate(line1Content, contentWidth, "")
 		line1Padding = 0
 	}
 
@@ -1162,6 +1178,8 @@ func (m Model) renderProgressPanel() string {
 	line2Width := ansi.StringWidth(line2Content)
 	line2Padding := contentWidth - line2Width
 	if line2Padding < 0 {
+		// Content exceeds available width - truncate to fit
+		line2Content = ansi.Truncate(line2Content, contentWidth, "")
 		line2Padding = 0
 	}
 
@@ -1226,6 +1244,8 @@ func (m Model) renderSessionPanel() string {
 	line1Width := ansi.StringWidth(line1Content)
 	line1Padding := contentWidth - line1Width
 	if line1Padding < 0 {
+		// Content exceeds available width - truncate to fit
+		line1Content = ansi.Truncate(line1Content, contentWidth, "")
 		line1Padding = 0
 	}
 
@@ -1245,6 +1265,8 @@ func (m Model) renderSessionPanel() string {
 	line2Width := ansi.StringWidth(line2Content)
 	line2Padding := contentWidth - line2Width
 	if line2Padding < 0 {
+		// Content exceeds available width - truncate to fit
+		line2Content = ansi.Truncate(line2Content, contentWidth, "")
 		line2Padding = 0
 	}
 

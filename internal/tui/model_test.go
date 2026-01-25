@@ -2062,3 +2062,52 @@ func TestRenderFullLayoutConsistency(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderLineWidthsWithLargeValues(t *testing.T) {
+	// Test that lines are properly truncated when content exceeds available width.
+	// This tests the fix for lines wrapping when token counts or costs are very large.
+	m := NewModel()
+
+	// Use minimum terminal width
+	terminalWidth := MinTerminalWidth
+	msg := tea.WindowSizeMsg{Width: terminalWidth, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set very large token counts that would overflow on narrow terminal
+	model.SetProgress(ProgressInfo{
+		Iteration:    999,
+		MaxIteration: 999,
+		StepName:     "very-long-step-name-that-might-overflow",
+		StepPosition: 99,
+		StepTotal:    99,
+		GateRetries:  9,
+		MaxRetries:   9,
+		TokensIn:     999999999,  // Very large: "999,999,999" = 11 chars
+		TokensOut:    999999999,  // Very large: "999,999,999" = 11 chars
+		Cost:         99999.99,   // Large cost
+		Budget:       100000.00,  // Large budget
+	})
+
+	model.SetSession(SessionInfo{
+		SpecFiles: []string{"/very/long/path/to/some/deeply/nested/directory/structure/spec-file.md"},
+		NotesFile: "/very/long/path/to/notes/that/could/overflow.md",
+		StateFile: "/very/long/path/to/state/file.json",
+	})
+
+	view := model.View()
+
+	// Split into lines and verify each line width does not exceed terminal width
+	lines := strings.Split(view, "\n")
+	for i, line := range lines {
+		// Skip the help bar (last line) which doesn't have borders
+		if i == len(lines)-1 {
+			continue
+		}
+
+		lineWidth := ansi.StringWidth(line)
+		if lineWidth > terminalWidth {
+			t.Errorf("line %d exceeds terminal width: has %d, max %d: %q", i, lineWidth, terminalWidth, line)
+		}
+	}
+}
