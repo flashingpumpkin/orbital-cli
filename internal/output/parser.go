@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 )
@@ -28,6 +29,19 @@ type OutputStats struct {
 	Duration  time.Duration
 }
 
+// knownEventTypes lists all event types recognised by this parser version.
+// If Claude CLI adds new types, they will trigger warnings until the parser is updated.
+var knownEventTypes = map[string]bool{
+	"assistant":           true,
+	"user":                true,
+	"result":              true,
+	"error":               true,
+	"content_block_delta": true,
+	"content_block_start": true,
+	"content_block_stop":  true,
+	"system":              true,
+}
+
 // Parser accumulates statistics while parsing Claude CLI stream-json output.
 type Parser struct {
 	stats OutputStats
@@ -39,11 +53,26 @@ type Parser struct {
 	// resultTokensIn/Out accumulate tokens across result events (iterations).
 	resultTokensIn  int
 	resultTokensOut int
+	// Event tracking for validation
+	knownEventCount   int            // Count of recognised event types parsed
+	unknownEventCount int            // Count of unrecognised event types parsed
+	unknownTypes      map[string]int // Map of unknown type -> count (for warning deduplication)
+	// Warning output (defaults to nil = no warnings)
+	warnWriter io.Writer
 }
 
 // NewParser creates a new Parser instance.
 func NewParser() *Parser {
-	return &Parser{}
+	return &Parser{
+		unknownTypes: make(map[string]int),
+	}
+}
+
+// SetWarningWriter sets the writer for format warnings.
+// If set, warnings about unrecognised event types are written to it.
+// Pass nil to disable warnings (the default).
+func (p *Parser) SetWarningWriter(w io.Writer) {
+	p.warnWriter = w
 }
 
 type messageContent struct {
@@ -118,6 +147,21 @@ func (p *Parser) ParseLine(line []byte) (*StreamEvent, error) {
 	event := &StreamEvent{
 		Type:      eventType,
 		Timestamp: time.Now(),
+	}
+
+	// Track event types for validation
+	if eventType != "" {
+		if knownEventTypes[eventType] {
+			p.knownEventCount++
+		} else {
+			p.unknownEventCount++
+			p.unknownTypes[eventType]++
+			// Log warning on first occurrence of each unknown type
+			if p.warnWriter != nil && p.unknownTypes[eventType] == 1 {
+				fmt.Fprintf(p.warnWriter, "warning: unrecognised event type %q in Claude CLI output; "+
+					"this may indicate a Claude CLI version incompatibility\n", eventType)
+			}
+		}
 	}
 
 	// Extract content based on type
@@ -375,6 +419,49 @@ func (p *Parser) GetStats() *OutputStats {
 		CostUSD:   p.stats.CostUSD,
 		Duration:  p.stats.Duration,
 	}
+}
+
+// ParseStats contains statistics about the parsing process itself.
+type ParseStats struct {
+	KnownEventCount   int            // Number of recognised events parsed
+	UnknownEventCount int            // Number of unrecognised events parsed
+	UnknownTypes      map[string]int // Map of unknown type -> occurrence count
+}
+
+// GetParseStats returns statistics about the parsing process.
+func (p *Parser) GetParseStats() *ParseStats {
+	// Return a copy of the map to prevent external modification
+	unknownCopy := make(map[string]int, len(p.unknownTypes))
+	for k, v := range p.unknownTypes {
+		unknownCopy[k] = v
+	}
+	return &ParseStats{
+		KnownEventCount:   p.knownEventCount,
+		UnknownEventCount: p.unknownEventCount,
+		UnknownTypes:      unknownCopy,
+	}
+}
+
+// Validate checks if the parser processed any valid events.
+// Returns an error if no recognised events were parsed, which may indicate
+// a Claude CLI format change or version incompatibility.
+func (p *Parser) Validate() error {
+	if p.knownEventCount == 0 {
+		if p.unknownEventCount > 0 {
+			// We got events but none were recognised
+			var types []string
+			for t := range p.unknownTypes {
+				types = append(types, t)
+			}
+			return fmt.Errorf("no recognised events parsed; found %d unknown event types (%s); "+
+				"this may indicate a Claude CLI version incompatibility - please update Orbital",
+				len(types), strings.Join(types, ", "))
+		}
+		// No events at all
+		return fmt.Errorf("no events parsed from Claude CLI output; "+
+			"check that Claude CLI is producing stream-json output correctly")
+	}
+	return nil
 }
 
 // ExtractText extracts all text content from raw stream-json output.

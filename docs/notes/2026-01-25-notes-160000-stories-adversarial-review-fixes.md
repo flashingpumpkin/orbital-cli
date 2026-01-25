@@ -592,3 +592,71 @@ Critical issues for immediate attention:
 3. Add guards or zero checks before divisions
 
 Note: These are predominantly edge case and design issues. The core performance optimisations (ring buffer, wrapped line cache, single-pass parsing, increased buffer limit) are correctly implemented and work for normal operation.
+
+### DESIGN-1: Add parser format validation and warnings
+
+**Completed**
+
+Implementation details:
+1. Added `knownEventTypes` map listing all 8 recognised event types:
+   - assistant, user, result, error, content_block_delta, content_block_start, content_block_stop, system
+2. Added tracking fields to Parser struct:
+   - `knownEventCount`: Count of recognised events
+   - `unknownEventCount`: Count of unrecognised events
+   - `unknownTypes`: Map tracking each unknown type and its occurrence count
+   - `warnWriter`: Optional io.Writer for warning output
+3. Added `SetWarningWriter(io.Writer)` method to enable warning output
+4. Modified `ParseLine` to:
+   - Track known vs unknown event types
+   - Log warning on first occurrence of each unknown type (deduplicated)
+   - Include version compatibility guidance in warning message
+5. Added `GetParseStats()` method returning `ParseStats` struct with event counts
+6. Added `Validate()` method that:
+   - Returns nil if at least one known event was parsed
+   - Returns error with unknown type list if only unknown events parsed
+   - Returns error if no events at all were parsed
+   - Includes guidance to update Orbital in error messages
+
+Tests added:
+- `TestParser_UnknownEventTypeWarning`: Verifies warning on first unknown type
+- `TestParser_UnknownEventTypeWarning_Disabled`: Verifies no panic when warning writer not set
+- `TestParser_GetParseStats`: Verifies event counting
+- `TestParser_Validate_Success`: Verifies no error for valid events
+- `TestParser_Validate_NoEvents`: Verifies error for empty output
+- `TestParser_Validate_OnlyUnknownEvents`: Verifies error when only unknown types
+- `TestParser_Validate_MixedEvents`: Verifies success when at least one known event
+- `TestParser_AllKnownEventTypes`: Verifies all 8 known types are counted correctly
+
+This addresses the code review feedback about silently swallowed JSON errors by:
+1. Tracking unknown event types for format change detection
+2. Providing Validate() for callers to check if parsing produced meaningful results
+3. Warning users about potential Claude CLI version incompatibility
+
+Verification: `make check` passes (lint + tests).
+
+## Sprint 3 Complete
+
+All "Could Have (Sprint 3)" items from the adversarial review have been completed:
+
+1. **PERF-5**: Add configurable output retention limit
+2. **DESIGN-1**: Add parser format validation and warnings
+
+## All Sprints Complete
+
+**Sprint 1 (Must Have):** All items complete
+- SEC-1: Make permission skip flag configurable
+- PERF-1: Implement ring buffer for TUI output
+- REL-1: Propagate errors from Queue.Pop()
+- REL-2: Add timeouts to git cleanup commands
+
+**Sprint 2 (Should Have):** All items complete
+- PERF-2: Cache wrapped lines in TUI
+- PERF-3: Use strings.Builder for parser concatenation
+- PERF-4: Eliminate double parsing in executor
+- PERF-6: Increase scanner buffer limit
+
+**Sprint 3 (Could Have):** All items complete
+- PERF-5: Add configurable output retention limit
+- DESIGN-1: Add parser format validation and warnings
+
+Final verification: `make check` passes (lint + tests).

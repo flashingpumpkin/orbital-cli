@@ -1,6 +1,7 @@
 package output
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -499,6 +500,186 @@ func TestParseLine_MultipleIterations_AccumulatesCorrectly(t *testing.T) {
 	}
 	if stats.CostUSD != 0.08 {
 		t.Errorf("expected CostUSD 0.08 (0.05+0.03), got %f", stats.CostUSD)
+	}
+}
+
+func TestParser_UnknownEventTypeWarning(t *testing.T) {
+	p := NewParser()
+
+	// Set up warning writer
+	var warnings strings.Builder
+	p.SetWarningWriter(&warnings)
+
+	// Parse an unknown event type
+	line := []byte(`{"type":"new_format_type","data":"something"}`)
+	event, err := p.ParseLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if event == nil {
+		t.Fatal("expected event, got nil")
+	}
+
+	// Check warning was logged
+	warningOutput := warnings.String()
+	if !strings.Contains(warningOutput, "new_format_type") {
+		t.Errorf("expected warning to mention unknown type, got: %q", warningOutput)
+	}
+	if !strings.Contains(warningOutput, "version incompatibility") {
+		t.Errorf("expected warning to mention version incompatibility, got: %q", warningOutput)
+	}
+
+	// Parse same unknown type again - should not warn again
+	warnings.Reset()
+	_, _ = p.ParseLine(line)
+	if warnings.String() != "" {
+		t.Errorf("expected no duplicate warning, got: %q", warnings.String())
+	}
+}
+
+func TestParser_UnknownEventTypeWarning_Disabled(t *testing.T) {
+	p := NewParser()
+	// No warning writer set (default)
+
+	// Parse an unknown event type - should not panic
+	line := []byte(`{"type":"unknown_type","data":"something"}`)
+	event, err := p.ParseLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if event == nil {
+		t.Fatal("expected event, got nil")
+	}
+
+	// Check parse stats reflect the unknown type
+	stats := p.GetParseStats()
+	if stats.UnknownEventCount != 1 {
+		t.Errorf("expected UnknownEventCount 1, got %d", stats.UnknownEventCount)
+	}
+	if stats.UnknownTypes["unknown_type"] != 1 {
+		t.Errorf("expected unknown_type count 1, got %d", stats.UnknownTypes["unknown_type"])
+	}
+}
+
+func TestParser_GetParseStats(t *testing.T) {
+	p := NewParser()
+
+	// Parse some known events
+	_, _ = p.ParseLine([]byte(`{"type":"assistant","message":{"content":[]}}`))
+	_, _ = p.ParseLine([]byte(`{"type":"result","total_cost_usd":0.01}`))
+	_, _ = p.ParseLine([]byte(`{"type":"system","message":"init"}`))
+
+	// Parse some unknown events
+	_, _ = p.ParseLine([]byte(`{"type":"new_type_1","data":"a"}`))
+	_, _ = p.ParseLine([]byte(`{"type":"new_type_2","data":"b"}`))
+	_, _ = p.ParseLine([]byte(`{"type":"new_type_1","data":"c"}`)) // duplicate
+
+	stats := p.GetParseStats()
+
+	if stats.KnownEventCount != 3 {
+		t.Errorf("expected KnownEventCount 3, got %d", stats.KnownEventCount)
+	}
+	if stats.UnknownEventCount != 3 {
+		t.Errorf("expected UnknownEventCount 3, got %d", stats.UnknownEventCount)
+	}
+	if len(stats.UnknownTypes) != 2 {
+		t.Errorf("expected 2 unique unknown types, got %d", len(stats.UnknownTypes))
+	}
+	if stats.UnknownTypes["new_type_1"] != 2 {
+		t.Errorf("expected new_type_1 count 2, got %d", stats.UnknownTypes["new_type_1"])
+	}
+	if stats.UnknownTypes["new_type_2"] != 1 {
+		t.Errorf("expected new_type_2 count 1, got %d", stats.UnknownTypes["new_type_2"])
+	}
+}
+
+func TestParser_Validate_Success(t *testing.T) {
+	p := NewParser()
+
+	// Parse known events
+	_, _ = p.ParseLine([]byte(`{"type":"assistant","message":{"content":[]}}`))
+	_, _ = p.ParseLine([]byte(`{"type":"result","total_cost_usd":0.01}`))
+
+	err := p.Validate()
+	if err != nil {
+		t.Errorf("expected no error for valid events, got: %v", err)
+	}
+}
+
+func TestParser_Validate_NoEvents(t *testing.T) {
+	p := NewParser()
+
+	// No events parsed
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for no events, got nil")
+	}
+	if !strings.Contains(err.Error(), "no events parsed") {
+		t.Errorf("expected error about no events, got: %v", err)
+	}
+}
+
+func TestParser_Validate_OnlyUnknownEvents(t *testing.T) {
+	p := NewParser()
+
+	// Only parse unknown events
+	_, _ = p.ParseLine([]byte(`{"type":"future_type_1","data":"a"}`))
+	_, _ = p.ParseLine([]byte(`{"type":"future_type_2","data":"b"}`))
+
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for only unknown events, got nil")
+	}
+	if !strings.Contains(err.Error(), "no recognised events") {
+		t.Errorf("expected error about no recognised events, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "future_type") {
+		t.Errorf("expected error to list unknown types, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "update Orbital") {
+		t.Errorf("expected error to suggest updating, got: %v", err)
+	}
+}
+
+func TestParser_Validate_MixedEvents(t *testing.T) {
+	p := NewParser()
+
+	// Mix of known and unknown events
+	_, _ = p.ParseLine([]byte(`{"type":"assistant","message":{"content":[]}}`))
+	_, _ = p.ParseLine([]byte(`{"type":"future_type","data":"a"}`))
+
+	// Should pass because we have at least one known event
+	err := p.Validate()
+	if err != nil {
+		t.Errorf("expected no error for mixed events with at least one known, got: %v", err)
+	}
+}
+
+func TestParser_AllKnownEventTypes(t *testing.T) {
+	// Test that all known event types are counted as known
+	knownTypes := []string{
+		"assistant",
+		"user",
+		"result",
+		"error",
+		"content_block_delta",
+		"content_block_start",
+		"content_block_stop",
+		"system",
+	}
+
+	for _, eventType := range knownTypes {
+		t.Run(eventType, func(t *testing.T) {
+			p := NewParser()
+			line := []byte(`{"type":"` + eventType + `"}`)
+			_, _ = p.ParseLine(line)
+
+			stats := p.GetParseStats()
+			if stats.KnownEventCount != 1 {
+				t.Errorf("expected %s to be counted as known, got KnownEventCount=%d, UnknownEventCount=%d",
+					eventType, stats.KnownEventCount, stats.UnknownEventCount)
+			}
+		})
 	}
 }
 

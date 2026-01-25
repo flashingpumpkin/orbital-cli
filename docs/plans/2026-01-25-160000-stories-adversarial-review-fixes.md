@@ -430,7 +430,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 ## Epic 4: Design Improvements
 
-### [ ] **Ticket: DESIGN-1 - Add parser format validation and warnings**
+### [x] **Ticket: DESIGN-1 - Add parser format validation and warnings**
 
 **As a** user running Orbital after Claude CLI updates
 **I want** clear feedback when output format changes
@@ -448,20 +448,20 @@ This plan addresses critical and high-severity issues identified in the adversar
 - Add version/format detection if Claude CLI provides it
 
 **Acceptance Criteria**:
-- [ ] Given valid stream-json, when parsed, then no warnings logged
-- [ ] Given unrecognised event type, when parsed, then warning logged (once per type)
-- [ ] Given no valid events parsed, when Validate() called, then returns error
-- [ ] Given partial format change, when some events unrecognised, then valid events still processed
-- [ ] Warning messages include guidance on version compatibility
+- [x] Given valid stream-json, when parsed, then no warnings logged
+- [x] Given unrecognised event type, when parsed, then warning logged (once per type)
+- [x] Given no valid events parsed, when Validate() called, then returns error
+- [x] Given partial format change, when some events unrecognised, then valid events still processed
+- [x] Warning messages include guidance on version compatibility
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Known event types enumerated in parser
-- [ ] Warning logging for unknown types
-- [ ] Event count tracking
-- [ ] Validate() method added
-- [ ] Tests for unknown event handling
-- [ ] Tests for empty parse detection
+- [x] Feature complete in one atomic commit
+- [x] Known event types enumerated in parser
+- [x] Warning logging for unknown types
+- [x] Event count tracking
+- [x] Validate() method added
+- [x] Tests for unknown event handling
+- [x] Tests for empty parse detection
 
 **Dependencies**:
 - None
@@ -492,7 +492,7 @@ This plan addresses critical and high-severity issues identified in the adversar
 
 **Could Have (Sprint 3):**
 - [x] PERF-5: Add configurable output retention limit (memory safety)
-- [ ] DESIGN-1: Add parser format validation and warnings (maintainability)
+- [x] DESIGN-1: Add parser format validation and warnings (maintainability)
 
 **Won't Have:**
 - Async state file writes (too complex for current scope)
