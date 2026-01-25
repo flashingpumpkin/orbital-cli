@@ -415,12 +415,13 @@ func formatInt(n int) string {
 
 // formatFloat formats a float with 4 decimal places.
 func formatFloat(f float64) string {
-	// Simple formatting without fmt
+	// Handle negative values specially to preserve sign for values between -1 and 0
+	if f < 0 {
+		// Format absolute value and prepend minus sign
+		return "-" + formatFloat(-f)
+	}
 	whole := int(f)
 	frac := int((f - float64(whole)) * 10000)
-	if frac < 0 {
-		frac = -frac
-	}
 	return util.IntToString(whole) + "." + padLeft(util.IntToString(frac), 4, '0')
 }
 

@@ -1187,10 +1187,10 @@ func (m Model) formatTokens(in, out int) string {
 // formatCost formats cost with optional warning colour.
 func (m Model) formatCost(cost, budget float64) string {
 	label := m.styles.Label.Render("Cost: ")
-	ratio := cost / budget
 
+	// Guard against division by zero: if budget is zero, don't show warning colour
 	var costStr string
-	if ratio > 0.8 {
+	if budget > 0 && cost/budget > 0.8 {
 		costStr = m.styles.Warning.Render(formatCurrency(cost))
 	} else {
 		costStr = m.styles.Value.Render(formatCurrency(cost))
@@ -1275,6 +1275,10 @@ func formatFraction(a, b int) string {
 
 
 func formatCurrency(amount float64) string {
+	// Handle negative amounts by formatting absolute value and prepending minus
+	if amount < 0 {
+		return "-" + formatCurrency(-amount)
+	}
 	// Format as $X.XX with proper rounding
 	// Add 0.005 to handle floating point precision issues
 	totalCents := int(amount*100 + 0.5)
