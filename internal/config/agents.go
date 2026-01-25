@@ -14,6 +14,15 @@ type Agent struct {
 	Model       string   `toml:"model,omitempty" json:"model,omitempty"`
 }
 
+// DefaultAgents contains built-in agent definitions that are always available.
+// These are merged with user-defined agents, with user agents taking precedence.
+var DefaultAgents = map[string]Agent{
+	"general-purpose": {
+		Description: "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks",
+		Prompt:      "You are a general-purpose agent that helps with research, code exploration, and multi-step tasks. Use available tools to gather information and complete the task thoroughly.",
+	},
+}
+
 // AgentDefinition represents the JSON format expected by Claude CLI --agents flag.
 type AgentDefinition struct {
 	Description string   `json:"description"`
@@ -48,14 +57,18 @@ func ValidateAgentsJSON(jsonStr string) error {
 
 // AgentsToJSON converts a map of Agent structs (from TOML config) to JSON string
 // suitable for passing to Claude CLI --agents flag.
+// User agents are merged with DefaultAgents, with user agents taking precedence.
 func AgentsToJSON(agents map[string]Agent) (string, error) {
-	if len(agents) == 0 {
+	// Merge defaults with user agents (user takes precedence)
+	merged := MergeAgents(DefaultAgents, agents)
+
+	if len(merged) == 0 {
 		return "{}", nil
 	}
 
 	// Convert to the JSON format expected by Claude CLI
 	result := make(map[string]AgentDefinition)
-	for name, agent := range agents {
+	for name, agent := range merged {
 		def := AgentDefinition{
 			Description: agent.Description,
 			Prompt:      agent.Prompt,
@@ -75,4 +88,45 @@ func AgentsToJSON(agents map[string]Agent) (string, error) {
 	}
 
 	return string(jsonBytes), nil
+}
+
+// MergeAgents merges two agent maps, with the second map taking precedence.
+// This is used to combine DefaultAgents with user-defined agents.
+func MergeAgents(base, override map[string]Agent) map[string]Agent {
+	result := make(map[string]Agent)
+
+	// Copy base agents
+	for name, agent := range base {
+		result[name] = agent
+	}
+
+	// Override with user agents
+	for name, agent := range override {
+		result[name] = agent
+	}
+
+	return result
+}
+
+// GetEffectiveAgents returns the merged default and user agents as JSON.
+// If no user agents are provided, returns only default agents.
+// If userAgentsJSON is provided and valid, it's merged with defaults.
+func GetEffectiveAgents(userAgentsJSON string) (string, error) {
+	if userAgentsJSON == "" {
+		// No user agents, return defaults
+		return AgentsToJSON(nil)
+	}
+
+	// Validate user agents JSON
+	if err := ValidateAgentsJSON(userAgentsJSON); err != nil {
+		return "", err
+	}
+
+	// Parse user agents and merge
+	var userAgents map[string]Agent
+	if err := json.Unmarshal([]byte(userAgentsJSON), &userAgents); err != nil {
+		return "", fmt.Errorf("failed to parse user agents: %w", err)
+	}
+
+	return AgentsToJSON(userAgents)
 }

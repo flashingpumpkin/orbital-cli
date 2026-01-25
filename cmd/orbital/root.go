@@ -90,6 +90,7 @@ func init() {
 	rootCmd.AddCommand(continueCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(worktreeCmd)
 
 	// Register persistent flags (inherited by subcommands like 'continue')
 	rootCmd.PersistentFlags().IntVarP(&iterations, "iterations", "n", 50, "Maximum number of loop iterations")
@@ -181,16 +182,26 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		spec.PromptTemplate = fileConfig.Prompt
 	}
 
-	// Handle agents: CLI flag takes precedence over config file
+	// Handle agents: CLI flag takes precedence over config file, defaults always included
 	if agents != "" {
-		if err := config.ValidateAgentsJSON(agents); err != nil {
+		// CLI flag provided - merge with defaults via GetEffectiveAgents
+		agentsJSON, err := config.GetEffectiveAgents(agents)
+		if err != nil {
 			return fmt.Errorf("invalid --agents flag: %w", err)
 		}
-		cfg.Agents = agents
+		cfg.Agents = agentsJSON
 	} else if fileConfig != nil && len(fileConfig.Agents) > 0 {
+		// Config file agents - AgentsToJSON already merges with defaults
 		agentsJSON, err := config.AgentsToJSON(fileConfig.Agents)
 		if err != nil {
 			return fmt.Errorf("failed to convert agents config: %w", err)
+		}
+		cfg.Agents = agentsJSON
+	} else {
+		// No user agents - use defaults only
+		agentsJSON, err := config.AgentsToJSON(nil)
+		if err != nil {
+			return fmt.Errorf("failed to get default agents: %w", err)
 		}
 		cfg.Agents = agentsJSON
 	}
