@@ -1,0 +1,24 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ ◆ ORBITAL                                   Iteration 10/50  │  $5.00/$10.00 ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ 1:Output                                                                     ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+║This is output line content for testing scroll behaviour                      ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ [████░░░░░░░░░░░░░░░░] Iteration 10/50                                       ║
+║ [██████████░░░░░░░░░░] Tokens: 50,000 in / 25,000 out │ Cost: $5.00 / $10.00 ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ Spec: (none)                                                                 ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+  ↑/↓ scroll  ←/→ tab  1-9 jump  r reload  q quit

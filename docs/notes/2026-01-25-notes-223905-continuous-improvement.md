@@ -1425,3 +1425,45 @@ The test harness is functional and provides the foundation for golden file testi
 - Defensive programming gaps (missing validation, resource cleanup)
 
 None of these prevent the harness from working. The commit comment acknowledges "actual golden file comparison will be added in next iteration", indicating this is intentionally a foundation commit. The design and logic issues should be addressed in future iterations when golden file comparison is implemented.
+
+## Iteration 18 - 2026-01-26 (Golden File Tests)
+
+### Task Selected
+Add golden file tests for key UI states: empty, single task, multiple tasks, scrolling content.
+
+### Why Highest Leverage
+This was the next unchecked item in the Acceptance testing for UI rendering section, directly following from the test harness created in iteration 17. Golden file tests provide concrete regression protection for TUI rendering by capturing expected output.
+
+### Implementation
+
+1. **Added golden file comparison**: Integrated the `charmbracelet/x/exp/golden` package which was already available as a transitive dependency.
+
+2. **Updated test functions**: Modified all existing TestGolden* tests to call `assertGolden(t, []byte(output))` which compares against golden files automatically named after the test function.
+
+3. **Added TestGoldenSingleTask**: Split the original TestGoldenWithTasks into two tests:
+   - `TestGoldenSingleTask`: Tests TUI with a single in-progress task
+   - `TestGoldenMultipleTasks`: Tests TUI with completed, in-progress, and pending tasks
+
+4. **Generated golden files**: Ran tests with `-update` flag to create:
+   - `testdata/TestGoldenEmpty.golden`
+   - `testdata/TestGoldenWithProgress.golden`
+   - `testdata/TestGoldenSingleTask.golden`
+   - `testdata/TestGoldenMultipleTasks.golden`
+   - `testdata/TestGoldenScrollingContent.golden`
+   - `testdata/TestGoldenNarrowTerminal.golden`
+
+### Key Decisions
+- Used `golden.RequireEqual(t, output)` which automatically derives the golden file name from `t.Name()`
+- Kept the narrow terminal test at 80 chars width (minimum supported)
+- Golden files show full TUI rendering including borders, task panel, progress bars
+
+### Files Modified
+- `internal/tui/golden_test.go`: Added golden file comparison calls
+
+### Files Created
+- `internal/tui/testdata/TestGolden*.golden`: 6 golden files
+
+### Verification
+- `make check` passes (lint and tests)
+- `make build` succeeds
+- All 7 TestGolden* tests pass

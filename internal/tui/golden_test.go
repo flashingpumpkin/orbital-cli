@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/exp/golden"
 	"github.com/charmbracelet/x/exp/teatest"
 )
 
@@ -25,6 +26,14 @@ func DefaultGoldenOptions() GoldenTestOptions {
 		Width:  80,
 		Height: 24,
 	}
+}
+
+// assertGolden compares output against a golden file.
+// Run with -update flag to update golden files.
+// The golden file name is derived from the test function name.
+func assertGolden(t *testing.T, output []byte) {
+	t.Helper()
+	golden.RequireEqual(t, output)
 }
 
 // createGoldenTestModel creates a Model configured for golden file testing.
@@ -107,8 +116,8 @@ func TestGoldenEmpty(t *testing.T) {
 		t.Fatal("expected non-empty output")
 	}
 
-	// The view should contain minimal UI elements
-	// (actual golden file comparison will be added in next iteration)
+	// Compare against golden file
+	assertGolden(t, []byte(output))
 }
 
 // TestGoldenWithProgress tests the TUI with progress information.
@@ -131,10 +140,38 @@ func TestGoldenWithProgress(t *testing.T) {
 	if output == "" {
 		t.Fatal("expected non-empty output")
 	}
+
+	// Compare against golden file
+	assertGolden(t, []byte(output))
 }
 
-// TestGoldenWithTasks tests the TUI with task panel populated.
-func TestGoldenWithTasks(t *testing.T) {
+// TestGoldenSingleTask tests the TUI with a single task.
+func TestGoldenSingleTask(t *testing.T) {
+	opts := DefaultGoldenOptions()
+	opts.Progress = &ProgressInfo{
+		Iteration:    1,
+		MaxIteration: 50,
+		TokensIn:     1000,
+		TokensOut:    500,
+		Cost:         0.25,
+		Budget:       10.00,
+	}
+	opts.Tasks = []Task{
+		{ID: "1", Content: "Set up authentication", Status: "in_progress"},
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	// Compare against golden file
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenMultipleTasks tests the TUI with multiple tasks in different states.
+func TestGoldenMultipleTasks(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
 		Iteration:    3,
@@ -155,10 +192,13 @@ func TestGoldenWithTasks(t *testing.T) {
 	if output == "" {
 		t.Fatal("expected non-empty output")
 	}
+
+	// Compare against golden file
+	assertGolden(t, []byte(output))
 }
 
-// TestGoldenWithScrollingContent tests the TUI with output that requires scrolling.
-func TestGoldenWithScrollingContent(t *testing.T) {
+// TestGoldenScrollingContent tests the TUI with output that requires scrolling.
+func TestGoldenScrollingContent(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
 		Iteration:    10,
@@ -180,6 +220,9 @@ func TestGoldenWithScrollingContent(t *testing.T) {
 	if output == "" {
 		t.Fatal("expected non-empty output")
 	}
+
+	// Compare against golden file
+	assertGolden(t, []byte(output))
 }
 
 // TestGoldenNarrowTerminal tests the TUI in a narrow terminal.
@@ -202,6 +245,9 @@ func TestGoldenNarrowTerminal(t *testing.T) {
 	if output == "" {
 		t.Fatal("expected non-empty output")
 	}
+
+	// Compare against golden file
+	assertGolden(t, []byte(output))
 }
 
 // TestGoldenTeatestIntegration demonstrates the full teatest integration harness.
