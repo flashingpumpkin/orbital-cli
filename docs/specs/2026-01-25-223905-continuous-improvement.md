@@ -55,7 +55,7 @@ Reference screenshots: docs/plans/broken-tui-rendering.png, docs/plans/broken-tu
 - [x] Fix Tasks panel content bleeding across multiple lines at bottom of TUI (fixed: renderTask now uses ansi.Truncate for ANSI-aware truncation)
 - [x] Fix duplicate iteration/token counter lines (fixed: panel lines now truncate when content exceeds available width instead of wrapping)
 - [x] Fix box drawing character (│) misalignment with adjacent content (fixed: same root cause as line wrapping - truncation prevents misalignment)
-- [ ] Fix numbered list and bullet point indentation inconsistency in content area
+- [x] Fix numbered list and bullet point indentation inconsistency in content area
 - [x] Investigate why footer sections (Tasks, progress, tokens) render as separate overlapping blocks (fixed: caused by line wrapping when content exceeded terminal width)
 
 #### Sub-agent task parsing (from sub-agent-tasks.png)

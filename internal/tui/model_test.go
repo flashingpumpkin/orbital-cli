@@ -412,6 +412,139 @@ func TestWrapLineContinuationIndent(t *testing.T) {
 	}
 }
 
+func TestDetectListIndent(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "plain text uses default indent",
+			input:    "This is plain text",
+			expected: "    ",
+		},
+		{
+			name:     "bullet dash",
+			input:    "- List item",
+			expected: "  ", // 2 spaces to align with content
+		},
+		{
+			name:     "bullet asterisk",
+			input:    "* List item",
+			expected: "  ",
+		},
+		{
+			name:     "bullet plus",
+			input:    "+ List item",
+			expected: "  ",
+		},
+		{
+			name:     "numbered single digit",
+			input:    "1. First item",
+			expected: "   ", // 3 spaces (1 digit + period + space)
+		},
+		{
+			name:     "numbered double digit",
+			input:    "12. Twelfth item",
+			expected: "    ", // 4 spaces (2 digits + period + space)
+		},
+		{
+			name:     "numbered triple digit",
+			input:    "123. Item",
+			expected: "     ", // 5 spaces (3 digits + period + space)
+		},
+		{
+			name:     "indented bullet",
+			input:    "  - Indented item",
+			expected: "    ", // 2 leading + 2 for bullet
+		},
+		{
+			name:     "indented numbered",
+			input:    "  1. Indented numbered",
+			expected: "     ", // 2 leading + 3 for "1. "
+		},
+		{
+			name:     "dash not followed by space",
+			input:    "-not a list",
+			expected: "    ", // Default, not a list marker
+		},
+		{
+			name:     "number not followed by period",
+			input:    "123 not a list",
+			expected: "    ", // Default, not a list marker
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "    ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := detectListIndent(tt.input)
+			if result != tt.expected {
+				t.Errorf("detectListIndent(%q) = %q (len %d), want %q (len %d)",
+					tt.input, result, len(result), tt.expected, len(tt.expected))
+			}
+		})
+	}
+}
+
+func TestWrapLineListIndent(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		width          int
+		wantLines      int
+		wantFirstStart string // First line should start with this
+		wantContStart  string // Continuation lines should start with this
+	}{
+		{
+			name:           "bullet list wraps with 2 space indent",
+			input:          "- This is a bullet list item that needs to wrap",
+			width:          25,
+			wantLines:      2,
+			wantFirstStart: "- ",
+			wantContStart:  "  ", // 2 spaces to align with content
+		},
+		{
+			name:           "numbered list wraps with 3 space indent",
+			input:          "1. This is a numbered list item that needs to wrap",
+			width:          25,
+			wantLines:      2,
+			wantFirstStart: "1. ",
+			wantContStart:  "   ", // 3 spaces to align with content
+		},
+		{
+			name:           "double digit numbered list",
+			input:          "12. This is item twelve which wraps to next line",
+			width:          25,
+			wantLines:      2,
+			wantFirstStart: "12. ",
+			wantContStart:  "    ", // 4 spaces to align with content
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := wrapLine(tt.input, tt.width)
+
+			if len(result) < tt.wantLines {
+				t.Fatalf("expected at least %d lines, got %d: %v", tt.wantLines, len(result), result)
+			}
+
+			if !strings.HasPrefix(result[0], tt.wantFirstStart) {
+				t.Errorf("first line should start with %q, got %q", tt.wantFirstStart, result[0])
+			}
+
+			if len(result) > 1 && !strings.HasPrefix(result[1], tt.wantContStart) {
+				t.Errorf("continuation line should start with %q, got %q", tt.wantContStart, result[1])
+			}
+		})
+	}
+}
+
 func TestTruncateFromStart(t *testing.T) {
 	tests := []struct {
 		name        string

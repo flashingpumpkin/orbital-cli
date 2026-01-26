@@ -1373,8 +1373,69 @@ func truncateFromStart(s string, targetWidth int) string {
 	return "..." + string(runes[startIdx:])
 }
 
+// detectListIndent detects list markers at the start of a line and returns
+// the appropriate continuation indent to align wrapped text with content.
+// Supports:
+//   - Numbered lists: "1. ", "12. ", "123. " (digit(s) + period + space)
+//   - Bullet lists: "- ", "* ", "+ " (marker + space)
+//   - Leading whitespace is preserved and added to the indent
+//
+// Returns a string of spaces matching the width of the list prefix,
+// or 4 spaces as default for non-list lines.
+func detectListIndent(line string) string {
+	const defaultIndent = "    " // 4 spaces for non-list lines
+
+	// Strip ANSI codes to analyse the visible content
+	visible := ansi.Strip(line)
+	if len(visible) == 0 {
+		return defaultIndent
+	}
+
+	// Count leading whitespace
+	leadingSpaces := 0
+	for _, r := range visible {
+		if r == ' ' {
+			leadingSpaces++
+		} else if r == '\t' {
+			leadingSpaces += 4 // Treat tab as 4 spaces
+		} else {
+			break
+		}
+	}
+
+	// Get content after leading whitespace
+	content := visible[leadingSpaces:]
+	if len(content) == 0 {
+		return defaultIndent
+	}
+
+	// Check for bullet list markers: "- ", "* ", "+ "
+	if len(content) >= 2 && (content[0] == '-' || content[0] == '*' || content[0] == '+') && content[1] == ' ' {
+		return strings.Repeat(" ", leadingSpaces+2)
+	}
+
+	// Check for numbered list: digit(s) + ". "
+	numDigits := 0
+	for i, r := range content {
+		if r >= '0' && r <= '9' {
+			numDigits++
+			if numDigits > 5 { // Limit to reasonable list numbers
+				break
+			}
+		} else if r == '.' && numDigits > 0 && i+1 < len(content) && content[i+1] == ' ' {
+			// Found "N. " pattern
+			return strings.Repeat(" ", leadingSpaces+numDigits+2)
+		} else {
+			break
+		}
+	}
+
+	return defaultIndent
+}
+
 // wrapLine wraps a single line to fit within the given width, preserving ANSI codes.
-// Returns a slice of wrapped lines. Continuation lines are indented with 4 spaces.
+// Returns a slice of wrapped lines. Continuation lines are indented to align with
+// the content after list markers (e.g., "1. " or "- "), or with 4 spaces for plain text.
 func wrapLine(line string, width int) []string {
 	if width <= 0 {
 		return []string{line}
@@ -1386,7 +1447,8 @@ func wrapLine(line string, width int) []string {
 		return []string{line}
 	}
 
-	const continuationIndent = "    " // 4 spaces for continuation lines
+	// Detect list markers and calculate appropriate continuation indent
+	continuationIndent := detectListIndent(line)
 	continuationWidth := width - len(continuationIndent)
 	if continuationWidth <= 10 {
 		// Terminal too narrow for meaningful wrapping

@@ -1031,3 +1031,79 @@ Both required fixes from Code Review - Iteration 12 have been addressed:
 ### Verification
 - `make check` passes (lint and tests)
 - All 18 queue tests pass including `TestQueue_ConcurrentAdd_DoesNotCorrupt`
+
+## Code Review - Iteration 13
+
+### Security
+No issues. The changes fix error handling in test code with no external input vectors, no injection risks, no authentication concerns.
+
+### Design
+No issues. The error channel pattern for concurrent test safety is the standard Go approach. The error handling follows established Go testing patterns using `t.Fatalf` for setup failures.
+
+### Logic
+No issues. The error channel pattern is correctly implemented:
+- Channel sized appropriately (`numGoroutines*2`) to avoid blocking
+- Channel closed after `wg.Wait()` ensures all goroutines complete before reading
+- Ranging over closed channel correctly drains all errors
+
+### Error Handling
+No issues. All previously swallowed errors are now properly checked and reported with `t.Fatalf` for setup operations. This is the correct approach for test code where setup failures should immediately fail the test.
+
+### Data Integrity
+No issues. The test data handling is unchanged. The fixes improve test reliability without affecting the data being tested.
+
+### Verdict
+**PASS**
+
+The changes correctly address both issues from the previous review:
+1. Race condition fixed using error channel pattern
+2. Swallowed errors replaced with proper `t.Fatalf` checks
+
+The test code now follows Go testing best practices for concurrent tests and error handling.
+
+## Iteration 14 - 2026-01-26 (List Indentation Fix)
+
+### Task Selected
+Fix numbered list and bullet point indentation inconsistency in content area.
+
+### Why Highest Leverage
+This was a visible UI issue from the TUI Fixes section (HIGH PRIORITY). When list items wrapped to multiple lines, the continuation text was indented with a fixed 4 spaces rather than aligning with the list content. This made wrapped lists harder to read.
+
+### Root Cause
+The `wrapLine` function used a hardcoded `continuationIndent = "    "` (4 spaces) for all wrapped lines. This didn't account for list markers like "1. " or "- " which have different widths.
+
+### Solution
+Added a `detectListIndent` helper function that:
+1. Strips ANSI codes to analyse visible content
+2. Counts leading whitespace (preserving indentation)
+3. Detects bullet markers: `-`, `*`, `+` followed by space
+4. Detects numbered list markers: digits followed by `. `
+5. Returns spaces matching the width of the list prefix
+
+Modified `wrapLine` to call `detectListIndent` instead of using the hardcoded 4-space indent.
+
+### Example Improvement
+
+Before (4-space indent for all):
+```
+1. This is a long list item that wraps
+    to the next line with wrong indent
+- Bullet points also had this
+    same problem
+```
+
+After (content-aligned indent):
+```
+1. This is a long list item that wraps
+   to the next line with correct indent
+- Bullet points now align
+  properly too
+```
+
+### Changes Made
+- `internal/tui/model.go`: Added `detectListIndent()` function, modified `wrapLine()` to use it
+- `internal/tui/model_test.go`: Added `TestDetectListIndent` (12 cases) and `TestWrapLineListIndent` (3 cases)
+
+### Verification
+- `make check` passes (lint and tests)
+- All 27 model tests pass
