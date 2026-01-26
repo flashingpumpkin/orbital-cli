@@ -889,9 +889,22 @@ func runWorkflowLoop(
 			return loopState, loop.ErrBudgetExceeded
 		}
 
-		// Workflow completed all steps (including gates passing)
-		if runResult.CompletedAllSteps {
-			if tuiProgram == nil {
+		// Check if completion promise was detected in any step output
+		promiseDetected := false
+		detector := completion.New(cfg.CompletionPromise)
+		for _, stepResult := range runResult.Steps {
+			if detector.Check(stepResult.Output) {
+				promiseDetected = true
+				if tuiProgram == nil {
+					fmt.Printf("\nCompletion promise detected in step %q. Running verification...\n", stepResult.StepName)
+				}
+				break
+			}
+		}
+
+		// Workflow completed all steps (including gates passing) OR promise detected
+		if runResult.CompletedAllSteps || promiseDetected {
+			if tuiProgram == nil && !promiseDetected {
 				fmt.Println("\nWorkflow completed. Running verification...")
 			}
 

@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/flashingpumpkin/orbital/internal/completion"
 	"github.com/flashingpumpkin/orbital/internal/state"
+	"github.com/flashingpumpkin/orbital/internal/workflow"
 )
 
 func TestGenerateSessionID_ReturnsNonEmptyString(t *testing.T) {
@@ -142,5 +144,69 @@ func TestGetAbsolutePaths_ConvertsRelativePaths(t *testing.T) {
 
 	if !filepath.IsAbs(paths[0]) {
 		t.Errorf("path %q is not absolute", paths[0])
+	}
+}
+
+func TestPromiseDetectionInWorkflowSteps(t *testing.T) {
+	promise := "<promise>COMPLETE</promise>"
+	detector := completion.New(promise)
+
+	tests := []struct {
+		name           string
+		steps          []*workflow.StepResult
+		expectDetected bool
+	}{
+		{
+			name: "detects promise in first step",
+			steps: []*workflow.StepResult{
+				{StepName: "implement", Output: "Done! <promise>COMPLETE</promise>"},
+				{StepName: "review", Output: "<gate>PASS</gate>"},
+			},
+			expectDetected: true,
+		},
+		{
+			name: "detects promise in second step",
+			steps: []*workflow.StepResult{
+				{StepName: "implement", Output: "Working on it..."},
+				{StepName: "review", Output: "All good! <promise>COMPLETE</promise>"},
+			},
+			expectDetected: true,
+		},
+		{
+			name: "no promise in any step",
+			steps: []*workflow.StepResult{
+				{StepName: "implement", Output: "Made progress"},
+				{StepName: "review", Output: "<gate>FAIL</gate> Issues found"},
+			},
+			expectDetected: false,
+		},
+		{
+			name:           "empty steps list",
+			steps:          []*workflow.StepResult{},
+			expectDetected: false,
+		},
+		{
+			name: "promise mixed with other content",
+			steps: []*workflow.StepResult{
+				{StepName: "implement", Output: "Starting work...\nDoing things...\n<promise>COMPLETE</promise>\nCleaning up..."},
+			},
+			expectDetected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detected := false
+			for _, stepResult := range tt.steps {
+				if detector.Check(stepResult.Output) {
+					detected = true
+					break
+				}
+			}
+
+			if detected != tt.expectDetected {
+				t.Errorf("promise detected = %v; want %v", detected, tt.expectDetected)
+			}
+		})
 	}
 }
