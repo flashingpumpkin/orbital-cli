@@ -1,0 +1,2 @@
+# Golden file tests - prevent line ending changes
+internal/tui/testdata/*.golden binary

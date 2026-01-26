@@ -1309,4 +1309,44 @@ No code files (`.go`, `.ts`, `.js`, `.py`, etc.) were modified in this commit.
 ### Verdict
 **PASS** (documentation only, no code to review)
 
-<gate>PASS</gate>
+## Iteration 17 - 2026-01-26 (TUI Test Harness)
+
+### Task Selected
+Create test harness that can render TUI to string for snapshot comparison.
+
+### Why Highest Leverage
+This was the next unchecked item in the Acceptance testing for UI rendering section, following directly from the research completed in iteration 16. The test harness is the foundation for all subsequent golden file tests.
+
+### Implementation
+
+Created `internal/tui/golden_test.go` with two approaches for TUI testing:
+
+1. **`renderToString()`**: Simpler, faster approach that:
+   - Creates a model directly
+   - Sets environment variables for deterministic output (`NO_COLOR=1`, `TERM=dumb`)
+   - Configures the model with provided options (progress, session, tasks, output lines)
+   - Calls `View()` and returns the string
+
+2. **`createGoldenTestModel()`**: Full teatest integration that:
+   - Creates a `teatest.TestModel` with specified terminal dimensions
+   - Sends `WindowSizeMsg` to initialise layout
+   - Returns the test model for further interaction
+
+### Files Created
+- `internal/tui/golden_test.go`: Test harness with 6 test functions covering:
+  - Empty state
+  - With progress info
+  - With tasks
+  - With scrolling content
+  - Narrow terminal
+  - Full teatest integration
+- `internal/tui/testdata/`: Directory for future golden files
+- `.gitattributes`: Mark `.golden` files as binary to prevent line ending changes
+
+### Dependencies Added
+- `github.com/charmbracelet/x/exp/teatest`: Bubbletea testing helpers
+
+### Verification
+- `make check` passes (lint and tests)
+- `make build` succeeds
+- All 6 new golden tests pass
