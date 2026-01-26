@@ -478,6 +478,21 @@ func TestDetectListIndent(t *testing.T) {
 			input:    "",
 			expected: "    ",
 		},
+		{
+			name:     "tab indented bullet",
+			input:    "\t- Indented item",
+			expected: "      ", // 4 (tab width) + 2 for "- "
+		},
+		{
+			name:     "tab indented numbered",
+			input:    "\t1. Indented item",
+			expected: "       ", // 4 (tab width) + 3 for "1. "
+		},
+		{
+			name:     "mixed tab and space indent",
+			input:    "\t  - Mixed indent",
+			expected: "        ", // 4 (tab) + 2 (spaces) + 2 for "- "
+		},
 	}
 
 	for _, tt := range tests {

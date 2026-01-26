@@ -1391,27 +1391,31 @@ func detectListIndent(line string) string {
 		return defaultIndent
 	}
 
-	// Count leading whitespace
-	leadingSpaces := 0
-	for _, r := range visible {
+	// Count leading whitespace - track bytes and visual width separately
+	// because tabs are 1 byte but render as multiple spaces
+	leadingBytes := 0
+	leadingWidth := 0
+	for i, r := range visible {
 		if r == ' ' {
-			leadingSpaces++
+			leadingBytes = i + 1
+			leadingWidth++
 		} else if r == '\t' {
-			leadingSpaces += 4 // Treat tab as 4 spaces
+			leadingBytes = i + 1
+			leadingWidth += 4 // Tab renders as 4 spaces visually
 		} else {
 			break
 		}
 	}
 
-	// Get content after leading whitespace
-	content := visible[leadingSpaces:]
+	// Get content after leading whitespace using byte offset
+	content := visible[leadingBytes:]
 	if len(content) == 0 {
 		return defaultIndent
 	}
 
 	// Check for bullet list markers: "- ", "* ", "+ "
 	if len(content) >= 2 && (content[0] == '-' || content[0] == '*' || content[0] == '+') && content[1] == ' ' {
-		return strings.Repeat(" ", leadingSpaces+2)
+		return strings.Repeat(" ", leadingWidth+2)
 	}
 
 	// Check for numbered list: digit(s) + ". "
@@ -1424,7 +1428,7 @@ func detectListIndent(line string) string {
 			}
 		} else if r == '.' && numDigits > 0 && i+1 < len(content) && content[i+1] == ' ' {
 			// Found "N. " pattern
-			return strings.Repeat(" ", leadingSpaces+numDigits+2)
+			return strings.Repeat(" ", leadingWidth+numDigits+2)
 		} else {
 			break
 		}

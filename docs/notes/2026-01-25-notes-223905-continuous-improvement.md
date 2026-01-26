@@ -1107,3 +1107,128 @@ After (content-aligned indent):
 ### Verification
 - `make check` passes (lint and tests)
 - All 27 model tests pass
+
+## Code Review - Iteration 14
+
+### Security
+No issues. The `detectListIndent` function is a pure string parser for display purposes with no external input vectors, no injection risks, no authentication concerns. Uses the charmbracelet/x/ansi library for ANSI stripping which is safe and well-tested.
+
+### Design
+No issues. The design is appropriate:
+- Single responsibility: `detectListIndent` does one thing (detect list markers and return appropriate indent)
+- Proper abstraction level: complexity is encapsulated within the helper
+- Clean API: takes string, returns string of spaces
+- Minimal coupling: only depends on `ansi.Strip()` and `strings.Repeat()`
+
+### Logic
+**_ISSUES_FOUND_**
+
+1. **Critical: Byte vs Rune Mismatch in Tab Handling** (model.go:1394-1407)
+   - Code counts `leadingSpaces` by treating tabs as 4 (visual width)
+   - But then uses `leadingSpaces` as byte index: `content := visible[leadingSpaces:]`
+   - A tab is 1 byte but counted as 4 spaces
+   - Input `"\t- List item"` produces:
+     - `leadingSpaces = 4` (tab counted as 4)
+     - `visible[4:]` slices from byte 4, skipping past "- " and returning "ist item"
+     - List marker is missed, returns default indent instead of tab+bullet indent
+
+2. **Medium: Byte indexing in numbered list detection** (model.go:1419-1430)
+   - When iterating with `for i, r := range content`, `i` is byte offset
+   - Check `content[i+1]` uses byte access, which is correct for ASCII
+   - But if content contained multi-byte characters before the period, `i+1` could point mid-character
+   - Low severity since only ASCII digits 0-9 are matched before reaching this check
+
+### Error Handling
+No issues. This is a pure string transformation with no failure modes requiring error handling. All edge cases (empty string, whitespace-only lines) return sensible defaults.
+
+### Data Integrity
+**_ISSUES_FOUND_**
+
+Same tab handling bug as Logic review:
+- Input with tabs causes incorrect byte slicing
+- `visible[leadingSpaces:]` uses visual width (4 per tab) as byte offset (1 per tab)
+- Results in garbled content and incorrect indent detection
+
+### Verdict
+**FAIL**
+
+The logic and data reviewers identified a critical bug: tab characters in leading whitespace cause incorrect byte slicing. When a line starts with a tab, `leadingSpaces` is set to 4 (visual width) but used as a byte index where tabs are 1 byte. This causes the string slice to skip past the actual content start.
+
+**Required fixes before PASS:**
+1. Track byte position separately from visual width:
+```go
+leadingBytes := 0
+leadingWidth := 0
+for i, r := range visible {
+    if r == ' ' {
+        leadingBytes = i + 1
+        leadingWidth++
+    } else if r == '\t' {
+        leadingBytes = i + 1
+        leadingWidth += 4
+    } else {
+        break
+    }
+}
+content := visible[leadingBytes:]
+// Use leadingWidth for the returned indent calculation
+```
+
+2. Add test case for tab + list marker:
+```go
+{
+    name:     "tab indented bullet",
+    input:    "\t- Indented item",
+    expected: "      ", // 4 (tab width) + 2 for "- "
+},
+```
+
+## Iteration 15 - 2026-01-26 (Tab Handling Fix)
+
+### Task Selected
+Fix tab handling bug in `detectListIndent` function.
+
+### Why Highest Leverage
+This was the sole required fix from Iteration 14's code review to achieve a PASS verdict. The bug caused incorrect byte slicing when tabs were present in leading whitespace.
+
+### Root Cause
+The original code used a single variable `leadingSpaces` for both:
+1. Visual width calculation (tabs counted as 4 spaces)
+2. Byte offset for string slicing (tabs are 1 byte)
+
+When a line started with a tab like `"\t- List item"`:
+- `leadingSpaces` was set to 4 (visual width)
+- But `visible[4:]` sliced from byte 4, skipping past the actual content start
+- The tab is only 1 byte, so `visible[1:]` would be correct
+- This caused the list marker `"- "` to be missed, returning the default indent
+
+### Fix Applied
+Tracked byte position and visual width separately:
+```go
+leadingBytes := 0
+leadingWidth := 0
+for i, r := range visible {
+    if r == ' ' {
+        leadingBytes = i + 1
+        leadingWidth++
+    } else if r == '\t' {
+        leadingBytes = i + 1
+        leadingWidth += 4
+    } else {
+        break
+    }
+}
+content := visible[leadingBytes:]  // Use byte offset for slicing
+// Use leadingWidth for visual indent calculation
+```
+
+### Tests Added
+Added 3 test cases to `TestDetectListIndent`:
+- `"tab indented bullet"`: `"\t- Indented item"` → 6 spaces (4 + 2)
+- `"tab indented numbered"`: `"\t1. Indented item"` → 7 spaces (4 + 3)
+- `"mixed tab and space indent"`: `"\t  - Mixed indent"` → 8 spaces (4 + 2 + 2)
+
+### Verification
+- `make check` passes (lint and tests)
+- `make build` succeeds
+- All 30 model tests pass (including 15 `TestDetectListIndent` cases)
