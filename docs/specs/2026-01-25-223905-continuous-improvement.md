@@ -67,7 +67,7 @@ Reference screenshots: docs/plans/broken-tui-rendering.png, docs/plans/broken-tu
 - [x] Research Bubbletea testing patterns (teatest package, golden file testing)
 - [x] Create test harness that can render TUI to string for snapshot comparison
 - [x] Add golden file tests for key UI states: empty, single task, multiple tasks, scrolling content
-- [ ] Add golden file tests for edge cases: long paths, Unicode content, ANSI sequences, narrow terminal
+- [x] Add golden file tests for edge cases: long paths, Unicode content, ANSI sequences, narrow terminal
 - [ ] Add golden file tests for footer layout: progress bar, token counts, task panel combinations
 - [ ] Consider property-based tests: rendered output height should never exceed terminal height
 - [ ] Add CI integration to catch rendering regressions

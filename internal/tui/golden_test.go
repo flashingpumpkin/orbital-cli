@@ -250,6 +250,139 @@ func TestGoldenNarrowTerminal(t *testing.T) {
 	assertGolden(t, []byte(output))
 }
 
+// TestGoldenLongPaths tests the TUI with very long file paths.
+// This exercises path truncation logic in the session panel.
+func TestGoldenLongPaths(t *testing.T) {
+	opts := DefaultGoldenOptions()
+	opts.Progress = &ProgressInfo{
+		Iteration:    1,
+		MaxIteration: 50,
+		TokensIn:     1000,
+		TokensOut:    500,
+		Cost:         0.25,
+		Budget:       10.00,
+	}
+	opts.Session = &SessionInfo{
+		SpecFiles:   []string{"/very/deeply/nested/directory/structure/that/goes/on/and/on/specs/implementation-plan-for-feature-xyz.md"},
+		NotesFile:   "/another/extremely/long/path/to/notes/directory/structure/session-notes-2026-01-26.md",
+		StateFile:   "/deeply/nested/state/directory/with/many/levels/.orbital/state.json",
+		ContextFile: "/path/to/context/with/long/name/context-file-for-session.md",
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenUnicodeContent tests the TUI with Unicode characters in content.
+// This exercises proper handling of wide characters and emoji.
+func TestGoldenUnicodeContent(t *testing.T) {
+	opts := DefaultGoldenOptions()
+	opts.Progress = &ProgressInfo{
+		Iteration:    2,
+		MaxIteration: 50,
+		TokensIn:     2000,
+		TokensOut:    1000,
+		Cost:         0.50,
+		Budget:       10.00,
+	}
+	opts.Tasks = []Task{
+		{ID: "1", Content: "实现用户认证系统", Status: "completed"},      // Chinese
+		{ID: "2", Content: "Добавить поддержку API", Status: "in_progress"}, // Russian
+		{ID: "3", Content: "🚀 Deploy to production 🎉", Status: "pending"},  // Emoji
+	}
+	opts.OutputLines = []string{
+		"Processing: こんにちは世界",
+		"Status: ✅ Complete",
+		"Warning: ⚠️ Check configuration",
+		"Building: 🔨 compiling...",
+		"Result: café résumé naïve",
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenANSISequences tests the TUI with ANSI escape sequences in content.
+// Note: With NO_COLOR=1, styling is disabled, but this tests that content
+// containing ANSI sequences is handled gracefully.
+func TestGoldenANSISequences(t *testing.T) {
+	opts := DefaultGoldenOptions()
+	opts.Progress = &ProgressInfo{
+		Iteration:    3,
+		MaxIteration: 50,
+		TokensIn:     3000,
+		TokensOut:    1500,
+		Cost:         0.75,
+		Budget:       10.00,
+	}
+	// Simulate output that might contain ANSI codes (e.g., from Claude's responses)
+	opts.OutputLines = []string{
+		"\x1b[32mSuccess:\x1b[0m Operation completed",
+		"\x1b[31mError:\x1b[0m Something went wrong",
+		"\x1b[1mBold text\x1b[0m and normal text",
+		"\x1b[33;1mWarning:\x1b[0m Check your input",
+		"Plain text without any formatting",
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenVeryNarrowTerminal tests the TUI in a very narrow terminal (60 cols).
+// This is narrower than the default 80 and exercises edge cases in layout.
+func TestGoldenVeryNarrowTerminal(t *testing.T) {
+	opts := GoldenTestOptions{
+		Width:  60, // Very narrow
+		Height: 24,
+		Progress: &ProgressInfo{
+			Iteration:    5,
+			MaxIteration: 50,
+			StepName:     "implement",
+			StepPosition: 2,
+			StepTotal:    4,
+			TokensIn:     10000,
+			TokensOut:    5000,
+			Cost:         2.50,
+			Budget:       10.00,
+		},
+		Tasks: []Task{
+			{ID: "1", Content: "This is a task with a very long description that needs truncation", Status: "in_progress"},
+		},
+		Session: &SessionInfo{
+			SpecFiles: []string{"/path/to/spec.md"},
+			NotesFile: "/path/to/notes.md",
+		},
+	}
+	opts.OutputLines = []string{
+		"This is a line of output that is quite long and may need wrapping in narrow mode",
+		"Short line",
+		"Another moderately long line that tests the wrapping behaviour",
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
 // TestGoldenTeatestIntegration demonstrates the full teatest integration harness.
 // This test verifies that the teatest-based harness works correctly for later
 // golden file comparison tests.
