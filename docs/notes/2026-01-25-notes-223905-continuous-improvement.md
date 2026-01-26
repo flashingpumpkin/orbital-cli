@@ -1565,3 +1565,74 @@ The required fix from Code Review - Iteration 19 has been addressed:
 - `make check` passes (lint and tests)
 - `make build` succeeds
 - All 11 golden tests pass including renamed `TestGoldenTerminalTooNarrow`
+
+## Code Review - Iteration 20
+
+### Security
+No issues. The changes are purely test code refactoring. No external input vectors, no injection risks, no sensitive data handling. The renamed golden file contains only the expected error message for the "terminal too narrow" scenario.
+
+### Design
+No issues. The test name now accurately describes what is being tested (`TestGoldenTerminalTooNarrow`). The simplified test options remove dead code that was never rendered due to the minimum width constraint.
+
+### Logic
+No issues. The test correctly verifies that a 60-column terminal (below the 80-column minimum) displays the "Terminal too narrow" error message. The simplification removes the misleading test data that suggested layout rendering would occur.
+
+### Error Handling
+No issues. Test code uses standard assertion patterns. The error message path is correctly tested.
+
+### Data Integrity
+No issues. The golden file accurately captures the expected error message output.
+
+### Verdict
+**PASS**
+
+The fix correctly addresses the misleading test name and dead test data issue. The test now:
+- Has an accurate name (`TestGoldenTerminalTooNarrow`)
+- Has an accurate comment explaining it tests the error message for terminals below minimum width
+- Contains only the minimal test options needed (Width: 60, Height: 24)
+- No longer has dead code that suggested content would be rendered
+
+## Iteration 21 - 2026-01-26 (Footer Layout Golden Files)
+
+### Task Selected
+Add golden file tests for footer layout: progress bar, token counts, task panel combinations.
+
+### Why Highest Leverage
+This was the next unchecked item in the Acceptance testing for UI rendering section. It extends the golden file testing infrastructure to cover footer-specific scenarios that have historically been sources of rendering bugs (per iterations 10-11).
+
+### Implementation
+
+Added 6 new golden file tests covering footer layout scenarios:
+
+1. **TestGoldenFooterHighTokens**: High token counts (1,234,567 in / 987,654 out) and high costs ($87.50/$100.00). Exercises number formatting with thousands separators and currency display.
+
+2. **TestGoldenFooterMaxTasks**: Maximum visible tasks (6). Uses taller terminal (32 rows) to ensure task panel fits. Shows all 6 tasks with different statuses.
+
+3. **TestGoldenFooterOverflowTasks**: More than 6 tasks (9 total). Shows "(scroll)" indicator in task panel header. Uses taller terminal (32 rows).
+
+4. **TestGoldenFooterZeroBudget**: Zero budget ($0.00). Exercises division-by-zero protection in ratio calculations. Progress bar shows empty when budget is undefined.
+
+5. **TestGoldenFooterFullProgress**: Near-complete progress (iteration 49/50, $95/$100). Exercises progress bar at high fill levels.
+
+6. **TestGoldenFooterNoTasksWithSession**: No tasks but with session info. Tests layout when only session panel shows without task panel.
+
+### Key Decisions
+
+- Used taller terminal height (32 rows) for tests with many tasks. The layout calculation collapses the task panel when scroll area would be less than 4 lines. With default 24 rows and 6 tasks (7 panel height), the scroll area would be 3 lines, triggering collapse.
+
+- Tests verify that high token counts and costs are properly formatted with thousands separators and don't overflow panel width.
+
+### Files Created
+- `internal/tui/testdata/TestGoldenFooterHighTokens.golden`
+- `internal/tui/testdata/TestGoldenFooterMaxTasks.golden`
+- `internal/tui/testdata/TestGoldenFooterOverflowTasks.golden`
+- `internal/tui/testdata/TestGoldenFooterZeroBudget.golden`
+- `internal/tui/testdata/TestGoldenFooterFullProgress.golden`
+- `internal/tui/testdata/TestGoldenFooterNoTasksWithSession.golden`
+
+### Files Modified
+- `internal/tui/golden_test.go`: Added 6 new test functions
+
+### Verification
+- `make check` passes (lint and tests)
+- All 17 golden tests pass

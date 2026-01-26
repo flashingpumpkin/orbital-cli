@@ -361,6 +361,189 @@ func TestGoldenTerminalTooNarrow(t *testing.T) {
 	assertGolden(t, []byte(output))
 }
 
+// TestGoldenFooterHighTokens tests the footer with high token counts and costs.
+// This exercises number formatting with thousands separators and currency display.
+func TestGoldenFooterHighTokens(t *testing.T) {
+	opts := DefaultGoldenOptions()
+	opts.Progress = &ProgressInfo{
+		Iteration:    45,
+		MaxIteration: 50,
+		StepName:     "review",
+		StepPosition: 3,
+		StepTotal:    3,
+		TokensIn:     1234567,
+		TokensOut:    987654,
+		Cost:         87.50,
+		Budget:       100.00,
+	}
+	opts.Tasks = []Task{
+		{ID: "1", Content: "Implement feature", Status: "completed"},
+		{ID: "2", Content: "Run tests", Status: "completed"},
+		{ID: "3", Content: "Review code", Status: "in_progress"},
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenFooterMaxTasks tests the footer with maximum visible tasks (6).
+// The task panel shows at most 6 tasks before scrolling.
+// Uses a taller terminal (32 rows) to ensure task panel fits.
+func TestGoldenFooterMaxTasks(t *testing.T) {
+	opts := GoldenTestOptions{
+		Width:  80,
+		Height: 32, // Taller to fit 6 tasks
+		Progress: &ProgressInfo{
+			Iteration:    10,
+			MaxIteration: 50,
+			TokensIn:     10000,
+			TokensOut:    5000,
+			Cost:         2.50,
+			Budget:       10.00,
+		},
+		Tasks: []Task{
+			{ID: "1", Content: "First task completed", Status: "completed"},
+			{ID: "2", Content: "Second task completed", Status: "completed"},
+			{ID: "3", Content: "Third task in progress", Status: "in_progress"},
+			{ID: "4", Content: "Fourth task pending", Status: "pending"},
+			{ID: "5", Content: "Fifth task pending", Status: "pending"},
+			{ID: "6", Content: "Sixth task pending", Status: "pending"},
+		},
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenFooterOverflowTasks tests the footer when there are more than 6 tasks.
+// This exercises the scroll indicator showing how many tasks are hidden.
+// Uses a taller terminal (32 rows) to ensure task panel fits.
+func TestGoldenFooterOverflowTasks(t *testing.T) {
+	opts := GoldenTestOptions{
+		Width:  80,
+		Height: 32, // Taller to fit overflow tasks
+		Progress: &ProgressInfo{
+			Iteration:    5,
+			MaxIteration: 50,
+			TokensIn:     5000,
+			TokensOut:    2500,
+			Cost:         1.25,
+			Budget:       10.00,
+		},
+		Tasks: []Task{
+			{ID: "1", Content: "Task one completed", Status: "completed"},
+			{ID: "2", Content: "Task two completed", Status: "completed"},
+			{ID: "3", Content: "Task three in progress", Status: "in_progress"},
+			{ID: "4", Content: "Task four pending", Status: "pending"},
+			{ID: "5", Content: "Task five pending", Status: "pending"},
+			{ID: "6", Content: "Task six pending", Status: "pending"},
+			{ID: "7", Content: "Task seven pending", Status: "pending"},
+			{ID: "8", Content: "Task eight pending", Status: "pending"},
+			{ID: "9", Content: "Task nine pending", Status: "pending"},
+		},
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenFooterZeroBudget tests the footer with zero budget.
+// This exercises division-by-zero protection in ratio calculations.
+func TestGoldenFooterZeroBudget(t *testing.T) {
+	opts := DefaultGoldenOptions()
+	opts.Progress = &ProgressInfo{
+		Iteration:    5,
+		MaxIteration: 50,
+		TokensIn:     5000,
+		TokensOut:    2500,
+		Cost:         1.25,
+		Budget:       0.00, // Zero budget
+	}
+	opts.Tasks = []Task{
+		{ID: "1", Content: "Working task", Status: "in_progress"},
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenFooterFullProgress tests the footer with near-complete progress.
+// This exercises the progress bar at high fill levels and warning styling.
+func TestGoldenFooterFullProgress(t *testing.T) {
+	opts := DefaultGoldenOptions()
+	opts.Progress = &ProgressInfo{
+		Iteration:    49,
+		MaxIteration: 50,
+		StepName:     "implement",
+		StepPosition: 1,
+		StepTotal:    1,
+		TokensIn:     500000,
+		TokensOut:    250000,
+		Cost:         95.00,
+		Budget:       100.00, // 95% budget consumed
+	}
+	opts.Tasks = []Task{
+		{ID: "1", Content: "Final task almost done", Status: "in_progress"},
+	}
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
+// TestGoldenFooterNoTasksWithSession tests the footer with no tasks but session info.
+// This verifies the layout when only session panel is shown without task panel.
+func TestGoldenFooterNoTasksWithSession(t *testing.T) {
+	opts := DefaultGoldenOptions()
+	opts.Progress = &ProgressInfo{
+		Iteration:    1,
+		MaxIteration: 50,
+		TokensIn:     1000,
+		TokensOut:    500,
+		Cost:         0.25,
+		Budget:       10.00,
+	}
+	opts.Session = &SessionInfo{
+		SpecFiles:   []string{"docs/plans/feature-spec.md"},
+		NotesFile:   "docs/notes/session-notes.md",
+		StateFile:   ".orbital/state.json",
+		ContextFile: "context.md",
+	}
+	// No tasks - tests layout without task panel
+
+	output := renderToString(t, opts)
+
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+
+	assertGolden(t, []byte(output))
+}
+
 // TestGoldenTeatestIntegration demonstrates the full teatest integration harness.
 // This test verifies that the teatest-based harness works correctly for later
 // golden file comparison tests.
