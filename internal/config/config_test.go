@@ -33,8 +33,8 @@ func TestNewConfig_ReturnsConfigWithDefaults(t *testing.T) {
 		t.Errorf("WorkingDir = %q; want %q", cfg.WorkingDir, ".")
 	}
 
-	if cfg.IterationTimeout != 30*time.Minute {
-		t.Errorf("IterationTimeout = %v; want %v", cfg.IterationTimeout, 30*time.Minute)
+	if cfg.IterationTimeout != 5*time.Minute {
+		t.Errorf("IterationTimeout = %v; want %v", cfg.IterationTimeout, 5*time.Minute)
 	}
 
 	// Check zero values for non-defaulted fields

@@ -103,7 +103,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&todosOnly, "todos-only", false, "Only show TodoWrite output")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "Run without executing commands")
 	rootCmd.PersistentFlags().StringVarP(&sessionID, "session-id", "s", "", "Session ID for resuming")
-	rootCmd.PersistentFlags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Timeout per iteration")
+	rootCmd.PersistentFlags().DurationVarP(&timeout, "timeout", "t", 5*time.Minute, "Timeout per iteration")
 	rootCmd.PersistentFlags().IntVar(&maxTurns, "max-turns", 0, "Max agentic turns per iteration (0 = unlimited)")
 	rootCmd.PersistentFlags().StringVar(&systemPrompt, "system-prompt", "", "Custom system prompt (overrides default)")
 	rootCmd.PersistentFlags().StringVar(&agents, "agents", "", "JSON object defining custom agents for Claude CLI")

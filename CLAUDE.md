@@ -168,7 +168,7 @@ Model:             "opus"
 CheckerModel:      "haiku"
 MaxBudget:         100.00
 WorkingDir:        "."
-IterationTimeout:  30 * time.Minute
+IterationTimeout:  5 * time.Minute
 ```
 
 ## Configuration File
