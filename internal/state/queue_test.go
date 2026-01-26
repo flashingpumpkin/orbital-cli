@@ -70,9 +70,12 @@ func TestQueue_SaveAndLoad_RoundTrip(t *testing.T) {
 func TestQueue_Add_AddsFileToQueue(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
 
-	err := q.Add("/path/to/spec.md")
+	err = q.Add("/path/to/spec.md")
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -94,10 +97,13 @@ func TestQueue_Add_AddsFileToQueue(t *testing.T) {
 func TestQueue_Add_DuplicateSilentlyIgnored(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
 
 	// Add same file twice
-	err := q.Add("/path/to/spec.md")
+	err = q.Add("/path/to/spec.md")
 	if err != nil {
 		t.Fatalf("first Add() error = %v", err)
 	}
@@ -116,10 +122,15 @@ func TestQueue_Add_DuplicateSilentlyIgnored(t *testing.T) {
 func TestQueue_Remove_RemovesFileFromQueue(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
-	_ = q.Add("/path/to/spec.md")
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+	if err := q.Add("/path/to/spec.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
 
-	err := q.Remove("/path/to/spec.md")
+	err = q.Remove("/path/to/spec.md")
 	if err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
@@ -135,9 +146,12 @@ func TestQueue_Remove_RemovesFileFromQueue(t *testing.T) {
 func TestQueue_Remove_ReturnsErrorWhenFileNotFound(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
 
-	err := q.Remove("/nonexistent.md")
+	err = q.Remove("/nonexistent.md")
 	if err == nil {
 		t.Error("Remove() should return error for nonexistent file")
 	}
@@ -146,9 +160,16 @@ func TestQueue_Remove_ReturnsErrorWhenFileNotFound(t *testing.T) {
 func TestQueue_Pop_ReturnsAndClearsAllFiles(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
-	_ = q.Add("/path/to/spec1.md")
-	_ = q.Add("/path/to/spec2.md")
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+	if err := q.Add("/path/to/spec1.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	if err := q.Add("/path/to/spec2.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
 
 	files, err := q.Pop()
 	if err != nil {
@@ -169,7 +190,10 @@ func TestQueue_Pop_ReturnsAndClearsAllFiles(t *testing.T) {
 func TestQueue_Pop_ReturnsEmptySliceWhenEmpty(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
 
 	files, err := q.Pop()
 	if err != nil {
@@ -187,8 +211,13 @@ func TestQueue_Pop_ReturnsEmptySliceWhenEmpty(t *testing.T) {
 func TestQueue_Contains_ReturnsTrueForQueuedFile(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
-	_ = q.Add("/path/to/spec.md")
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+	if err := q.Add("/path/to/spec.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
 
 	if !q.Contains("/path/to/spec.md") {
 		t.Error("Contains() = false; want true for queued file")
@@ -198,7 +227,10 @@ func TestQueue_Contains_ReturnsTrueForQueuedFile(t *testing.T) {
 func TestQueue_Contains_ReturnsFalseForNonQueuedFile(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
 
 	if q.Contains("/nonexistent.md") {
 		t.Error("Contains() = true; want false for non-queued file")
@@ -216,8 +248,13 @@ func TestQueue_IsEmpty_ReturnsTrueWhenEmpty(t *testing.T) {
 func TestQueue_IsEmpty_ReturnsFalseWhenNotEmpty(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
-	_ = q.Add("/path/to/spec.md")
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+	if err := q.Add("/path/to/spec.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
 
 	if q.IsEmpty() {
 		t.Error("IsEmpty() = true; want false for non-empty queue")
@@ -232,23 +269,32 @@ func TestQueue_ConcurrentAdd_DoesNotCorrupt(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
 
+	// Use error channel to collect errors from goroutines (t.Errorf is not safe to call from goroutines)
+	errCh := make(chan error, numGoroutines*2)
+
 	for i := 0; i < numGoroutines; i++ {
 		go func(idx int) {
 			defer wg.Done()
 			// Each goroutine loads its own queue instance
 			q, err := LoadQueue(stateDir)
 			if err != nil {
-				t.Errorf("LoadQueue() error = %v", err)
+				errCh <- err
 				return
 			}
 			err = q.Add("/path/to/spec" + string(rune('A'+idx)) + ".md")
 			if err != nil {
-				t.Errorf("Add() error = %v", err)
+				errCh <- err
 			}
 		}(i)
 	}
 
 	wg.Wait()
+	close(errCh)
+
+	// Report any errors collected from goroutines
+	for err := range errCh {
+		t.Errorf("goroutine error: %v", err)
+	}
 
 	// Load final queue and verify integrity
 	finalQ, err := LoadQueue(stateDir)
@@ -276,11 +322,19 @@ func TestQueue_ConcurrentAdd_DoesNotCorrupt(t *testing.T) {
 func TestQueue_Add_PersistsToFile(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q1, _ := LoadQueue(stateDir)
-	_ = q1.Add("/path/to/spec.md")
+	q1, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+	if err := q1.Add("/path/to/spec.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
 
 	// Load from a new queue instance
-	q2, _ := LoadQueue(stateDir)
+	q2, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
 
 	if !q2.Contains("/path/to/spec.md") {
 		t.Error("Add() should persist to file, but new queue instance doesn't contain added file")
@@ -290,12 +344,22 @@ func TestQueue_Add_PersistsToFile(t *testing.T) {
 func TestQueue_Remove_PersistsToFile(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q1, _ := LoadQueue(stateDir)
-	_ = q1.Add("/path/to/spec.md")
-	_ = q1.Remove("/path/to/spec.md")
+	q1, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+	if err := q1.Add("/path/to/spec.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	if err := q1.Remove("/path/to/spec.md"); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
 
 	// Load from a new queue instance
-	q2, _ := LoadQueue(stateDir)
+	q2, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
 
 	if q2.Contains("/path/to/spec.md") {
 		t.Error("Remove() should persist to file, but new queue instance still contains removed file")
@@ -305,15 +369,23 @@ func TestQueue_Remove_PersistsToFile(t *testing.T) {
 func TestQueue_Pop_PersistsToFile(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q1, _ := LoadQueue(stateDir)
-	_ = q1.Add("/path/to/spec.md")
-	_, err := q1.Pop()
+	q1, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+	if err := q1.Add("/path/to/spec.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	_, err = q1.Pop()
 	if err != nil {
 		t.Fatalf("Pop() returned unexpected error: %v", err)
 	}
 
 	// Load from a new queue instance
-	q2, _ := LoadQueue(stateDir)
+	q2, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
 
 	if !q2.IsEmpty() {
 		t.Error("Pop() should persist to file, but new queue instance is not empty")
@@ -323,8 +395,13 @@ func TestQueue_Pop_PersistsToFile(t *testing.T) {
 func TestQueue_Pop_ReturnsErrorWhenSaveFails(t *testing.T) {
 	_, stateDir := testhelpers.StateDir(t)
 
-	q, _ := LoadQueue(stateDir)
-	_ = q.Add("/path/to/spec.md")
+	q, err := LoadQueue(stateDir)
+	if err != nil {
+		t.Fatalf("LoadQueue() error = %v", err)
+	}
+	if err := q.Add("/path/to/spec.md"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
 
 	// Make the state directory read-only to cause save to fail
 	if err := os.Chmod(stateDir, 0555); err != nil {

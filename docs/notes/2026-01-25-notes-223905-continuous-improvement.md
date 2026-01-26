@@ -922,3 +922,112 @@ Creating a shared test helper eliminates boilerplate and improves test maintaina
 - All 18 queue tests pass
 - All 22 state tests pass
 - New testhelpers tests pass
+
+## Code Review - Iteration 12
+
+### Security
+No issues. The utility functions are pure directory creation helpers for tests using `t.TempDir()` (Go's built-in secure temp directory creation). No path injection vectors, no external input handling, no credentials or secrets. The 0755 permissions are appropriate for ephemeral test directories.
+
+### Design
+**_ISSUES_FOUND_**
+
+1. **Inconsistent Return Value API** (dirs.go)
+   - `StateDir()` and `OrbitalDir()` return two values (tempDir, targetDir)
+   - `WorkingDir()` returns one value
+   - All callers in `queue_test.go` discard the first return value: `_, stateDir := testhelpers.StateDir(t)`
+   - If tempDir is never used, returning it creates unnecessary API complexity
+
+2. **Code Duplication Within testhelpers** (dirs.go)
+   - `StateDir()` and `OrbitalDir()` have nearly identical implementations
+   - Only the subdirectory path differs (`.orbital/state` vs `.orbital`)
+   - Could extract common `createSubDir(t, subPath)` helper
+
+3. **WorkingDir Provides No Value** (dirs.go:39-42)
+   - Simply wraps `t.TempDir()` with no additional functionality
+   - Adds indirection without benefit; callers should use `t.TempDir()` directly
+
+4. **Incomplete Migration**
+   - `state_test.go` and `config/file_test.go` still use inline directory creation
+   - Creates inconsistent patterns within the codebase
+
+### Logic
+**_ISSUES_FOUND_**
+
+1. **Race Condition: t.Errorf in goroutines** (queue_test.go:240-247)
+   - `TestQueue_ConcurrentAdd_DoesNotCorrupt` calls `t.Errorf` from goroutines
+   - Go testing docs warn against calling `t.Error`/`t.Errorf` from goroutines after test returns
+   - Can cause panic: "Errorf in goroutine after test has returned"
+   - Should use error channel to collect errors, report after `wg.Wait()`
+
+2. **Temp File Collision in Concurrent Writes** (exposed by test)
+   - Test exposes potential bug in `queue.go` where multiple concurrent writers use same `.tmp` file path
+   - This is a production code issue, not a test issue, but the test may be flaky
+
+### Error Handling
+**_ISSUES_FOUND_**
+
+1. **Swallowed Errors Throughout queue_test.go**
+   - 17+ occurrences of `q, _ := LoadQueue(stateDir)` and `_ = q.Add(...)`
+   - Errors are silently discarded instead of failing the test
+   - Makes debugging harder when tests fail for unexpected reasons
+   - Should use `if err != nil { t.Fatalf(...) }` for setup operations
+
+### Data Integrity
+**_ISSUES_FOUND_**
+
+1. **Nil Parameter Not Validated** (dirs.go)
+   - If `t` is nil, functions panic on `t.Helper()` or `t.TempDir()`
+   - Low severity for test code but defensive check would be clearer
+
+2. **Race Condition in Concurrent Test** (queue_test.go:227-274)
+   - Same issue as Logic review
+   - Calling test methods from goroutines is a data race with test framework
+
+3. **Pop Failure Inconsistency** (exposed by TestQueue_Pop_ReturnsErrorWhenSaveFails)
+   - Test documents that `Pop()` clears in-memory state before `save()` fails
+   - If save fails, in-memory and persisted state diverge
+   - This is a production code issue, not introduced by this iteration
+
+### Verdict
+**FAIL**
+
+The review found multiple issues:
+
+1. **Required Fix**: Race condition with `t.Errorf` in goroutines (queue_test.go:240-247)
+   - Can cause test panics in CI
+   - Fix: Use error channel pattern to collect errors from goroutines
+
+2. **Should Fix**: Swallowed errors in test setup
+   - Makes debugging harder
+   - Fix: Replace `q, _ := LoadQueue()` with proper error checking
+
+3. **Design Issues**: Inconsistent API, unnecessary function, incomplete migration
+   - These are quality concerns, not bugs
+   - Acceptable for initial implementation but should be addressed in follow-up
+
+The `t.Errorf` in goroutine issue is the critical blocker - it can cause flaky test failures that are hard to diagnose.
+
+## Iteration 13 - 2026-01-26 (Review Fixes Round 4)
+
+### Issues Addressed
+
+Both required fixes from Code Review - Iteration 12 have been addressed:
+
+1. **Race condition with t.Errorf in goroutines** (queue_test.go:240-247)
+   - **Problem**: `TestQueue_ConcurrentAdd_DoesNotCorrupt` called `t.Errorf` from goroutines. Go testing docs warn against calling `t.Error`/`t.Errorf` from goroutines after test returns, which can cause panic: "Errorf in goroutine after test has returned".
+   - **Fix**: Used error channel pattern to collect errors from goroutines and report them after `wg.Wait()`. Created `errCh := make(chan error, numGoroutines*2)` to collect errors, then ranged over closed channel to report all errors on main test goroutine.
+   - **Why**: This is the standard Go pattern for safe error collection from concurrent goroutines in tests.
+
+2. **Swallowed errors in test setup** (queue_test.go throughout)
+   - **Problem**: 17 occurrences of `q, _ := LoadQueue(stateDir)` and `_ = q.Add(...)` silently discarded errors, making debugging harder when tests fail unexpectedly.
+   - **Fix**: Replaced all instances with proper error checking using `t.Fatalf` for setup operations:
+     - `q, err := LoadQueue(stateDir); if err != nil { t.Fatalf(...) }`
+     - `if err := q.Add(...); err != nil { t.Fatalf(...) }`
+   - **Why**: Test setup failures should immediately fail the test with clear error messages rather than proceeding with potentially invalid state.
+
+### Files Modified
+- `internal/state/queue_test.go`
+
+### Verification
+- `make check` passes (lint and tests)
+- All 18 queue tests pass including `TestQueue_ConcurrentAdd_DoesNotCorrupt`
