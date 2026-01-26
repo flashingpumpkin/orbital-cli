@@ -72,6 +72,20 @@ Reference screenshots: docs/plans/broken-tui-rendering.png, docs/plans/broken-tu
 - [ ] Consider property-based tests: rendered output height should never exceed terminal height
 - [ ] Add CI integration to catch rendering regressions
 
+#### Bubbles Component Library Integration
+Reference: docs/research/2026-01-26-001750-bubbletea-testing-patterns.md
+
+- [ ] Add `github.com/charmbracelet/bubbles` as a dependency
+- [ ] Replace custom scroll logic with `viewport.Model` for output panel (HIGH VALUE)
+  - Removes 200+ lines of manual scroll logic
+  - Built-in keyboard navigation and mouse support
+  - Better tested upstream
+- [ ] Replace custom scroll logic with `viewport.Model` for file content tabs
+- [ ] Implement tailing mode wrapper around viewport (auto-scroll to bottom on new content)
+- [ ] Update golden file tests after viewport migration
+- [ ] Evaluate `progress.Model` for animated progress bars (optional, cosmetic)
+- [ ] Remove `briandowns/spinner` dependency in favour of `bubbles/spinner` (optional)
+
 ### Known Issues
 - [ ] Review TODO comments and address actionable items
 - [ ] Check for potential nil pointer dereferences
