@@ -865,19 +865,6 @@ func (m Model) renderFileContent(path string) string {
 	return strings.Join(lines, "\n")
 }
 
-// wrapAllOutputLines returns all output lines wrapped to fit the content width.
-// This is used by tests to verify wrapping behaviour.
-func (m Model) wrapAllOutputLines() []string {
-	width := m.layout.ContentWidth()
-	var wrappedLines []string
-	m.outputLines.Iterate(func(_ int, line string) bool {
-		wrapped := wrapLine(line, width)
-		wrappedLines = append(wrappedLines, wrapped...)
-		return true
-	})
-	return wrappedLines
-}
-
 // renderScrollArea renders the scrolling output region using the viewport.
 func (m Model) renderScrollArea() string {
 	height := m.layout.ScrollAreaHeight
@@ -1269,202 +1256,6 @@ func truncateFromStart(s string, targetWidth int) string {
 	return "..." + string(runes[startIdx:])
 }
 
-// detectListIndent detects list markers at the start of a line and returns
-// the appropriate continuation indent to align wrapped text with content.
-// Supports:
-//   - Numbered lists: "1. ", "12. ", "123. " (digit(s) + period + space)
-//   - Bullet lists: "- ", "* ", "+ " (marker + space)
-//   - Leading whitespace is preserved and added to the indent
-//
-// Returns a string of spaces matching the width of the list prefix,
-// or 4 spaces as default for non-list lines.
-func detectListIndent(line string) string {
-	const defaultIndent = "    " // 4 spaces for non-list lines
-
-	// Strip ANSI codes to analyse the visible content
-	visible := ansi.Strip(line)
-	if len(visible) == 0 {
-		return defaultIndent
-	}
-
-	// Count leading whitespace - track bytes and visual width separately
-	// because tabs are 1 byte but render as multiple spaces
-	leadingBytes := 0
-	leadingWidth := 0
-	for i, r := range visible {
-		if r == ' ' {
-			leadingBytes = i + 1
-			leadingWidth++
-		} else if r == '\t' {
-			leadingBytes = i + 1
-			leadingWidth += 4 // Tab renders as 4 spaces visually
-		} else {
-			break
-		}
-	}
-
-	// Get content after leading whitespace using byte offset
-	content := visible[leadingBytes:]
-	if len(content) == 0 {
-		return defaultIndent
-	}
-
-	// Check for bullet list markers: "- ", "* ", "+ "
-	if len(content) >= 2 && (content[0] == '-' || content[0] == '*' || content[0] == '+') && content[1] == ' ' {
-		return strings.Repeat(" ", leadingWidth+2)
-	}
-
-	// Check for numbered list: digit(s) + ". "
-	numDigits := 0
-	for i, r := range content {
-		if r >= '0' && r <= '9' {
-			numDigits++
-			if numDigits > 5 { // Limit to reasonable list numbers
-				break
-			}
-		} else if r == '.' && numDigits > 0 && i+1 < len(content) && content[i+1] == ' ' {
-			// Found "N. " pattern
-			return strings.Repeat(" ", leadingWidth+numDigits+2)
-		} else {
-			break
-		}
-	}
-
-	return defaultIndent
-}
-
-// wrapLine wraps a single line to fit within the given width, preserving ANSI codes.
-// Returns a slice of wrapped lines. Continuation lines are indented to align with
-// the content after list markers (e.g., "1. " or "- "), or with 4 spaces for plain text.
-func wrapLine(line string, width int) []string {
-	if width <= 0 {
-		return []string{line}
-	}
-
-	// Use ansi.StringWidth to measure visible width (excludes ANSI escape sequences)
-	visibleWidth := ansi.StringWidth(line)
-	if visibleWidth <= width {
-		return []string{line}
-	}
-
-	// Detect list markers and calculate appropriate continuation indent
-	continuationIndent := detectListIndent(line)
-	continuationWidth := width - len(continuationIndent)
-	if continuationWidth <= 10 {
-		// Terminal too narrow for meaningful wrapping
-		continuationWidth = width
-	}
-
-	var result []string
-	remaining := line
-	isFirst := true
-
-	for len(remaining) > 0 {
-		targetWidth := width
-		if !isFirst {
-			targetWidth = continuationWidth
-		}
-
-		if ansi.StringWidth(remaining) <= targetWidth {
-			if isFirst {
-				result = append(result, remaining)
-			} else {
-				result = append(result, continuationIndent+remaining)
-			}
-			break
-		}
-
-		// Find a good break point
-		breakIdx := findBreakPoint(remaining, targetWidth)
-		if breakIdx <= 0 {
-			// No good break point, force break at width
-			breakIdx = truncateToWidth(remaining, targetWidth)
-			if breakIdx <= 0 {
-				breakIdx = len(remaining)
-			}
-		}
-
-		chunk := remaining[:breakIdx]
-		if isFirst {
-			result = append(result, chunk)
-		} else {
-			result = append(result, continuationIndent+chunk)
-		}
-
-		remaining = strings.TrimLeft(remaining[breakIdx:], " ")
-		isFirst = false
-	}
-
-	return result
-}
-
-// findBreakPoint finds the best position to break a line at or before targetWidth.
-// Returns the index after the last space that fits, or 0 if no good break point.
-func findBreakPoint(s string, targetWidth int) int {
-	lastSpace := -1
-	currentWidth := 0
-	inEscape := false
-
-	for i, r := range s {
-		// Track ANSI escape sequences
-		if r == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			// ANSI sequences end with a letter
-			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-
-		// Measure visible character width
-		charWidth := ansi.StringWidth(string(r))
-		if currentWidth+charWidth > targetWidth {
-			// We've exceeded the target width
-			if lastSpace >= 0 {
-				return lastSpace + 1 // Include the space, then trim later
-			}
-			return i // Force break at current position
-		}
-
-		currentWidth += charWidth
-		if r == ' ' {
-			lastSpace = i
-		}
-	}
-
-	return 0 // Line fits, no break needed
-}
-
-// truncateToWidth returns the byte index where the visible width reaches targetWidth.
-func truncateToWidth(s string, targetWidth int) int {
-	currentWidth := 0
-	inEscape := false
-
-	for i, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-
-		charWidth := ansi.StringWidth(string(r))
-		if currentWidth+charWidth > targetWidth {
-			return i
-		}
-		currentWidth += charWidth
-	}
-
-	return len(s)
-}
-
 // SetProgress updates the progress information.
 func (m *Model) SetProgress(p ProgressInfo) {
 	m.progress = p
@@ -1521,8 +1312,10 @@ func (m *Model) syncFileViewport(path string) {
 		return
 	}
 
-	// Set content
-	vp.SetContent(content)
+	// Use lipgloss to wrap content to viewport width
+	wrapStyle := lipgloss.NewStyle().Width(vp.Width)
+	wrapped := wrapStyle.Render(content)
+	vp.SetContent(wrapped)
 
 	// If this is a new viewport, start at the top
 	if !exists {
@@ -1546,7 +1339,11 @@ func (m *Model) syncViewportContent() {
 		lines = append(lines, line)
 		return true
 	})
-	m.viewport.SetContent(strings.Join(lines, "\n"))
+
+	// Use lipgloss to wrap content to viewport width
+	wrapStyle := lipgloss.NewStyle().Width(m.viewport.Width)
+	wrapped := wrapStyle.Render(strings.Join(lines, "\n"))
+	m.viewport.SetContent(wrapped)
 
 	// If tailing, scroll to bottom
 	if m.outputTailing {

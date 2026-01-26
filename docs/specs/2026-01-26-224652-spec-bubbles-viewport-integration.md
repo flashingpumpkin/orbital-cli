@@ -70,7 +70,13 @@ The Bubbles `viewport` component provides all this functionality with built-in k
 
 **Resize handling**: Viewport handles resize via `viewport.Width` and `viewport.Height` setters. Update these in the `tea.WindowSizeMsg` handler.
 
-**Content updates**: Use `viewport.SetContent(strings.Join(lines, "\n"))` to update content. The viewport handles wrapping internally.
+**Line wrapping**: Use lipgloss for wrapping before passing content to viewport:
+```go
+wrapStyle := lipgloss.NewStyle().Width(viewport.Width)
+wrapped := wrapStyle.Render(content)
+viewport.SetContent(wrapped)
+```
+This replaces the custom `wrapLine()`, `findBreakPoint()`, `truncateToWidth()`, and `detectListIndent()` functions.
 
 ## References
 
