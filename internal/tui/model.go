@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -68,7 +69,8 @@ type Model struct {
 	layout Layout
 
 	// Content
-	outputLines *RingBuffer // Ring buffer for bounded memory usage
+	outputLines *RingBuffer     // Ring buffer for bounded memory usage
+	viewport    viewport.Model  // Viewport for output scrolling
 	tasks       []Task
 	progress    ProgressInfo
 	session     SessionInfo
@@ -80,13 +82,7 @@ type Model struct {
 	fileScroll   map[string]int    // Scroll offset per file
 
 	// Output scrolling
-	outputScroll  int  // Line offset from the top of the wrapped output buffer
 	outputTailing bool // Whether the output window is locked to the bottom (auto-scrolling)
-
-	// Wrapped lines cache for scroll performance
-	wrappedLinesCache []string // Cache of wrapped output lines
-	cacheWidth        int      // Width used for current cache (invalidate on change)
-	cacheLineCount    int      // Number of raw lines when cache was built
 
 	// Styles
 	styles Styles
@@ -97,14 +93,15 @@ type Model struct {
 
 // NewModel creates a new TUI model.
 func NewModel() Model {
+	vp := viewport.New(0, 0)
 	return Model{
 		outputLines:   NewRingBuffer(DefaultMaxOutputLines),
+		viewport:      vp,
 		tasks:         make([]Task, 0),
 		tabs:          []Tab{{Name: "Output", Type: TabOutput}},
 		activeTab:     0,
 		fileContents:  make(map[string]string),
 		fileScroll:    make(map[string]int),
-		outputScroll:  0,
 		outputTailing: true,
 		styles:        defaultStyles(),
 		progress: ProgressInfo{
@@ -171,28 +168,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks))
 		m.ready = true
 
-		// Invalidate wrapped lines cache since width may have changed
-		m.invalidateWrappedLinesCache()
-		m.updateWrappedLinesCache()
+		// Update viewport dimensions
+		m.viewport.Width = m.layout.ContentWidth()
+		m.viewport.Height = m.layout.ScrollAreaHeight
 
-		// Clamp output scroll position if not tailing
-		if !m.outputTailing {
-			wrappedLines := m.wrapAllOutputLines()
-			height := m.layout.ScrollAreaHeight
-			maxOffset := len(wrappedLines) - height
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
-			// Clamp scroll to valid range
-			if m.outputScroll > maxOffset {
-				m.outputScroll = maxOffset
-			}
-			// If output now fits in viewport, optionally resume tailing
-			if maxOffset == 0 {
-				m.outputTailing = true
-				m.outputScroll = 0
-			}
-		}
+		// Rebuild viewport content from ring buffer
+		m.syncViewportContent()
+
 		return m, nil
 
 	case StatsMsg:
@@ -203,7 +185,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case OutputLineMsg:
 		m.outputLines.Push(string(msg))
-		m.appendLineToCache(string(msg))
+		m.syncViewportContent()
 		return m, nil
 
 	case TasksMsg:
@@ -252,13 +234,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			return m.prevTab()
 		case "up", "k":
-			return m.scrollUp()
+			return m.handleScrollUp()
 		case "down", "j":
-			return m.scrollDown()
+			return m.handleScrollDown()
 		case "pgup":
-			return m.scrollPageUp()
+			return m.handleScrollPageUp()
 		case "pgdown":
-			return m.scrollPageDown()
+			return m.handleScrollPageDown()
+		case "home":
+			return m.handleScrollHome()
+		case "end":
+			return m.handleScrollEnd()
 		case "r":
 			return m.reloadCurrentFile()
 		}
@@ -266,9 +252,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
-			return m.scrollUp()
+			return m.handleScrollUp()
 		case tea.MouseButtonWheelDown:
-			return m.scrollDown()
+			return m.handleScrollDown()
 		case tea.MouseButtonLeft:
 			if msg.Action == tea.MouseActionPress && msg.Y == 0 {
 				return m.handleTabClick(msg.X)
@@ -394,37 +380,15 @@ func (m Model) handleTabClick(x int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// scrollUp scrolls the current tab up.
-func (m Model) scrollUp() (tea.Model, tea.Cmd) {
+// handleScrollUp handles scroll up for the current tab.
+func (m Model) handleScrollUp() (tea.Model, tea.Cmd) {
 	// Handle output tab (tab 0)
 	if m.activeTab == 0 {
-		wrappedLines := m.wrapAllOutputLines()
-		height := m.layout.ScrollAreaHeight
-
-		// Calculate max scroll offset
-		maxOffset := len(wrappedLines) - height
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-
-		// Nothing to scroll if content fits in viewport
-		if maxOffset == 0 {
-			return m, nil
-		}
-
+		// Disable tailing when user scrolls up
 		if m.outputTailing {
-			// Unlock tail mode and position one line up from bottom
 			m.outputTailing = false
-			m.outputScroll = maxOffset - 1
-			if m.outputScroll < 0 {
-				m.outputScroll = 0
-			}
-		} else {
-			// Already scrolling, move up one line
-			if m.outputScroll > 0 {
-				m.outputScroll--
-			}
 		}
+		m.viewport.ScrollUp(1)
 		return m, nil
 	}
 
@@ -442,33 +406,15 @@ func (m Model) scrollUp() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// scrollDown scrolls the current tab down.
-func (m Model) scrollDown() (tea.Model, tea.Cmd) {
+// handleScrollDown handles scroll down for the current tab.
+func (m Model) handleScrollDown() (tea.Model, tea.Cmd) {
 	// Handle output tab (tab 0)
 	if m.activeTab == 0 {
-		// If already tailing, nothing to do (already at bottom)
-		if m.outputTailing {
-			return m, nil
-		}
-
-		wrappedLines := m.wrapAllOutputLines()
-		height := m.layout.ScrollAreaHeight
-
-		// Calculate max scroll offset
-		maxOffset := len(wrappedLines) - height
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-
-		// Increment scroll offset
-		m.outputScroll++
-
-		// If we've reached or exceeded max offset, re-lock to tail mode
-		if m.outputScroll >= maxOffset {
-			m.outputScroll = maxOffset
+		m.viewport.ScrollDown(1)
+		// Re-enable tailing if we've scrolled to the bottom
+		if m.viewport.AtBottom() {
 			m.outputTailing = true
 		}
-
 		return m, nil
 	}
 
@@ -496,38 +442,15 @@ func (m Model) scrollDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// scrollPageUp scrolls the current tab up by a page.
-func (m Model) scrollPageUp() (tea.Model, tea.Cmd) {
+// handleScrollPageUp handles page up for the current tab.
+func (m Model) handleScrollPageUp() (tea.Model, tea.Cmd) {
 	// Handle output tab (tab 0)
 	if m.activeTab == 0 {
-		wrappedLines := m.wrapAllOutputLines()
-		height := m.layout.ScrollAreaHeight
-
-		// Calculate max scroll offset
-		maxOffset := len(wrappedLines) - height
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-
-		// Nothing to scroll if content fits in viewport
-		if maxOffset == 0 {
-			return m, nil
-		}
-
+		// Disable tailing when user scrolls up
 		if m.outputTailing {
-			// Unlock tail mode and jump up one page from bottom
 			m.outputTailing = false
-			m.outputScroll = maxOffset - height
-			if m.outputScroll < 0 {
-				m.outputScroll = 0
-			}
-		} else {
-			// Already scrolling, move up one page
-			m.outputScroll -= height
-			if m.outputScroll < 0 {
-				m.outputScroll = 0
-			}
 		}
+		m.viewport.HalfPageUp()
 		return m, nil
 	}
 
@@ -548,33 +471,15 @@ func (m Model) scrollPageUp() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// scrollPageDown scrolls the current tab down by a page.
-func (m Model) scrollPageDown() (tea.Model, tea.Cmd) {
+// handleScrollPageDown handles page down for the current tab.
+func (m Model) handleScrollPageDown() (tea.Model, tea.Cmd) {
 	// Handle output tab (tab 0)
 	if m.activeTab == 0 {
-		// If already tailing, nothing to do (already at bottom)
-		if m.outputTailing {
-			return m, nil
-		}
-
-		wrappedLines := m.wrapAllOutputLines()
-		height := m.layout.ScrollAreaHeight
-
-		// Calculate max scroll offset
-		maxOffset := len(wrappedLines) - height
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-
-		// Jump down by one page
-		m.outputScroll += height
-
-		// If we've reached or exceeded max offset, re-lock to tail mode
-		if m.outputScroll >= maxOffset {
-			m.outputScroll = maxOffset
+		m.viewport.HalfPageDown()
+		// Re-enable tailing if we've scrolled to the bottom
+		if m.viewport.AtBottom() {
 			m.outputTailing = true
 		}
-
 		return m, nil
 	}
 
@@ -600,6 +505,54 @@ func (m Model) scrollPageDown() (tea.Model, tea.Cmd) {
 			newOffset = maxOffset
 		}
 		m.fileScroll[tab.FilePath] = newOffset
+	}
+	return m, nil
+}
+
+// handleScrollHome handles home key for the current tab.
+func (m Model) handleScrollHome() (tea.Model, tea.Cmd) {
+	if m.activeTab == 0 {
+		m.outputTailing = false
+		m.viewport.GotoTop()
+		return m, nil
+	}
+
+	// Handle file tabs
+	if len(m.tabs) <= m.activeTab {
+		return m, nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile && tab.FilePath != "" {
+		m.fileScroll[tab.FilePath] = 0
+	}
+	return m, nil
+}
+
+// handleScrollEnd handles end key for the current tab.
+func (m Model) handleScrollEnd() (tea.Model, tea.Cmd) {
+	if m.activeTab == 0 {
+		m.outputTailing = true
+		m.viewport.GotoBottom()
+		return m, nil
+	}
+
+	// Handle file tabs
+	if len(m.tabs) <= m.activeTab {
+		return m, nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab.Type == TabFile && tab.FilePath != "" {
+		content, ok := m.fileContents[tab.FilePath]
+		if ok {
+			lines := strings.Split(content, "\n")
+			maxOffset := len(lines) - m.layout.ScrollAreaHeight
+			if maxOffset < 0 {
+				maxOffset = 0
+			}
+			m.fileScroll[tab.FilePath] = maxOffset
+		}
 	}
 	return m, nil
 }
@@ -911,16 +864,9 @@ func (m Model) renderFileContent(path string) string {
 	return strings.Join(lines, "\n")
 }
 
-// wrapAllOutputLines returns the cached wrapped output lines.
-// The cache is maintained by updateWrappedLinesCache() which is called
-// during Update() when content or width changes.
+// wrapAllOutputLines returns all output lines wrapped to fit the content width.
+// This is used by tests to verify wrapping behaviour.
 func (m Model) wrapAllOutputLines() []string {
-	// If cache exists and is valid, use it
-	if m.wrappedLinesCache != nil {
-		return m.wrappedLinesCache
-	}
-
-	// Fallback: rebuild if cache is nil (shouldn't happen in normal operation)
 	width := m.layout.ContentWidth()
 	var wrappedLines []string
 	m.outputLines.Iterate(func(_ int, line string) bool {
@@ -931,38 +877,7 @@ func (m Model) wrapAllOutputLines() []string {
 	return wrappedLines
 }
 
-// updateWrappedLinesCache rebuilds or updates the wrapped lines cache.
-// Call this when content changes (new line) or width changes (resize).
-func (m *Model) updateWrappedLinesCache() {
-	width := m.layout.ContentWidth()
-	lineCount := m.outputLines.Len()
-
-	// Check if cache is still valid
-	if m.wrappedLinesCache != nil && m.cacheWidth == width && m.cacheLineCount == lineCount {
-		return
-	}
-
-	// Rebuild the cache
-	var wrappedLines []string
-	m.outputLines.Iterate(func(_ int, line string) bool {
-		wrapped := wrapLine(line, width)
-		wrappedLines = append(wrappedLines, wrapped...)
-		return true
-	})
-
-	m.wrappedLinesCache = wrappedLines
-	m.cacheWidth = width
-	m.cacheLineCount = lineCount
-}
-
-// invalidateWrappedLinesCache clears the cache, forcing a rebuild on next access.
-func (m *Model) invalidateWrappedLinesCache() {
-	m.wrappedLinesCache = nil
-	m.cacheWidth = 0
-	m.cacheLineCount = 0
-}
-
-// renderScrollArea renders the scrolling output region.
+// renderScrollArea renders the scrolling output region using the viewport.
 func (m Model) renderScrollArea() string {
 	height := m.layout.ScrollAreaHeight
 	contentWidth := m.layout.ContentWidth()
@@ -975,12 +890,11 @@ func (m Model) renderScrollArea() string {
 		contentWidth = 0
 	}
 
-	wrappedLines := m.wrapAllOutputLines()
 	border := m.styles.Border.Render(BoxVertical)
 	emptyLine := border + strings.Repeat(" ", contentWidth) + border
 
 	// Empty state: show waiting message
-	if len(wrappedLines) == 0 {
+	if m.outputLines.Len() == 0 {
 		var lines []string
 		midHeight := height / 2
 		for i := 0; i < midHeight-1; i++ {
@@ -1005,45 +919,26 @@ func (m Model) renderScrollArea() string {
 		return strings.Join(lines, "\n")
 	}
 
-	// Determine start index based on scroll state
-	var startIdx int
-	if m.outputTailing {
-		// Tailing: show most recent lines
-		startIdx = 0
-		if len(wrappedLines) > height {
-			startIdx = len(wrappedLines) - height
-		}
-	} else {
-		// Scrolling: use the scroll offset
-		startIdx = m.outputScroll
-		// Clamp to valid range
-		maxOffset := len(wrappedLines) - height
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-		if startIdx > maxOffset {
-			startIdx = maxOffset
-		}
-		if startIdx < 0 {
-			startIdx = 0
-		}
-	}
+	// Get viewport content
+	viewContent := m.viewport.View()
+	viewLines := strings.Split(viewContent, "\n")
 
+	// Build output with borders
 	var lines []string
-	for i := startIdx; i < len(wrappedLines) && len(lines) < height; i++ {
-		line := wrappedLines[i]
+	for i := 0; i < height; i++ {
+		var line string
+		if i < len(viewLines) {
+			line = viewLines[i]
+		}
 		// Pad line to content width
 		lineWidth := ansi.StringWidth(line)
 		padding := contentWidth - lineWidth
 		if padding < 0 {
+			// Truncate if line exceeds width
+			line = ansi.Truncate(line, contentWidth, "")
 			padding = 0
 		}
 		lines = append(lines, border+line+strings.Repeat(" ", padding)+border)
-	}
-
-	// Pad with empty lines if needed
-	for len(lines) < height {
-		lines = append(lines, emptyLine)
 	}
 
 	return strings.Join(lines, "\n")
@@ -1590,35 +1485,30 @@ func (m *Model) SetTasks(tasks []Task) {
 
 // AppendOutput adds a line to the output buffer.
 // When the buffer is full, the oldest line is evicted automatically.
-// This also updates the wrapped lines cache incrementally when possible.
+// This also updates the viewport content and maintains tailing mode.
 func (m *Model) AppendOutput(line string) {
 	m.outputLines.Push(line)
-	m.appendLineToCache(line)
+	m.syncViewportContent()
 }
 
-// appendLineToCache updates the wrapped lines cache after a new line is pushed.
-// It attempts incremental update if possible, otherwise rebuilds the cache.
-func (m *Model) appendLineToCache(line string) {
-	if m.wrappedLinesCache != nil && m.cacheWidth == m.layout.ContentWidth() {
-		// Check if ring buffer wrapped (evicted old lines)
-		if m.outputLines.Len() == m.cacheLineCount+1 {
-			// Normal case: just append the new wrapped lines
-			wrapped := wrapLine(line, m.cacheWidth)
-			m.wrappedLinesCache = append(m.wrappedLinesCache, wrapped...)
-			m.cacheLineCount = m.outputLines.Len()
-		} else {
-			// Ring buffer wrapped, need full rebuild
-			m.invalidateWrappedLinesCache()
-			m.updateWrappedLinesCache()
-		}
-	} else if m.ready {
-		// No valid cache, build it
-		m.updateWrappedLinesCache()
+// syncViewportContent rebuilds viewport content from the ring buffer.
+// If tailing is enabled, it scrolls to the bottom after content update.
+func (m *Model) syncViewportContent() {
+	var lines []string
+	m.outputLines.Iterate(func(_ int, line string) bool {
+		lines = append(lines, line)
+		return true
+	})
+	m.viewport.SetContent(strings.Join(lines, "\n"))
+
+	// If tailing, scroll to bottom
+	if m.outputTailing {
+		m.viewport.GotoBottom()
 	}
 }
 
-// ClearOutput clears the output buffer and cache.
+// ClearOutput clears the output buffer and viewport.
 func (m *Model) ClearOutput() {
 	m.outputLines.Clear()
-	m.invalidateWrappedLinesCache()
+	m.viewport.SetContent("")
 }
