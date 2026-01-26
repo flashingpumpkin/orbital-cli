@@ -248,3 +248,78 @@ Both Story 1 and Story 2 have only "Manual verification" items remaining. These 
 - Story 1: Output scrolls correctly, tailing works on new content
 - Story 2: File tabs scroll independently
 
+## Code Review - Iteration 3
+
+### Security
+No issues. The viewport migration is purely internal TUI state management. No new external input handling, network operations, or authentication changes. File paths originate from the parent orchestration layer. Map accesses use comma-ok idiom for safety. The bubbletea architecture is inherently single-threaded for state updates.
+
+### Design
+_ISSUES_FOUND
+
+1. **Inconsistent viewport usage pattern**: Output tab uses `viewport.View()` for rendering; file tabs only use `viewport.YOffset` and do manual rendering. The file viewports store content via `SetContent()` that is never used for rendering, creating a leaky abstraction.
+
+2. **Code duplication in scroll handlers**: Six methods (handleScrollUp/Down/PageUp/PageDown/Home/End) share 80% identical structure. Could extract a helper method for viewport selection and the get-modify-store pattern.
+
+3. **Value type verbose pattern**: Storing `viewport.Model` (value type) in a map requires verbose get-modify-store on every scroll operation. Could use `*viewport.Model` pointers instead.
+
+### Logic
+_ISSUES_FOUND
+
+1. **Early return in syncFileViewport loses modifications**: If `vp.Height <= 0` (during resize to small terminal), the function returns without saving the viewport back to the map. This loses any previous scroll position. When terminal becomes larger, a new viewport is created at position 0.
+
+2. **Dead code in width guard**: After clamping `vp.Width` to minimum 1 (line 1508-1510), the subsequent check `if vp.Width <= 0` (line 1515) can never be true.
+
+3. **Viewport content never used**: `syncFileViewport` calls `vp.SetContent(content)` but `renderFileContent` reads raw `fileContents[path]` and only uses `vp.YOffset`. The content storage is wasteful.
+
+### Error Handling
+_ISSUES_FOUND
+
+1. **WindowSizeMsg iterates over wrong map**: The resize handler iterates over `fileViewports` (line 187) but should iterate over `fileContents`. Files loaded before `WindowSizeMsg` (when dimensions are invalid) never get viewports created, causing permanent scroll failure.
+
+2. **Silent scroll failure**: When viewport is missing for a file tab, scroll operations silently do nothing. No feedback to user, no attempt to create the missing viewport.
+
+### Data Integrity
+_ISSUES_FOUND
+
+1. **State inconsistency between maps**: Files loaded when dimensions are invalid have content in `fileContents` but no viewport in `fileViewports`. The resize handler only syncs existing viewports, leaving these files permanently without scroll capability.
+
+2. **Same root cause as error handling issue**: The fix is to iterate over `fileContents` in the resize handler, not `fileViewports`.
+
+### Verdict
+**FAIL**
+
+Primary issue: The `WindowSizeMsg` handler iterates over `fileViewports` but should iterate over `fileContents`. This causes files loaded before valid dimensions to permanently lack viewport support.
+
+**Required fix** (line 187-189):
+```go
+// Before:
+for path := range m.fileViewports {
+
+// After:
+for path := range m.fileContents {
+```
+
+Secondary issue: The early return in `syncFileViewport` (line 1516) discards viewport modifications without saving, potentially losing scroll position on extreme resize sequences.
+
+The design issues (inconsistent viewport usage, code duplication, value type verbosity) are acceptable technical debt that doesn't block functionality.
+
+## Iteration 4: Review Fixes for Story 2
+
+### Issues Addressed
+
+**Error Handling Issue 1 (PRIMARY)**: WindowSizeMsg iterates over wrong map
+- **Fix**: Changed `for path := range m.fileViewports` to `for path := range m.fileContents` in `WindowSizeMsg` handler (line 187-189)
+- **Rationale**: Files loaded before `WindowSizeMsg` arrives (when dimensions are invalid) have content in `fileContents` but no viewport in `fileViewports`. By iterating over `fileContents`, we ensure all files get their viewports created or updated when valid dimensions become available. This prevents the permanent scroll failure bug.
+
+**Logic Issue 1**: Early return in syncFileViewport loses modifications
+- **Fix**: Added `m.fileViewports[path] = vp` before the early return when height is invalid
+- **Rationale**: During extreme resize sequences (e.g., very small terminal), the viewport dimensions may become invalid but we should still preserve scroll position. Saving the viewport before returning ensures scroll state is not lost.
+
+**Logic Issue 2**: Dead code in width guard
+- **Fix**: Removed the `vp.Width <= 0` check since width is already clamped to minimum 1 on line 1508-1510
+- **Rationale**: The width clamp ensures `vp.Width >= 1`, so `vp.Width <= 0` can never be true. Only the height check is needed.
+
+### Verification
+
+All tests pass (`make check`).
+

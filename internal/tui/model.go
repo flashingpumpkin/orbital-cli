@@ -183,8 +183,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 		}
 
-		// Update all file viewports dimensions
-		for path := range m.fileViewports {
+		// Update all file viewports dimensions.
+		// Iterate over fileContents (not fileViewports) to ensure files loaded
+		// before valid dimensions are established get their viewports created.
+		for path := range m.fileContents {
 			m.syncFileViewport(path)
 		}
 
@@ -1511,8 +1513,11 @@ func (m *Model) syncFileViewport(path string) {
 	}
 	vp.Height = m.layout.ScrollAreaHeight
 
-	// Guard against zero-dimension viewport
-	if vp.Width <= 0 || vp.Height <= 0 {
+	// Guard against zero-height viewport.
+	// Save the viewport first to preserve scroll position even if dimensions are invalid.
+	// This prevents losing scroll state during extreme resize sequences.
+	if vp.Height <= 0 {
+		m.fileViewports[path] = vp
 		return
 	}
 
