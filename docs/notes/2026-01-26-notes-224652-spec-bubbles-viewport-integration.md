@@ -323,3 +323,38 @@ The design issues (inconsistent viewport usage, code duplication, value type ver
 
 All tests pass (`make check`).
 
+## Iteration 5: Final State Assessment
+
+### Task Selection
+
+Assessed the remaining work to determine highest leverage action.
+
+### Remaining Items
+
+Both stories have only "Manual verification" items remaining:
+- Story 1: `[ ] Manual verification: output scrolls correctly, tailing works on new content`
+- Story 2: `[ ] Manual verification: file tabs scroll independently`
+
+### Blocker
+
+These items require human interaction with a running instance of the TUI. They cannot be completed through automated means. The autonomous loop cannot:
+- Launch the TUI interactively
+- Scroll through output
+- Switch between file tabs
+- Verify visual behaviour
+
+### Recommendation
+
+A human operator should:
+1. Run `orbital --tui` with a spec file that produces substantial output
+2. Verify output panel scrolls with arrow keys, Page Up/Down, Home/End
+3. Verify new output auto-scrolls to bottom (tailing)
+4. Verify scrolling up disables tailing, scrolling to bottom re-enables it
+5. Open multiple file tabs
+6. Verify each tab scrolls independently
+7. Mark the acceptance criteria as complete in the spec file
+
+### Verification Status
+
+All automated checks pass (`make check`). All code changes are complete and reviewed. Only manual verification remains.
+
