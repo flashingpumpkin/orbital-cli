@@ -65,3 +65,83 @@ Decision: Keep RingBuffer for memory bounds, set viewport content from buffer co
 - Manual verification of scrolling and tailing behaviour
 - Story 2: File content tabs migration
 
+## Code Review - Iteration 1
+
+### Security
+No issues. The ring buffer provides bounded memory (10,000 lines max), preventing DoS. File size limits (1MB) are enforced. No injection vectors or information disclosure concerns.
+
+### Design
+_ISSUES_FOUND
+
+1. **Dual data storage creates synchronisation burden**: Model maintains both `RingBuffer` and `viewport.Model` storing the same data. Every `AppendOutput()` rebuilds the entire content string (O(n) at 10,000 lines). Consider rendering only visible content or using viewport as single source of truth.
+
+2. **Inconsistent scrolling abstractions**: Output tab uses viewport component; file tabs use manual `fileScroll` offsets. This creates duplicate scroll logic and inconsistent page scroll distances (viewport uses HalfPage, files use full page).
+
+3. **Test-only method in production code**: `wrapAllOutputLines()` exists solely for tests. Should be moved to test file or tests should verify behaviour through public interfaces.
+
+4. **Feature envy in file tab scroll handling**: Scroll boundary calculations are duplicated across 6 methods. Extract a `FileTabState` struct to own scroll logic.
+
+### Logic
+_ISSUES_FOUND
+
+1. **CRITICAL - ClearOutput() does not reset outputTailing**: If user scrolls up then clears output, `outputTailing` remains false. New content won't auto-scroll to bottom. Fix: add `m.outputTailing = true` in `ClearOutput()`.
+
+2. **Wrapping mismatch**: `syncViewportContent()` pushes raw lines to viewport. `wrapAllOutputLines()` (used by tests) applies custom list-aware wrapping. Tests may not reflect actual render behaviour.
+
+3. **Viewport initialised with 0x0 dimensions**: Content can be added before `WindowSizeMsg` arrives. Viewport operations on zero dimensions have undefined behaviour.
+
+### Error Handling
+No issues. Guards exist for zero/negative dimensions. Viewport component handles edge cases internally. Ring buffer iteration is safe for empty state.
+
+### Data Integrity
+_ISSUES_FOUND
+
+1. **outputTailing flag desync after window resize**: Resize changes viewport dimensions but doesn't sync `outputTailing` with `viewport.AtBottom()`. User may miss new content if resize puts them at bottom but flag remains false.
+
+2. **Zero-dimension viewport operations**: `syncViewportContent()` should guard against viewport.Width/Height being zero to avoid undefined behaviour.
+
+### Verdict
+**FAIL**
+
+Critical issue: `ClearOutput()` doesn't reset `outputTailing`, causing new content to not auto-scroll after clear. This is a functional bug that affects normal usage.
+
+Secondary concerns:
+- Design debt from dual data storage (performance impact at scale)
+- Inconsistent abstractions between output and file tabs
+- Missing guard for zero-dimension viewport
+
+Recommend fixing the `ClearOutput()` bug before marking this iteration complete.
+
+## Iteration 2: Review Fixes
+
+### Issues Addressed
+
+**Logic Issue 1 (CRITICAL)**: `ClearOutput()` does not reset `outputTailing`
+- **Fix**: Added `m.outputTailing = true` to `ClearOutput()` method
+- **Rationale**: When output is cleared, the user expects new content to auto-scroll. Resetting tailing ensures new content appears at the bottom.
+
+**Data Integrity Issue 1**: `outputTailing` flag desync after window resize
+- **Fix**: Added tailing sync logic after resize in `WindowSizeMsg` handler
+- **Rationale**: If the user was tailing before resize, or if the resize puts them at the bottom, maintain tailing mode and call `GotoBottom()` to ensure consistent behaviour.
+
+**Data Integrity Issue 2**: Zero-dimension viewport operations
+- **Fix**: Added guard in `syncViewportContent()` to return early if `viewport.Width <= 0 || viewport.Height <= 0`
+- **Rationale**: Before `WindowSizeMsg` arrives, the viewport has 0x0 dimensions. Operations on such a viewport have undefined behaviour. The guard prevents content from being set until valid dimensions are established.
+
+**Test Updates**
+- Updated tests that used `Height: 20` to use `Height: 24` (the minimum valid terminal height)
+- This was necessary because the zero-dimension guard correctly prevents viewport operations when the layout is marked as "too small" (height < 24)
+
+### Issues Not Addressed (Deferred)
+
+The following design issues were identified in the review but are out of scope for Story 1:
+
+- **Dual data storage**: The RingBuffer + viewport approach is intentional for bounded memory. The O(n) cost at 10,000 lines is acceptable given the interactive nature of the UI.
+- **Inconsistent scrolling abstractions**: Story 2 will migrate file tabs to viewport, addressing this inconsistency.
+- **Test-only method**: `wrapAllOutputLines()` can be cleaned up in a future refactoring pass.
+- **Feature envy in file tab scroll handling**: Will be addressed when file tabs migrate to viewport in Story 2.
+
+### Verification
+- All tests pass (`make check`)
+- Build succeeds (`make build`)
+

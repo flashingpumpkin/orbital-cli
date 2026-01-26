@@ -175,6 +175,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Rebuild viewport content from ring buffer
 		m.syncViewportContent()
 
+		// Sync tailing state with viewport position after resize.
+		// If the resize puts the user at the bottom, enable tailing;
+		// if they were at the bottom but resize changed that, keep tailing.
+		if m.outputTailing || m.viewport.AtBottom() {
+			m.outputTailing = true
+			m.viewport.GotoBottom()
+		}
+
 		return m, nil
 
 	case StatsMsg:
@@ -1494,6 +1502,12 @@ func (m *Model) AppendOutput(line string) {
 // syncViewportContent rebuilds viewport content from the ring buffer.
 // If tailing is enabled, it scrolls to the bottom after content update.
 func (m *Model) syncViewportContent() {
+	// Guard against zero-dimension viewport (before WindowSizeMsg arrives).
+	// Viewport operations on zero dimensions have undefined behaviour.
+	if m.viewport.Width <= 0 || m.viewport.Height <= 0 {
+		return
+	}
+
 	var lines []string
 	m.outputLines.Iterate(func(_ int, line string) bool {
 		lines = append(lines, line)
@@ -1508,7 +1522,9 @@ func (m *Model) syncViewportContent() {
 }
 
 // ClearOutput clears the output buffer and viewport.
+// It also resets tailing mode so new content will auto-scroll.
 func (m *Model) ClearOutput() {
 	m.outputLines.Clear()
 	m.viewport.SetContent("")
+	m.outputTailing = true
 }

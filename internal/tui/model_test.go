@@ -798,7 +798,7 @@ func TestScrollUpOutputTab(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
@@ -827,7 +827,7 @@ func TestScrollUpOutputTab(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
@@ -856,7 +856,7 @@ func TestScrollUpOutputTab(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
@@ -909,7 +909,7 @@ func TestScrollUpOutputTab(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
@@ -943,7 +943,7 @@ func TestScrollDownOutputTab(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
@@ -972,7 +972,7 @@ func TestScrollDownOutputTab(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
@@ -1013,7 +1013,7 @@ func TestScrollDownOutputTab(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
@@ -1077,7 +1077,7 @@ func TestScrollDownOutputTab(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
@@ -1362,7 +1362,7 @@ func TestWrapAllOutputLines(t *testing.T) {
 	m := NewModel()
 
 	// Set up valid dimensions
-	msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+	msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 	updatedModel, _ := m.Update(msg)
 	model := updatedModel.(Model)
 
@@ -1889,7 +1889,7 @@ func TestViewportScrollPerformance(t *testing.T) {
 		m := NewModel()
 
 		// Set up valid dimensions
-		msg := tea.WindowSizeMsg{Width: 80, Height: 20}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, _ := m.Update(msg)
 		model := updatedModel.(Model)
 
