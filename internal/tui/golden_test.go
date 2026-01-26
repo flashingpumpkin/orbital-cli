@@ -343,35 +343,13 @@ func TestGoldenANSISequences(t *testing.T) {
 	assertGolden(t, []byte(output))
 }
 
-// TestGoldenVeryNarrowTerminal tests the TUI in a very narrow terminal (60 cols).
-// This is narrower than the default 80 and exercises edge cases in layout.
-func TestGoldenVeryNarrowTerminal(t *testing.T) {
+// TestGoldenTerminalTooNarrow tests the TUI error message when terminal is below minimum width.
+// The minimum supported width is 80 columns (MinTerminalWidth). When the terminal is narrower,
+// the TUI displays an error message instead of the normal interface.
+func TestGoldenTerminalTooNarrow(t *testing.T) {
 	opts := GoldenTestOptions{
-		Width:  60, // Very narrow
+		Width:  60, // Below MinTerminalWidth (80)
 		Height: 24,
-		Progress: &ProgressInfo{
-			Iteration:    5,
-			MaxIteration: 50,
-			StepName:     "implement",
-			StepPosition: 2,
-			StepTotal:    4,
-			TokensIn:     10000,
-			TokensOut:    5000,
-			Cost:         2.50,
-			Budget:       10.00,
-		},
-		Tasks: []Task{
-			{ID: "1", Content: "This is a task with a very long description that needs truncation", Status: "in_progress"},
-		},
-		Session: &SessionInfo{
-			SpecFiles: []string{"/path/to/spec.md"},
-			NotesFile: "/path/to/notes.md",
-		},
-	}
-	opts.OutputLines = []string{
-		"This is a line of output that is quite long and may need wrapping in narrow mode",
-		"Short line",
-		"Another moderately long line that tests the wrapping behaviour",
 	}
 
 	output := renderToString(t, opts)

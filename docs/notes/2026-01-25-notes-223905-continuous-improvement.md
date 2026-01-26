@@ -1467,3 +1467,101 @@ This was the next unchecked item in the Acceptance testing for UI rendering sect
 - `make check` passes (lint and tests)
 - `make build` succeeds
 - All 7 TestGolden* tests pass
+
+## Code Review - Iteration 18
+
+### Security
+No issues. The changes are test code with golden file assertions. No external input vectors, no injection risks, no authentication concerns. Golden files contain only expected TUI output strings.
+
+### Design
+No issues. The golden file testing follows the established charmbracelet pattern. Tests are well-organised with clear naming.
+
+### Logic
+No issues. The test assertions correctly compare rendered output against golden files.
+
+### Error Handling
+No issues. Test code uses proper t.Fatal and assertion helpers from the golden package.
+
+### Data Integrity
+No issues. Golden files correctly capture expected TUI states.
+
+### Verdict
+**PASS**
+
+The golden file tests provide concrete regression protection for TUI rendering. All six key UI states are covered: empty, with progress, single task, multiple tasks, scrolling content, and narrow terminal.
+
+## Iteration 19 - 2026-01-26 (Golden File Edge Cases)
+
+### Task Selected
+Add golden file tests for edge cases in TUI rendering.
+
+### Changes
+Added 4 new golden file tests for edge cases:
+- `TestGoldenLongPaths`: Very long file paths that test truncation
+- `TestGoldenUnicodeContent`: Unicode characters (Chinese, Russian, emoji) in content
+- `TestGoldenANSISequences`: ANSI escape codes in output content
+- `TestGoldenVeryNarrowTerminal`: 60-column terminal (below minimum width)
+
+Also removed `version: "2"` from `.golangci.yml` as it was causing a warning.
+
+## Code Review - Iteration 19
+
+### Security
+No issues. Pure test code with hardcoded test data. No external input processing, no injection risks, no sensitive data.
+
+### Design
+No issues. Tests follow established golden file patterns. Each test covers a distinct edge case.
+
+### Logic
+**_ISSUES_FOUND_**
+
+1. **TestGoldenVeryNarrowTerminal tests wrong behaviour** (golden_test.go:346-384)
+   - Test comment claims it "exercises edge cases in layout" with 60-column terminal
+   - But `MinTerminalWidth` is 80 columns (layout.go:5)
+   - Width 60 triggers "TooSmall = true" and renders only "Terminal too narrow. Minimum width: 80 columns"
+   - All test data (Progress, Tasks, Session, OutputLines) is constructed but never rendered
+   - The golden file confirms only the "too small" message is captured
+
+   **Impact**: Misleading test name and comment. The test actually verifies the "too narrow" error message, not layout edge cases.
+
+   **Recommended fix**: Either:
+   - Option A: Rename test to clarify it tests the error message path
+   - Option B: Change width to 80 to actually test minimum supported layout
+
+### Error Handling
+No issues. Test assertions are proper for test code.
+
+### Data Integrity
+No issues. Golden files correctly capture rendered output (including the "too small" message for the 60-column test).
+
+### Verdict
+**FAIL**
+
+The logic reviewer identified that `TestGoldenVeryNarrowTerminal` is misleading:
+- Test name and comment suggest it tests layout edge cases
+- Actually tests the "terminal too narrow" error message
+- All test data (Progress, Tasks, etc.) is dead code that never gets rendered
+
+**Required fixes before PASS:**
+1. Either rename the test to `TestGoldenTerminalTooNarrow` and simplify test data, OR
+2. Change width to 80 and verify actual layout rendering
+
+## Iteration 20 - 2026-01-26 (Review Fixes Round 5)
+
+### Issues Addressed
+
+The required fix from Code Review - Iteration 19 has been addressed:
+
+1. **Misleading test name and dead test data** (golden_test.go:346-384)
+   - **Problem**: `TestGoldenVeryNarrowTerminal` name and comment suggested it tested layout edge cases, but with `Width: 60` (below MinTerminalWidth of 80), it actually tested the "terminal too narrow" error message. All test data (Progress, Tasks, Session, OutputLines) was dead code that never rendered.
+   - **Fix**: Renamed test to `TestGoldenTerminalTooNarrow` and simplified test data since it's not rendered anyway. Updated comment to accurately describe the test's purpose.
+   - **Why**: Test names and comments should accurately describe what is being tested. The simplified test data removes confusion about what the test verifies.
+
+### Files Modified
+- `internal/tui/golden_test.go`: Renamed and simplified test
+- `internal/tui/testdata/TestGoldenTerminalTooNarrow.golden`: Renamed from `TestGoldenVeryNarrowTerminal.golden`
+
+### Verification
+- `make check` passes (lint and tests)
+- `make build` succeeds
+- All 11 golden tests pass including renamed `TestGoldenTerminalTooNarrow`
