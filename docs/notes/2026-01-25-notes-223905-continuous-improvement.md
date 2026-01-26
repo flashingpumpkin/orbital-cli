@@ -1232,3 +1232,66 @@ Added 3 test cases to `TestDetectListIndent`:
 - `make check` passes (lint and tests)
 - `make build` succeeds
 - All 30 model tests pass (including 15 `TestDetectListIndent` cases)
+
+## Code Review - Iteration 15
+
+### Security
+No issues. The changes fix a bug in tab handling for list indentation detection. Pure string processing for display purposes with no external input vectors, no injection risks, no authentication concerns.
+
+### Design
+No issues. The fix correctly separates byte offset tracking from visual width tracking, which is the proper approach when dealing with characters that have different byte widths and visual widths.
+
+### Logic
+No issues. The fix is correct:
+- `leadingBytes` tracks byte position using `i + 1` from the range iteration index
+- `leadingWidth` tracks visual width (1 per space, 4 per tab)
+- Both space and tab are single-byte ASCII characters, so `i + 1` correctly computes the byte offset
+- The loop only processes spaces and tabs (both single-byte), so no multi-byte character handling is needed in this section
+
+### Error Handling
+No issues. Pure rendering function with no failure modes.
+
+### Data Integrity
+No issues. The fix correctly separates byte offset from visual width, ensuring string slicing uses bytes while indentation calculation uses visual width.
+
+### Verdict
+**PASS**
+
+The fix correctly addresses the tab handling bug by tracking byte offset and visual width separately. Test coverage added for tab scenarios confirms the fix works correctly.
+
+## Iteration 16 - 2026-01-26 (Bubbletea Testing Research)
+
+### Task Selected
+Research Bubbletea testing patterns (teatest package, golden file testing).
+
+### Why Highest Leverage
+This research task is the foundation for implementing acceptance tests for UI rendering. Understanding the available testing tools and their trade-offs informs the approach for subsequent golden file testing tasks. The spec explicitly lists this as the first step before creating test harnesses and golden files.
+
+### Key Findings
+
+1. **teatest package**: Located in `charmbracelet/x/exp/teatest`, provides full integration testing with:
+   - `NewTestModel()` for creating test harness with terminal dimensions
+   - `Send()` and `Type()` for message/input simulation
+   - `WaitFor()` for condition-based waiting
+   - `RequireEqualOutput()` for golden file comparison with `-update` flag
+
+2. **Current test approach**: The existing isolated model tests are effective for state transitions and layout calculations. They bypass the full event loop but provide fast, deterministic testing.
+
+3. **Golden file considerations**:
+   - Colour profiles differ between local/CI environments
+   - Need `.gitattributes` to prevent line ending changes
+   - Use `NO_COLOR=1` for deterministic output
+
+4. **Recommended approach**: Hybrid strategy that keeps isolated model tests for logic and adds teatest-based golden file tests for key UI states.
+
+### Outcome
+Created research document: `docs/research/2026-01-26-001750-bubbletea-testing-patterns.md`
+
+Document covers:
+- Three testing approaches (isolated, teatest, catwalk)
+- Implementation steps for adding golden file tests
+- Risks and mitigations for CI/CD
+- References to upstream documentation
+
+### Verification
+Documentation only iteration; no code changes to verify.

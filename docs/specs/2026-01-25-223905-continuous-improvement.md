@@ -64,7 +64,7 @@ Reference screenshots: docs/plans/broken-tui-rendering.png, docs/plans/broken-tu
 - [ ] Show sub-agent progress or status alongside the task description
 
 #### Acceptance testing for UI rendering
-- [ ] Research Bubbletea testing patterns (teatest package, golden file testing)
+- [x] Research Bubbletea testing patterns (teatest package, golden file testing)
 - [ ] Create test harness that can render TUI to string for snapshot comparison
 - [ ] Add golden file tests for key UI states: empty, single task, multiple tasks, scrolling content
 - [ ] Add golden file tests for edge cases: long paths, Unicode content, ANSI sequences, narrow terminal
