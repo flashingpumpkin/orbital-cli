@@ -922,18 +922,28 @@ func TestScrollUpOutputTab(t *testing.T) {
 		// Switch to file tab (tab 1)
 		model.activeTab = 1
 
-		// Set file content and initial scroll
+		// Set file content (this triggers viewport creation)
 		model.fileContents["/path/to/spec.md"] = strings.Repeat("Line\n", 50)
-		model.fileScroll["/path/to/spec.md"] = 10
+		model.syncFileViewport("/path/to/spec.md")
+
+		// Set initial scroll position via viewport
+		if vp, ok := model.fileViewports["/path/to/spec.md"]; ok {
+			vp.SetYOffset(10)
+			model.fileViewports["/path/to/spec.md"] = vp
+		}
 
 		// Press up arrow
 		keyMsg := tea.KeyMsg{Type: tea.KeyUp}
 		updatedModel, _ = model.Update(keyMsg)
 		model = updatedModel.(Model)
 
-		// Verify file scroll decremented
-		if model.fileScroll["/path/to/spec.md"] != 9 {
-			t.Errorf("expected file scroll to be 9, got %d", model.fileScroll["/path/to/spec.md"])
+		// Verify file scroll decremented via viewport
+		if vp, ok := model.fileViewports["/path/to/spec.md"]; ok {
+			if vp.YOffset != 9 {
+				t.Errorf("expected file viewport YOffset to be 9, got %d", vp.YOffset)
+			}
+		} else {
+			t.Error("expected file viewport to exist")
 		}
 	})
 }
@@ -1090,18 +1100,28 @@ func TestScrollDownOutputTab(t *testing.T) {
 		// Switch to file tab (tab 1)
 		model.activeTab = 1
 
-		// Set file content and initial scroll
+		// Set file content (this triggers viewport creation)
 		model.fileContents["/path/to/spec.md"] = strings.Repeat("Line\n", 50)
-		model.fileScroll["/path/to/spec.md"] = 5
+		model.syncFileViewport("/path/to/spec.md")
+
+		// Set initial scroll position via viewport
+		if vp, ok := model.fileViewports["/path/to/spec.md"]; ok {
+			vp.SetYOffset(5)
+			model.fileViewports["/path/to/spec.md"] = vp
+		}
 
 		// Press down arrow
 		keyMsg := tea.KeyMsg{Type: tea.KeyDown}
 		updatedModel, _ = model.Update(keyMsg)
 		model = updatedModel.(Model)
 
-		// Verify file scroll incremented
-		if model.fileScroll["/path/to/spec.md"] != 6 {
-			t.Errorf("expected file scroll to be 6, got %d", model.fileScroll["/path/to/spec.md"])
+		// Verify file scroll incremented via viewport
+		if vp, ok := model.fileViewports["/path/to/spec.md"]; ok {
+			if vp.YOffset != 6 {
+				t.Errorf("expected file viewport YOffset to be 6, got %d", vp.YOffset)
+			}
+		} else {
+			t.Error("expected file viewport to exist")
 		}
 	})
 }
@@ -1205,23 +1225,30 @@ func TestScrollPageUpOutputTab(t *testing.T) {
 		// Switch to file tab (tab 1)
 		model.activeTab = 1
 
-		// Set file content and initial scroll
+		// Set file content (this triggers viewport creation)
 		model.fileContents["/path/to/spec.md"] = strings.Repeat("Line\n", 100)
-		model.fileScroll["/path/to/spec.md"] = 50
+		model.syncFileViewport("/path/to/spec.md")
+
+		// Set initial scroll position via viewport
+		if vp, ok := model.fileViewports["/path/to/spec.md"]; ok {
+			vp.SetYOffset(50)
+			model.fileViewports["/path/to/spec.md"] = vp
+		}
+
+		previousOffset := 50
 
 		// Press page up
 		keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
 		updatedModel, _ = model.Update(keyMsg)
 		model = updatedModel.(Model)
 
-		// Verify file scroll moved up by page height
-		height := model.layout.ScrollAreaHeight
-		expectedScroll := 50 - height
-		if expectedScroll < 0 {
-			expectedScroll = 0
-		}
-		if model.fileScroll["/path/to/spec.md"] != expectedScroll {
-			t.Errorf("expected file scroll to be %d, got %d", expectedScroll, model.fileScroll["/path/to/spec.md"])
+		// Verify file scroll moved up (HalfPageUp moves by half viewport height)
+		if vp, ok := model.fileViewports["/path/to/spec.md"]; ok {
+			if vp.YOffset >= previousOffset {
+				t.Errorf("expected file viewport YOffset to decrease, was %d, now %d", previousOffset, vp.YOffset)
+			}
+		} else {
+			t.Error("expected file viewport to exist")
 		}
 	})
 }
@@ -1338,22 +1365,30 @@ func TestScrollPageDownOutputTab(t *testing.T) {
 		// Switch to file tab (tab 1)
 		model.activeTab = 1
 
-		// Set file content and initial scroll
+		// Set file content (this triggers viewport creation)
 		model.fileContents["/path/to/spec.md"] = strings.Repeat("Line\n", 100)
-		model.fileScroll["/path/to/spec.md"] = 10
+		model.syncFileViewport("/path/to/spec.md")
 
-		previousScroll := model.fileScroll["/path/to/spec.md"]
-		height := model.layout.ScrollAreaHeight
+		// Set initial scroll position via viewport
+		if vp, ok := model.fileViewports["/path/to/spec.md"]; ok {
+			vp.SetYOffset(10)
+			model.fileViewports["/path/to/spec.md"] = vp
+		}
+
+		previousOffset := 10
 
 		// Press page down
 		keyMsg := tea.KeyMsg{Type: tea.KeyPgDown}
 		updatedModel, _ = model.Update(keyMsg)
 		model = updatedModel.(Model)
 
-		// Verify file scroll moved down by page height
-		expectedScroll := previousScroll + height
-		if model.fileScroll["/path/to/spec.md"] != expectedScroll {
-			t.Errorf("expected file scroll to be %d, got %d", expectedScroll, model.fileScroll["/path/to/spec.md"])
+		// Verify file scroll moved down (HalfPageDown moves by half viewport height)
+		if vp, ok := model.fileViewports["/path/to/spec.md"]; ok {
+			if vp.YOffset <= previousOffset {
+				t.Errorf("expected file viewport YOffset to increase, was %d, now %d", previousOffset, vp.YOffset)
+			}
+		} else {
+			t.Error("expected file viewport to exist")
 		}
 	})
 }

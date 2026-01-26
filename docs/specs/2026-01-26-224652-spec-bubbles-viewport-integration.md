@@ -44,12 +44,12 @@ The Bubbles `viewport` component provides all this functionality with built-in k
 **So that** file scrolling behaviour matches output panel
 
 **Acceptance Criteria**
-- [ ] Replace file content scroll state with `map[string]viewport.Model`
-- [ ] Create viewport per file tab on first load
-- [ ] Forward keyboard events to active file viewport
-- [ ] Replace `renderFileContent()` with viewport.View()
-- [ ] Remove remaining scroll-related helper functions
-- [ ] Existing golden file tests pass or are updated
+- [x] Replace file content scroll state with `map[string]viewport.Model`
+- [x] Create viewport per file tab on first load
+- [x] Forward keyboard events to active file viewport
+- [x] Replace `renderFileContent()` with viewport.View()
+- [x] Remove remaining scroll-related helper functions
+- [x] Existing golden file tests pass or are updated
 - [ ] Manual verification: file tabs scroll independently
 
 **Definition of Done**

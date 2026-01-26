@@ -145,3 +145,106 @@ The following design issues were identified in the review but are out of scope f
 - All tests pass (`make check`)
 - Build succeeds (`make build`)
 
+## Code Review - Iteration 2
+
+### Security
+No issues. Changes are pure TUI state management (scroll position, viewport dimensions, tailing mode). No user input processing, file operations, network access, command execution, or authentication logic. No injection vectors.
+
+### Design
+No issues. Changes follow existing patterns:
+- Guard clause in `syncViewportContent()` is proper defensive programming
+- Tailing state sync in resize handler maintains state coherence
+- `ClearOutput()` reset is documented and intentional
+- Single responsibility maintained in each change
+
+### Logic
+No issues. After thorough analysis:
+- Zero-dimension guard correctly prevents undefined viewport operations
+- Lines stored in RingBuffer are preserved and processed when dimensions become valid
+- Resize tailing logic handles both cases: already tailing (stay tailing) and resize puts user at bottom (enable tailing)
+- `ClearOutput()` tailing reset is sensible UX for "start fresh" operation
+
+### Error Handling
+No issues. The changes actually improve error handling:
+- Zero-dimension guard prevents potential panics or undefined behaviour
+- Viewport methods (`AtBottom()`, `GotoBottom()`, `SetContent()`) don't return errors
+- No swallowed errors, silent failures, or resource leaks
+- Early return in guard is appropriate for transient zero-dimension state
+
+### Data Integrity
+No issues. Previous concerns addressed:
+- `ClearOutput()` now resets tailing (fixes critical bug from Iteration 1)
+- Zero-dimension guard prevents undefined viewport operations
+- Resize handler syncs tailing state with viewport position
+
+The concern about resize overwriting user scroll intent was analysed: the condition `m.outputTailing || m.viewport.AtBottom()` is intentional design. If resize coincidentally puts user at bottom, enabling tailing is reasonable UX (the comment documents this intent).
+
+### Verdict
+**PASS**
+
+All critical issues from Iteration 1 have been addressed:
+1. `ClearOutput()` now resets `outputTailing = true`
+2. Zero-dimension viewport guard added to `syncViewportContent()`
+3. Resize handler syncs tailing state with viewport position
+
+The code is production-ready. Changes are defensive, well-documented, and maintain proper state invariants.
+
+## Iteration 3: Story 2 Implementation
+
+### Task Selection
+
+Story 2 (File Content Tabs migration) was selected as the highest leverage task because:
+1. Story 1 is complete except for manual verification (requires human interaction)
+2. Story 2 follows the same pattern established in Story 1
+3. Completes the viewport migration for the entire TUI
+
+### Changes Made
+
+1. **Replaced `fileScroll map[string]int` with `fileViewports map[string]viewport.Model`**
+   - Each file tab now has its own viewport instance
+   - Scroll state is managed by the viewport component
+
+2. **Added `syncFileViewport()` helper function**
+   - Creates or updates viewport for a file when content is loaded
+   - Sets viewport dimensions (width excludes 6-char line number column)
+   - Guards against zero-dimension viewport operations
+
+3. **Updated scroll handlers for file tabs**
+   - `handleScrollUp()`: Uses `vp.ScrollUp(1)` instead of decrementing offset
+   - `handleScrollDown()`: Uses `vp.ScrollDown(1)` instead of incrementing offset
+   - `handleScrollPageUp()`: Uses `vp.HalfPageUp()` for consistent page scrolling
+   - `handleScrollPageDown()`: Uses `vp.HalfPageDown()` for consistent page scrolling
+   - `handleScrollHome()`: Uses `vp.GotoTop()`
+   - `handleScrollEnd()`: Uses `vp.GotoBottom()`
+
+4. **Updated `renderFileContent()` to use viewport scroll position**
+   - Gets scroll offset from `vp.YOffset` instead of `fileScroll` map
+   - Still renders line numbers manually (viewport doesn't support this)
+   - Maintains ANSI-aware truncation for long lines
+
+5. **Updated `WindowSizeMsg` handler**
+   - Resizes all file viewports when terminal dimensions change
+
+6. **Updated `reloadCurrentFile()`**
+   - Clears both `fileContents` and `fileViewports` for the file being reloaded
+
+7. **Updated tests**
+   - Tests now use `syncFileViewport()` and `vp.SetYOffset()` instead of `fileScroll`
+   - Assertions check `vp.YOffset` instead of `fileScroll[path]`
+
+### Design Decisions
+
+- **Kept line numbers in file rendering**: The viewport component doesn't support line numbers. Rather than remove this useful feature, I kept manual line number rendering while using the viewport for scroll state management. This is a hybrid approach that preserves functionality.
+
+- **Used `viewport.YOffset` for scroll position**: Rather than calling `viewport.View()` and parsing the output, I directly use the `YOffset` property to slice the file content. This is more efficient and maintains control over line number formatting.
+
+### Verification
+
+All tests pass (`make check`).
+
+### Remaining Work
+
+Both Story 1 and Story 2 have only "Manual verification" items remaining. These require human interaction to verify:
+- Story 1: Output scrolls correctly, tailing works on new content
+- Story 2: File tabs scroll independently
+

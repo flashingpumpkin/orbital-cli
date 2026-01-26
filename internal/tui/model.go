@@ -76,10 +76,10 @@ type Model struct {
 	session     SessionInfo
 
 	// Tabs
-	tabs         []Tab             // List of tabs
-	activeTab    int               // Index of active tab
-	fileContents map[string]string // Cached file contents by path
-	fileScroll   map[string]int    // Scroll offset per file
+	tabs          []Tab                      // List of tabs
+	activeTab     int                        // Index of active tab
+	fileContents  map[string]string          // Cached file contents by path
+	fileViewports map[string]viewport.Model  // Viewport per file tab
 
 	// Output scrolling
 	outputTailing bool // Whether the output window is locked to the bottom (auto-scrolling)
@@ -101,7 +101,7 @@ func NewModel() Model {
 		tabs:          []Tab{{Name: "Output", Type: TabOutput}},
 		activeTab:     0,
 		fileContents:  make(map[string]string),
-		fileScroll:    make(map[string]int),
+		fileViewports: make(map[string]viewport.Model),
 		outputTailing: true,
 		styles:        defaultStyles(),
 		progress: ProgressInfo{
@@ -168,7 +168,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.layout = CalculateLayout(msg.Width, msg.Height, len(m.tasks))
 		m.ready = true
 
-		// Update viewport dimensions
+		// Update output viewport dimensions
 		m.viewport.Width = m.layout.ContentWidth()
 		m.viewport.Height = m.layout.ScrollAreaHeight
 
@@ -181,6 +181,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.outputTailing || m.viewport.AtBottom() {
 			m.outputTailing = true
 			m.viewport.GotoBottom()
+		}
+
+		// Update all file viewports dimensions
+		for path := range m.fileViewports {
+			m.syncFileViewport(path)
 		}
 
 		return m, nil
@@ -222,6 +227,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.fileContents[msg.Path] = msg.Content
 		}
+		// Create or update viewport for this file
+		m.syncFileViewport(msg.Path)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -407,8 +414,9 @@ func (m Model) handleScrollUp() (tea.Model, tea.Cmd) {
 
 	tab := m.tabs[m.activeTab]
 	if tab.Type == TabFile && tab.FilePath != "" {
-		if offset, ok := m.fileScroll[tab.FilePath]; ok && offset > 0 {
-			m.fileScroll[tab.FilePath] = offset - 1
+		if vp, ok := m.fileViewports[tab.FilePath]; ok {
+			vp.ScrollUp(1)
+			m.fileViewports[tab.FilePath] = vp
 		}
 	}
 	return m, nil
@@ -433,18 +441,9 @@ func (m Model) handleScrollDown() (tea.Model, tea.Cmd) {
 
 	tab := m.tabs[m.activeTab]
 	if tab.Type == TabFile && tab.FilePath != "" {
-		content, ok := m.fileContents[tab.FilePath]
-		if !ok {
-			return m, nil
-		}
-		lines := strings.Split(content, "\n")
-		maxOffset := len(lines) - m.layout.ScrollAreaHeight
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-		offset := m.fileScroll[tab.FilePath]
-		if offset < maxOffset {
-			m.fileScroll[tab.FilePath] = offset + 1
+		if vp, ok := m.fileViewports[tab.FilePath]; ok {
+			vp.ScrollDown(1)
+			m.fileViewports[tab.FilePath] = vp
 		}
 	}
 	return m, nil
@@ -469,12 +468,10 @@ func (m Model) handleScrollPageUp() (tea.Model, tea.Cmd) {
 
 	tab := m.tabs[m.activeTab]
 	if tab.Type == TabFile && tab.FilePath != "" {
-		offset := m.fileScroll[tab.FilePath]
-		newOffset := offset - m.layout.ScrollAreaHeight
-		if newOffset < 0 {
-			newOffset = 0
+		if vp, ok := m.fileViewports[tab.FilePath]; ok {
+			vp.HalfPageUp()
+			m.fileViewports[tab.FilePath] = vp
 		}
-		m.fileScroll[tab.FilePath] = newOffset
 	}
 	return m, nil
 }
@@ -498,21 +495,10 @@ func (m Model) handleScrollPageDown() (tea.Model, tea.Cmd) {
 
 	tab := m.tabs[m.activeTab]
 	if tab.Type == TabFile && tab.FilePath != "" {
-		content, ok := m.fileContents[tab.FilePath]
-		if !ok {
-			return m, nil
+		if vp, ok := m.fileViewports[tab.FilePath]; ok {
+			vp.HalfPageDown()
+			m.fileViewports[tab.FilePath] = vp
 		}
-		lines := strings.Split(content, "\n")
-		maxOffset := len(lines) - m.layout.ScrollAreaHeight
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-		offset := m.fileScroll[tab.FilePath]
-		newOffset := offset + m.layout.ScrollAreaHeight
-		if newOffset > maxOffset {
-			newOffset = maxOffset
-		}
-		m.fileScroll[tab.FilePath] = newOffset
 	}
 	return m, nil
 }
@@ -532,7 +518,10 @@ func (m Model) handleScrollHome() (tea.Model, tea.Cmd) {
 
 	tab := m.tabs[m.activeTab]
 	if tab.Type == TabFile && tab.FilePath != "" {
-		m.fileScroll[tab.FilePath] = 0
+		if vp, ok := m.fileViewports[tab.FilePath]; ok {
+			vp.GotoTop()
+			m.fileViewports[tab.FilePath] = vp
+		}
 	}
 	return m, nil
 }
@@ -552,14 +541,9 @@ func (m Model) handleScrollEnd() (tea.Model, tea.Cmd) {
 
 	tab := m.tabs[m.activeTab]
 	if tab.Type == TabFile && tab.FilePath != "" {
-		content, ok := m.fileContents[tab.FilePath]
-		if ok {
-			lines := strings.Split(content, "\n")
-			maxOffset := len(lines) - m.layout.ScrollAreaHeight
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
-			m.fileScroll[tab.FilePath] = maxOffset
+		if vp, ok := m.fileViewports[tab.FilePath]; ok {
+			vp.GotoBottom()
+			m.fileViewports[tab.FilePath] = vp
 		}
 	}
 	return m, nil
@@ -573,8 +557,9 @@ func (m Model) reloadCurrentFile() (tea.Model, tea.Cmd) {
 
 	tab := m.tabs[m.activeTab]
 	if tab.Type == TabFile && tab.FilePath != "" {
-		// Clear cached content to trigger reload
+		// Clear cached content and viewport to trigger reload
 		delete(m.fileContents, tab.FilePath)
+		delete(m.fileViewports, tab.FilePath)
 		return m, loadFileCmd(tab.FilePath)
 	}
 	return m, nil
@@ -777,7 +762,7 @@ func (m Model) renderMainContent() string {
 	return m.renderScrollArea()
 }
 
-// renderFileContent renders the content of a file.
+// renderFileContent renders the content of a file using viewport for scrolling.
 func (m Model) renderFileContent(path string) string {
 	height := m.layout.ScrollAreaHeight
 	contentWidth := m.layout.ContentWidth()
@@ -810,11 +795,17 @@ func (m Model) renderFileContent(path string) string {
 		return strings.Join(lines, "\n")
 	}
 
+	// Get viewport for scroll position
+	vp, vpOk := m.fileViewports[path]
+	offset := 0
+	if vpOk {
+		offset = vp.YOffset
+	}
+
 	// Split content into lines
 	fileLines := strings.Split(content, "\n")
 
-	// Get scroll offset
-	offset := m.fileScroll[path]
+	// Clamp offset to valid range
 	if offset < 0 {
 		offset = 0
 	}
@@ -1497,6 +1488,43 @@ func (m *Model) SetTasks(tasks []Task) {
 func (m *Model) AppendOutput(line string) {
 	m.outputLines.Push(line)
 	m.syncViewportContent()
+}
+
+// syncFileViewport creates or updates a viewport for a file tab.
+// It sets the viewport dimensions and content from the cached file content.
+func (m *Model) syncFileViewport(path string) {
+	content, ok := m.fileContents[path]
+	if !ok {
+		return
+	}
+
+	// Get or create viewport for this file
+	vp, exists := m.fileViewports[path]
+	if !exists {
+		vp = viewport.New(0, 0)
+	}
+
+	// Update dimensions - file content area excludes line numbers (6 chars: "NNNNN│")
+	vp.Width = m.layout.ContentWidth() - 6
+	if vp.Width < 1 {
+		vp.Width = 1
+	}
+	vp.Height = m.layout.ScrollAreaHeight
+
+	// Guard against zero-dimension viewport
+	if vp.Width <= 0 || vp.Height <= 0 {
+		return
+	}
+
+	// Set content
+	vp.SetContent(content)
+
+	// If this is a new viewport, start at the top
+	if !exists {
+		vp.GotoTop()
+	}
+
+	m.fileViewports[path] = vp
 }
 
 // syncViewportContent rebuilds viewport content from the ring buffer.
