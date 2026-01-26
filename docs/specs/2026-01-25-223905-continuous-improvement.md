@@ -8,7 +8,7 @@ Explore the codebase to identify areas for improvement and add them to this spec
 
 ### Deduplication
 - [x] Identify and extract repeated code patterns into shared functions (intToString/formatNumber extracted to internal/util)
-- [ ] Consolidate similar test helpers across packages
+- [x] Consolidate similar test helpers across packages (created internal/testhelpers with StateDir, OrbitalDir, WorkingDir; migrated queue_test.go)
 - [ ] Remove redundant error handling patterns
 - [ ] Unify string formatting approaches
 

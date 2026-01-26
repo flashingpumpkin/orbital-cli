@@ -2,10 +2,11 @@ package state
 
 import (
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/flashingpumpkin/orbital/internal/testhelpers"
 )
 
 func TestQueue_NewQueueReturnsEmptyQueue(t *testing.T) {
@@ -23,13 +24,7 @@ func TestQueue_NewQueueReturnsEmptyQueue(t *testing.T) {
 }
 
 func TestQueue_LoadQueue_ReturnsEmptyQueueWhenNoFile(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-
-	// Create state directory but no queue file
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, err := LoadQueue(stateDir)
 	if err != nil {
@@ -42,11 +37,7 @@ func TestQueue_LoadQueue_ReturnsEmptyQueueWhenNoFile(t *testing.T) {
 }
 
 func TestQueue_SaveAndLoad_RoundTrip(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	// Create queue with files
 	original := NewQueue()
@@ -77,11 +68,7 @@ func TestQueue_SaveAndLoad_RoundTrip(t *testing.T) {
 }
 
 func TestQueue_Add_AddsFileToQueue(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 
@@ -105,11 +92,7 @@ func TestQueue_Add_AddsFileToQueue(t *testing.T) {
 }
 
 func TestQueue_Add_DuplicateSilentlyIgnored(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 
@@ -131,11 +114,7 @@ func TestQueue_Add_DuplicateSilentlyIgnored(t *testing.T) {
 }
 
 func TestQueue_Remove_RemovesFileFromQueue(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 	_ = q.Add("/path/to/spec.md")
@@ -154,11 +133,7 @@ func TestQueue_Remove_RemovesFileFromQueue(t *testing.T) {
 }
 
 func TestQueue_Remove_ReturnsErrorWhenFileNotFound(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 
@@ -169,11 +144,7 @@ func TestQueue_Remove_ReturnsErrorWhenFileNotFound(t *testing.T) {
 }
 
 func TestQueue_Pop_ReturnsAndClearsAllFiles(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 	_ = q.Add("/path/to/spec1.md")
@@ -196,11 +167,7 @@ func TestQueue_Pop_ReturnsAndClearsAllFiles(t *testing.T) {
 }
 
 func TestQueue_Pop_ReturnsEmptySliceWhenEmpty(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 
@@ -218,11 +185,7 @@ func TestQueue_Pop_ReturnsEmptySliceWhenEmpty(t *testing.T) {
 }
 
 func TestQueue_Contains_ReturnsTrueForQueuedFile(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 	_ = q.Add("/path/to/spec.md")
@@ -233,11 +196,7 @@ func TestQueue_Contains_ReturnsTrueForQueuedFile(t *testing.T) {
 }
 
 func TestQueue_Contains_ReturnsFalseForNonQueuedFile(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 
@@ -255,11 +214,7 @@ func TestQueue_IsEmpty_ReturnsTrueWhenEmpty(t *testing.T) {
 }
 
 func TestQueue_IsEmpty_ReturnsFalseWhenNotEmpty(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 	_ = q.Add("/path/to/spec.md")
@@ -270,11 +225,7 @@ func TestQueue_IsEmpty_ReturnsFalseWhenNotEmpty(t *testing.T) {
 }
 
 func TestQueue_ConcurrentAdd_DoesNotCorrupt(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	// Run multiple concurrent adds
 	const numGoroutines = 10
@@ -323,11 +274,7 @@ func TestQueue_ConcurrentAdd_DoesNotCorrupt(t *testing.T) {
 }
 
 func TestQueue_Add_PersistsToFile(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q1, _ := LoadQueue(stateDir)
 	_ = q1.Add("/path/to/spec.md")
@@ -341,11 +288,7 @@ func TestQueue_Add_PersistsToFile(t *testing.T) {
 }
 
 func TestQueue_Remove_PersistsToFile(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q1, _ := LoadQueue(stateDir)
 	_ = q1.Add("/path/to/spec.md")
@@ -360,11 +303,7 @@ func TestQueue_Remove_PersistsToFile(t *testing.T) {
 }
 
 func TestQueue_Pop_PersistsToFile(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q1, _ := LoadQueue(stateDir)
 	_ = q1.Add("/path/to/spec.md")
@@ -382,11 +321,7 @@ func TestQueue_Pop_PersistsToFile(t *testing.T) {
 }
 
 func TestQueue_Pop_ReturnsErrorWhenSaveFails(t *testing.T) {
-	tempDir := t.TempDir()
-	stateDir := filepath.Join(tempDir, ".orbital", "state")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
+	_, stateDir := testhelpers.StateDir(t)
 
 	q, _ := LoadQueue(stateDir)
 	_ = q.Add("/path/to/spec.md")

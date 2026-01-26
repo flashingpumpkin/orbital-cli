@@ -862,3 +862,63 @@ After thorough review of the codebase and test suite, the TUI rendering is now i
 
 ### Outcome
 Marked assessment task complete. The critical rendering issues from the screenshots have been addressed. The comprehensive test suite provides regression protection.
+
+## Code Review - Iteration 11
+
+### Security
+No issues. The changes are documentation only (notes file and spec file updates). No secrets, credentials, or sensitive data exposed. Internal file paths are part of the public repository structure.
+
+### Design
+No issues. The documentation is well-structured. While the notes file has minor nesting inconsistencies, they don't impair understanding. The spec file's checkbox update is correctly marked as complete with appropriate context.
+
+### Logic
+No issues. The documentation changes accurately describe the work performed. All statements about code fixes are logically consistent with their descriptions of the bugs and solutions.
+
+### Error Handling
+No issues. These are documentation files only, containing no executable code. No error handling to review.
+
+### Data Integrity
+No issues. All cross-references verified (screenshot files exist). Checkbox syntax is valid throughout. Document structure follows project conventions.
+
+### Verdict
+PASS
+
+This iteration contains only documentation updates: adding the iteration 11 assessment to the notes file and marking the assessment task complete in the spec file. No code changes were made. All five review perspectives confirmed no issues.
+
+## Iteration 12 - 2026-01-25 (Test Helper Consolidation)
+
+### Task Selected
+Consolidate similar test helpers across packages by creating a shared `internal/testhelpers` package.
+
+### Why Highest Leverage
+The exploration revealed 60+ occurrences of duplicated test setup code across test files, particularly:
+- The pattern `tempDir := t.TempDir(); stateDir := filepath.Join(tempDir, ".orbital", "state"); os.MkdirAll(stateDir, 0755)` appeared 17 times in `queue_test.go` alone
+- Similar patterns in `state_test.go`, `executor_test.go`, `config/file_test.go`, etc.
+
+Creating a shared test helper eliminates boilerplate and improves test maintainability.
+
+### Key Decisions
+1. Created `internal/testhelpers/dirs.go` with three helper functions:
+   - `StateDir(t)` - creates `.orbital/state` directory structure, returns both tempDir and stateDir
+   - `OrbitalDir(t)` - creates `.orbital` directory, returns both paths
+   - `WorkingDir(t)` - simple wrapper around `t.TempDir()` for semantic clarity
+2. All helpers call `t.Helper()` for proper stack traces
+3. Migrated `queue_test.go` (17 occurrences) as proof of concept
+4. Left `state_test.go` unchanged since most tests only need `t.TempDir()` directly (the state package creates its own directories via `Save()`)
+
+### Files Created
+- `internal/testhelpers/dirs.go` - shared test helpers
+- `internal/testhelpers/dirs_test.go` - tests for the helpers
+
+### Files Modified
+- `internal/state/queue_test.go` - replaced 17 occurrences with `testhelpers.StateDir(t)`
+
+### Lines Saved
+- Approximately 68 lines removed from `queue_test.go` (4 lines per occurrence x 17)
+- Future migrations to other test files will save additional lines
+
+### Verification
+- `make check` passes (lint and tests)
+- All 18 queue tests pass
+- All 22 state tests pass
+- New testhelpers tests pass
