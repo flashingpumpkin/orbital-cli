@@ -318,7 +318,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	loopState, err := controller.Run(ctx, prompt)
 
 	// Print summary
-	printSummary(formatter, loopState)
+	printSummary(formatter, loopState, sessID)
 
 	// Handle state cleanup or preservation
 	if err != nil {
@@ -330,8 +330,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		case context.DeadlineExceeded:
 			os.Exit(3)
 		case context.Canceled:
-			fmt.Println("\nInterrupted by user")
-			fmt.Println("Session state preserved. Run 'orbital continue' to resume.")
+			// Summary already printed above with resume instructions
 			os.Exit(130)
 		default:
 			os.Exit(4)

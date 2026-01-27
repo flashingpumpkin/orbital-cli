@@ -604,11 +604,9 @@ func TestPrintLoopSummary_Error(t *testing.T) {
 	f.PrintLoopSummary(summary)
 	output := buf.String()
 
-	if !strings.Contains(output, "TERMINATED") {
-		t.Error("expected output to indicate termination")
-	}
-	if !strings.Contains(output, "max iterations") {
-		t.Error("expected output to contain error message")
+	// The new implementation shows "MAX ITERATIONS REACHED" for this error type
+	if !strings.Contains(output, "MAX ITERATIONS REACHED") {
+		t.Errorf("expected output to indicate max iterations reached, got: %s", output)
 	}
 }
 
@@ -629,5 +627,100 @@ func TestPrintLoopSummary_NotCompleted(t *testing.T) {
 
 	if !strings.Contains(output, "NOT COMPLETED") {
 		t.Error("expected output to indicate not completed")
+	}
+}
+
+func TestPrintLoopSummary_TokenBreakdown(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(false, false, &buf)
+
+	summary := LoopSummary{
+		Iterations:  5,
+		TotalCost:   0.25,
+		TotalTokens: 10000, // Should be ignored when TokensIn/Out are set
+		TokensIn:    7500,
+		TokensOut:   2500,
+		Duration:    2 * time.Minute,
+		Completed:   true,
+	}
+
+	f.PrintLoopSummary(summary)
+	output := buf.String()
+
+	// Should show detailed token breakdown
+	if !strings.Contains(output, "7500 in") {
+		t.Errorf("expected output to show tokens in, got: %s", output)
+	}
+	if !strings.Contains(output, "2500 out") {
+		t.Errorf("expected output to show tokens out, got: %s", output)
+	}
+}
+
+func TestPrintLoopSummary_Interrupted(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(false, false, &buf)
+
+	summary := LoopSummary{
+		Iterations: 3,
+		TotalCost:  0.15,
+		TokensIn:   5000,
+		TokensOut:  1500,
+		Duration:   1 * time.Minute,
+		Completed:  false,
+		Error:      errors.New("context canceled"),
+		SessionID:  "abc123def",
+	}
+
+	f.PrintLoopSummary(summary)
+	output := buf.String()
+
+	if !strings.Contains(output, "INTERRUPTED") {
+		t.Errorf("expected output to show INTERRUPTED status, got: %s", output)
+	}
+	if !strings.Contains(output, "Resume with") {
+		t.Errorf("expected output to show resume instructions, got: %s", output)
+	}
+	if !strings.Contains(output, "orbital continue") {
+		t.Errorf("expected output to show orbital continue command, got: %s", output)
+	}
+}
+
+func TestPrintLoopSummary_BudgetExceeded(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(false, false, &buf)
+
+	summary := LoopSummary{
+		Iterations: 10,
+		TotalCost:  5.00,
+		Duration:   10 * time.Minute,
+		Completed:  false,
+		Error:      errors.New("budget exceeded"),
+	}
+
+	f.PrintLoopSummary(summary)
+	output := buf.String()
+
+	if !strings.Contains(output, "BUDGET EXCEEDED") {
+		t.Errorf("expected output to show BUDGET EXCEEDED status, got: %s", output)
+	}
+}
+
+func TestPrintLoopSummary_Timeout(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(false, false, &buf)
+
+	summary := LoopSummary{
+		Iterations: 1,
+		TotalCost:  0.05,
+		Duration:   5 * time.Minute,
+		Completed:  false,
+		Error:      errors.New("context deadline exceeded"),
+	}
+
+	f.PrintLoopSummary(summary)
+	output := buf.String()
+
+	if !strings.Contains(output, "TIMEOUT") {
+		t.Errorf("expected output to show TIMEOUT status, got: %s", output)
 	}
 }

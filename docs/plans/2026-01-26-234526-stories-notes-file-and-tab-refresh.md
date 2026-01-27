@@ -11,6 +11,7 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 5. **Context window progress bar**: Display token usage relative to model context window, updating on each streamed message
 6. **Exit summary**: Print a final summary when the app exits (via CTRL-C or completion promise)
 7. **Iteration countdown timer**: Display remaining time in the current iteration
+8. **Light and dark mode**: Support both terminal themes with auto-detection
 
 ## Story Mapping Overview
 
@@ -35,6 +36,7 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 | Must Have | Add context window progress bar | Users see real-time token usage relative to model limits |
 | Must Have | Print exit summary on TUI shutdown | Users see completion status, cost, and metrics after exit |
 | Must Have | Add iteration countdown timer | Users see time remaining before iteration timeout |
+| Must Have | Add light and dark mode with auto-detection | TUI is readable on both light and dark terminal backgrounds |
 
 ## Epic: File Management Improvements
 
@@ -360,7 +362,7 @@ For future enhancement, consider:
 
 ---
 
-### [ ] **Ticket: Print exit summary when TUI shuts down**
+### [x] **Ticket: Print exit summary when TUI shuts down**
 
 **As a** user
 **I want** to see a summary of the session when the app exits
@@ -414,21 +416,21 @@ The summary should print AFTER the TUI has fully exited, so it appears cleanly i
    - Session ID for resume instructions
 
 **Acceptance Criteria**:
-- [ ] Given the TUI is running and I press CTRL-C, when the app exits, then a summary is printed showing "Interrupted" status, accumulated cost, tokens, and resume instructions
-- [ ] Given the TUI is running and the completion promise is emitted, when the app exits, then a summary is printed showing "Completed" status with final metrics
-- [ ] Given the TUI is running and budget is exceeded, when the app exits, then a summary is printed showing "Budget Exceeded" status and accumulated metrics
-- [ ] Given the TUI is running and max iterations reached, when the app exits, then a summary is printed showing "Max Iterations" status
+- [x] Given the TUI is running and I press CTRL-C, when the app exits, then a summary is printed showing "Interrupted" status, accumulated cost, tokens, and resume instructions
+- [x] Given the TUI is running and the completion promise is emitted, when the app exits, then a summary is printed showing "Completed" status with final metrics
+- [x] Given the TUI is running and budget is exceeded, when the app exits, then a summary is printed showing "Budget Exceeded" status and accumulated metrics
+- [x] Given the TUI is running and max iterations reached, when the app exits, then a summary is printed showing "Max Iterations" status
 - [ ] Given a workflow with multiple steps completes, when the app exits, then the summary includes per-step breakdown
-- [ ] Given the TUI is running, when the app exits, then the summary appears AFTER the TUI has fully cleared the screen
+- [x] Given the TUI is running, when the app exits, then the summary appears AFTER the TUI has fully cleared the screen
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Summary printed for all TUI exit scenarios (success, error, interrupt)
-- [ ] Existing `PrintLoopSummary()` reused or extended
-- [ ] Resume instructions included for interrupts
+- [x] Feature complete in one atomic commit
+- [x] Summary printed for all TUI exit scenarios (success, error, interrupt)
+- [x] Existing `PrintLoopSummary()` reused or extended
+- [x] Resume instructions included for interrupts
 - [ ] Workflow step breakdown included when applicable
-- [ ] Summary prints cleanly after TUI exits (no rendering artifacts)
-- [ ] All tests passing (`make check`)
+- [x] Summary prints cleanly after TUI exits (no rendering artifacts)
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - Uses existing `LoopState` struct for metrics
@@ -549,6 +551,137 @@ For future enhancement:
 
 ---
 
+### [ ] **Ticket: Add light and dark mode with auto-detection**
+
+**As a** user
+**I want** the TUI to automatically adapt to my terminal's colour scheme
+**So that** text is readable whether I use a light or dark terminal background
+
+**Context**: The current TUI uses an amber colour palette designed exclusively for dark terminal backgrounds. Users with light terminal themes (white or light grey backgrounds) experience poor contrast and readability issues. The amber colours that look vibrant on black become washed out or invisible on white.
+
+The project already uses lipgloss/termenv which provides `HasDarkBackground()` for automatic theme detection. This allows the TUI to detect the terminal background and select an appropriate colour palette without user configuration.
+
+**Description**: Implement dual colour palettes (light and dark) with automatic detection at startup. The dark palette retains the current amber theme. The light palette uses darker, more saturated variants of the same colours for visibility on light backgrounds. Users can override auto-detection via CLI flag or config file.
+
+**Implementation Requirements**:
+
+1. **Create theme infrastructure** in new file `internal/tui/themes.go`:
+   ```go
+   type Theme string
+   const (
+       ThemeAuto  Theme = "auto"
+       ThemeDark  Theme = "dark"
+       ThemeLight Theme = "light"
+   )
+
+   func DetectTheme() Theme {
+       if termenv.HasDarkBackground() {
+           return ThemeDark
+       }
+       return ThemeLight
+   }
+   ```
+
+2. **Define light colour palette** in `internal/tui/styles.go`:
+   ```go
+   // Dark theme (current - for dark backgrounds)
+   ColourAmber      = lipgloss.Color("#FFB000")  // Bright amber
+   ColourAmberLight = lipgloss.Color("#FFD966")  // Light amber
+
+   // Light theme (new - for light backgrounds)
+   ColourAmberDark    = lipgloss.Color("#8B6914")  // Dark amber
+   ColourAmberDarkDim = lipgloss.Color("#5C4A0A")  // Darker amber
+   ```
+
+3. **Create style factory functions**:
+   ```go
+   func DarkStyles() Styles { ... }   // Current amber-on-black
+   func LightStyles() Styles { ... }  // Dark amber-on-white
+   func GetStyles(theme Theme) Styles {
+       if theme == ThemeLight {
+           return LightStyles()
+       }
+       return DarkStyles()
+   }
+   ```
+
+4. **Add theme to config** in `internal/config/config.go`:
+   ```go
+   type Config struct {
+       // ... existing fields ...
+       Theme string  // "auto", "light", "dark"
+   }
+   ```
+
+5. **Add CLI flag** in `cmd/orbital/root.go`:
+   ```go
+   rootCmd.Flags().String("theme", "auto", "Colour theme: auto, light, dark")
+   ```
+
+6. **Apply theme at startup** in `internal/tui/program.go`:
+   - Detect theme if "auto"
+   - Pass resolved theme to model creation
+   - Apply before TUI starts
+
+7. **Update session selector** in `internal/tui/selector/styles.go`:
+   - Apply same theme logic to selector component
+
+**Light Theme Colour Mapping**:
+
+| Element | Dark Theme | Light Theme |
+|---------|------------|-------------|
+| Primary (headers, active) | #FFB000 (bright amber) | #8B6914 (dark amber) |
+| Secondary (labels) | #B38F00 (amber faded) | #5C4A0A (darker amber) |
+| Body text | #FFD966 (light amber) | #6B5A1E (medium amber) |
+| Borders active | #FFB000 | #8B6914 |
+| Borders inactive | #996600 | #A08050 |
+| Success | #00FF00 | #008000 |
+| Warning | #FFAA00 | #CC5500 |
+| Error | #FF3300 | #CC0000 |
+| Background | (terminal default) | (terminal default) |
+
+**Acceptance Criteria**:
+- [ ] Given a dark terminal background, when the TUI starts with theme "auto", then the dark colour palette is applied
+- [ ] Given a light terminal background, when the TUI starts with theme "auto", then the light colour palette is applied
+- [ ] Given `--theme dark` flag, when the TUI starts, then the dark palette is used regardless of terminal background
+- [ ] Given `--theme light` flag, when the TUI starts, then the light palette is used regardless of terminal background
+- [ ] Given `theme = "light"` in config file, when the TUI starts without flag, then the light palette is used
+- [ ] Given the light palette is active, when viewing the TUI on a light terminal, then all text has sufficient contrast for readability
+- [ ] Given the session selector is displayed, when theme is applied, then selector uses matching colour palette
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] Theme detection using `termenv.HasDarkBackground()`
+- [ ] Dark palette (current amber theme) preserved
+- [ ] Light palette with adjusted colours created
+- [ ] CLI flag `--theme` added
+- [ ] Config file support for theme setting
+- [ ] Session selector themed consistently
+- [ ] Fallback to dark theme if detection fails
+- [ ] Unit test for theme detection logic
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Uses existing `termenv` package (already a dependency)
+- Uses existing `lipgloss` colour system
+- Integrates with existing config and CLI flag infrastructure
+
+**Risks**:
+- Theme detection may fail on some terminals (mitigated: default to dark)
+- Light palette colours may need tuning after user testing (mitigated: design with sufficient contrast)
+- Session selector has duplicated style definitions (mitigated: update both files)
+
+**Notes**: The amber identity is preserved in both themes. Auto-detection uses `termenv.HasDarkBackground()` which queries the terminal via OSC sequences or falls back to environment variables like `COLORFGBG`. When detection is uncertain, dark mode is the safer default since it matches the original design.
+
+For future enhancement:
+- Custom theme colours via config file
+- High contrast mode for accessibility
+- Theme switching at runtime (currently requires restart)
+
+**Effort Estimate**: M (3-4 hours)
+
+---
+
 ## Backlog Prioritisation
 
 **Must Have (Sprint 1):**
@@ -560,6 +693,7 @@ For future enhancement:
 6. Add context window progress bar showing token usage (S)
 7. Print exit summary when TUI shuts down (S)
 8. Add iteration countdown timer to TUI (S)
+9. Add light and dark mode with auto-detection (M)
 
 **Should Have (Future):**
 - Configurable refresh interval via flag
@@ -872,6 +1006,116 @@ Timer shows "0m 30s" (warning colour)
 Iteration 1 completes → Iteration 2 starts → IterationStart = now, timer resets
 ```
 
+### Light/Dark Theme Architecture
+
+**Theme Detection Flow:**
+```
+CLI Start
+    ↓
+Check --theme flag → if specified, use it
+    ↓
+Check config file theme → if specified, use it
+    ↓
+Auto-detect using termenv.HasDarkBackground()
+    ↓
+Apply resolved theme to Styles struct
+    ↓
+Pass Styles to Model and Selector
+```
+
+**New File: `internal/tui/themes.go`**
+```go
+package tui
+
+import "github.com/muesli/termenv"
+
+type Theme string
+
+const (
+    ThemeAuto  Theme = "auto"
+    ThemeDark  Theme = "dark"
+    ThemeLight Theme = "light"
+)
+
+func DetectTheme() Theme {
+    output := termenv.NewOutput(os.Stdout)
+    if output.HasDarkBackground() {
+        return ThemeDark
+    }
+    return ThemeLight
+}
+
+func ResolveTheme(configured Theme) Theme {
+    if configured == ThemeAuto {
+        return DetectTheme()
+    }
+    return configured
+}
+```
+
+**Style Factory Pattern:**
+```go
+// internal/tui/styles.go
+
+func GetStyles(theme Theme) Styles {
+    switch theme {
+    case ThemeLight:
+        return lightStyles()
+    default:
+        return darkStyles()
+    }
+}
+
+func darkStyles() Styles {
+    return Styles{
+        Header: lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB000")),
+        // ... current amber palette
+    }
+}
+
+func lightStyles() Styles {
+    return Styles{
+        Header: lipgloss.NewStyle().Foreground(lipgloss.Color("#8B6914")),
+        // ... dark amber palette for light backgrounds
+    }
+}
+```
+
+**Config Integration:**
+```go
+// internal/config/config.go
+type Config struct {
+    // ...
+    Theme string `toml:"theme"` // "auto", "light", "dark"
+}
+
+func NewConfig() *Config {
+    return &Config{
+        Theme: "auto",
+        // ...
+    }
+}
+```
+
+**CLI Flag:**
+```go
+// cmd/orbital/root.go
+rootCmd.Flags().StringVar(&cfg.Theme, "theme", "auto",
+    "Colour theme: auto, light, dark")
+```
+
+**Colour Palette Comparison:**
+
+| Colour Role | Dark Theme (current) | Light Theme (new) |
+|-------------|---------------------|-------------------|
+| Primary | `#FFB000` | `#8B6914` |
+| Primary Dim | `#996600` | `#5C4A0A` |
+| Body Text | `#FFD966` | `#6B5A1E` |
+| Faded | `#B38F00` | `#7A6A30` |
+| Success | `#00FF00` | `#008000` |
+| Warning | `#FFAA00` | `#CC5500` |
+| Error | `#FF3300` | `#CC0000` |
+
 ## Success Metrics
 
 | Metric | Target |
@@ -894,3 +1138,9 @@ Iteration 1 completes → Iteration 2 starts → IterationStart = now, timer res
 | Timer resets on new iteration | Immediate reset when iteration starts |
 | Warning colour threshold | Triggered at < 1 minute remaining |
 | Timer shows neutral state between iterations | Displays "—" when no iteration active |
+| Theme auto-detection accuracy | Correct detection on iTerm2, Terminal.app, Kitty, WezTerm |
+| Light theme readability | All text meets WCAG AA contrast ratio (4.5:1) |
+| Dark theme preserved | Existing amber palette unchanged |
+| Theme flag override | --theme flag takes precedence over auto-detection |
+| Config file theme | theme setting in config.toml respected |
+| Fallback behaviour | Defaults to dark when detection fails |

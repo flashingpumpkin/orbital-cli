@@ -44,9 +44,12 @@ type LoopSummary struct {
 	Iterations  int
 	TotalCost   float64
 	TotalTokens int
+	TokensIn    int
+	TokensOut   int
 	Duration    time.Duration
 	Completed   bool
 	Error       error
+	SessionID   string // For resume instructions on interrupt
 }
 
 // NewFormatter creates a new Formatter with the specified options.
@@ -159,23 +162,51 @@ func (f *Formatter) PrintLoopSummary(summary LoopSummary) {
 	cyan := color.New(color.FgCyan, color.Bold)
 	white := color.New(color.FgWhite)
 	green := color.New(color.FgGreen, color.Bold)
+	yellow := color.New(color.FgYellow, color.Bold)
 	red := color.New(color.FgRed, color.Bold)
 
 	_, _ = fmt.Fprintln(f.writer, "")
 	_, _ = cyan.Fprintln(f.writer, "════════════════════════════════════════════════════════════════")
 	_, _ = cyan.Fprintln(f.writer, "                           Summary                              ")
 	_, _ = cyan.Fprintln(f.writer, "════════════════════════════════════════════════════════════════")
-	_, _ = white.Fprintf(f.writer, "  Iterations:  %d\n", summary.Iterations)
-	_, _ = white.Fprintf(f.writer, "  Total Cost:  $%.4f USD\n", summary.TotalCost)
-	_, _ = white.Fprintf(f.writer, "  Total Tokens: %d\n", summary.TotalTokens)
-	_, _ = white.Fprintf(f.writer, "  Duration:    %v\n", formatDuration(summary.Duration))
+	_, _ = white.Fprintf(f.writer, "  Iterations:   %d\n", summary.Iterations)
+	_, _ = white.Fprintf(f.writer, "  Duration:     %v\n", formatDuration(summary.Duration))
+	_, _ = white.Fprintf(f.writer, "  Cost:         $%.4f USD\n", summary.TotalCost)
 
+	// Show detailed token breakdown if available, otherwise fall back to TotalTokens
+	if summary.TokensIn > 0 || summary.TokensOut > 0 {
+		_, _ = white.Fprintf(f.writer, "  Tokens:       %d in / %d out\n", summary.TokensIn, summary.TokensOut)
+	} else if summary.TotalTokens > 0 {
+		_, _ = white.Fprintf(f.writer, "  Tokens:       %d\n", summary.TotalTokens)
+	}
+
+	// Status line with appropriate colour
 	if summary.Completed {
-		_, _ = green.Fprintln(f.writer, "  Status:      COMPLETED (promise detected)")
+		_, _ = green.Fprintln(f.writer, "  Status:       COMPLETED")
 	} else if summary.Error != nil {
-		_, _ = red.Fprintf(f.writer, "  Status:      TERMINATED (%v)\n", summary.Error)
+		// Check for specific error types
+		errStr := summary.Error.Error()
+		switch {
+		case errStr == "context canceled":
+			_, _ = yellow.Fprintln(f.writer, "  Status:       INTERRUPTED")
+		case errStr == "max iterations reached":
+			_, _ = red.Fprintln(f.writer, "  Status:       MAX ITERATIONS REACHED")
+		case errStr == "budget exceeded":
+			_, _ = red.Fprintln(f.writer, "  Status:       BUDGET EXCEEDED")
+		case errStr == "context deadline exceeded":
+			_, _ = red.Fprintln(f.writer, "  Status:       TIMEOUT")
+		default:
+			_, _ = red.Fprintf(f.writer, "  Status:       FAILED (%v)\n", summary.Error)
+		}
 	} else {
-		_, _ = red.Fprintln(f.writer, "  Status:      NOT COMPLETED")
+		_, _ = red.Fprintln(f.writer, "  Status:       NOT COMPLETED")
+	}
+
+	// Show resume instructions if session was interrupted and we have a session ID
+	if summary.SessionID != "" && summary.Error != nil && summary.Error.Error() == "context canceled" {
+		_, _ = fmt.Fprintln(f.writer, "")
+		_, _ = white.Fprintln(f.writer, "  Resume with:")
+		_, _ = white.Fprintf(f.writer, "    orbital continue\n")
 	}
 
 	_, _ = fmt.Fprintln(f.writer, "")

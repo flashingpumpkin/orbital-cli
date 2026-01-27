@@ -490,13 +490,14 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Print summary (only in non-TUI mode)
-	if !useTUI && formatter != nil {
-		// Print task summary if we have tasks
-		if streamProcessor != nil {
+	// Print summary
+	if loopState != nil {
+		summaryFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
+		// For non-TUI mode, print task summary if we have tasks
+		if !useTUI && streamProcessor != nil {
 			streamProcessor.PrintTaskSummary()
 		}
-		printSummary(formatter, loopState)
+		printSummary(summaryFormatter, loopState, st.SessionID)
 	}
 
 	// Handle state cleanup or preservation
@@ -511,13 +512,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		case context.DeadlineExceeded:
 			os.Exit(3)
 		case context.Canceled:
-			fmt.Println("\nInterrupted by user")
-			// Print summary on interrupt
-			if loopState != nil {
-				summaryFormatter := output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
-				printSummary(summaryFormatter, loopState)
-			}
-			fmt.Println("Session state preserved. Run 'orbital continue' to resume.")
+			// Summary already printed above with resume instructions
 			os.Exit(130)
 		default:
 			os.Exit(4)
@@ -554,14 +549,17 @@ func printBanner(formatter *output.Formatter, cfg *config.Config, sp *spec.Spec,
 	formatter.PrintRichBanner(bannerCfg)
 }
 
-func printSummary(formatter *output.Formatter, loopState *loop.LoopState) {
+func printSummary(formatter *output.Formatter, loopState *loop.LoopState, sessionID string) {
 	summary := output.LoopSummary{
 		Iterations:  loopState.Iteration,
 		TotalCost:   loopState.TotalCost,
 		TotalTokens: loopState.TotalTokens,
+		TokensIn:    loopState.TotalTokensIn,
+		TokensOut:   loopState.TotalTokensOut,
 		Duration:    time.Since(loopState.StartTime).Round(time.Second),
 		Completed:   loopState.Completed,
 		Error:       loopState.Error,
+		SessionID:   sessionID,
 	}
 	formatter.PrintLoopSummary(summary)
 }

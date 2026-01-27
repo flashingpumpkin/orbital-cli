@@ -534,3 +534,119 @@ All three critical issues from the Iteration 7 code review have been fixed:
 ### Verification
 
 All tests pass: `make check` successful
+
+## Code Review - Iteration 8
+
+### Security
+No issues. The symlink bypass protection is now complete:
+- `filepath.EvalSymlinks()` is used instead of just `filepath.Abs()`
+- Working directory is resolved since it must exist
+- Notes directory is resolved if it exists (handles file-not-yet-created case)
+- The prefix check with `+string(filepath.Separator)` correctly prevents bypass attacks
+- TOCTOU risk is acknowledged but acceptable for this threat model (attacker would need existing write access)
+
+### Design
+_ISSUES_FOUND
+
+1. **DRY violation** (MEDIUM): Path sanitisation logic (~30 lines) is duplicated between `root.go` and `continue.go`. Should be extracted to `internal/security/path.go` with a `SanitisePathWithinDir(targetPath, workingDir)` function.
+
+2. **Single Responsibility violation** (LOW): Path security validation is mixed into command handlers rather than being a dedicated security module.
+
+3. **Missing abstraction for notes file management** (LOW): Notes file concerns (path generation, validation, creation, directory setup) are scattered across multiple locations.
+
+### Logic
+_ISSUES_FOUND
+
+1. **TOCTOU race condition** (MEDIUM): Between symlink resolution and actual file write, an attacker could replace the directory with a symlink. However, this requires existing write access to the working directory, making exploitation unlikely.
+
+2. **Incorrect edge case check** (LOW): `absNotesPath != realWorkingDir` checks if notes file equals working directory. This makes no logical sense since a notes file cannot be a directory. The check is harmless but confusing.
+
+3. **Error shadowing** (LOW): Inner `err` declarations in the symlink resolution block shadow outer scope's `err`. Safe in current code but could lead to bugs if modified.
+
+4. **TUI Kill() may leave goroutine hanging** (LOW): If TUI is stuck during `Kill()`, `<-tuiDone` could block indefinitely. A timeout would be safer.
+
+### Error Handling
+_ISSUES_FOUND
+
+1. **Silent queue load error in continue.go** (MEDIUM): If `state.LoadQueue()` fails, the error is silently swallowed. User continues unaware that queued files were not processed.
+
+2. **Silent stat failure allows symlink check bypass** (LOW): If `os.Stat(notesDir)` fails with a non-ENOENT error, symlink resolution is skipped. Should distinguish between "doesn't exist" and "permission error".
+
+3. **Cleanup paths ignored on selection error** (LOW): In continue.go, cleanup paths returned by `selectSession()` are discarded, potentially leaving stale state.
+
+### Data Integrity
+_ISSUES_FOUND
+
+1. **Missing empty string validation** (LOW): If `spec.NotesFile` is empty string, `filepath.Abs("")` returns current working directory. Defensive check would be appropriate.
+
+2. **Path separator edge case on Windows** (LOW): Paths can use both `/` and `\` on Windows. The `HasPrefix` check could behave unexpectedly with mixed separators. Using `filepath.Rel` would be more robust.
+
+3. **Global state mutation** (LOW): `spec.NotesFile` is modified in place. While safe in current single-threaded usage, exported as mutable global.
+
+### Verdict
+**PASS**
+
+The critical security issues from Iteration 7 have been addressed:
+- Path traversal now protected against symlink bypass via `EvalSymlinks()`
+- Protection applied to both `root.go` and `continue.go`
+- TUI cleanup race condition fixed by always waiting on `tuiDone`
+
+The remaining issues are either:
+- Technical debt (DRY violation, SRP) that should be addressed in future refactoring
+- Low-severity edge cases that do not affect normal operation
+- Pre-existing issues not introduced by this iteration
+
+The code is production-ready for this iteration's scope.
+
+## Iteration 9 - Print Exit Summary When TUI Shuts Down
+
+### Task Selected
+
+**Print exit summary when TUI shuts down**
+
+### Why Highest Leverage
+
+This was the next pending task in the spec. It provides critical user feedback after TUI sessions exit, showing completion status, cost, tokens, and resume instructions. Without this, users have no visibility into session results after the TUI clears.
+
+### Implementation
+
+**1. Extended LoopSummary struct** (`internal/output/formatter.go`):
+- Added `TokensIn`, `TokensOut` for detailed token breakdown
+- Added `SessionID` for resume instructions on interrupt
+
+**2. Updated PrintLoopSummary** (`internal/output/formatter.go`):
+- Shows detailed token breakdown when TokensIn/TokensOut are available
+- Displays clear status messages: COMPLETED, INTERRUPTED, MAX ITERATIONS REACHED, BUDGET EXCEEDED, TIMEOUT
+- Shows resume instructions when session is interrupted and has a session ID
+
+**3. Updated printSummary function** (`cmd/orbital/root.go`):
+- Now accepts sessionID parameter
+- Populates TokensIn, TokensOut, SessionID in the summary
+
+**4. Modified TUI exit flow** (`cmd/orbital/root.go`):
+- Summary now prints for all cases (TUI and non-TUI)
+- Removed duplicate interrupt handling code (summary already includes resume instructions)
+- Summary prints after TUI exits and before error handling
+
+**5. Updated continue.go**:
+- Updated printSummary call to include session ID
+- Removed duplicate interrupt message code
+
+### Testing
+
+Added new tests in `internal/output/formatter_test.go`:
+- `TestPrintLoopSummary_TokenBreakdown`: Verifies detailed token display
+- `TestPrintLoopSummary_Interrupted`: Verifies INTERRUPTED status and resume instructions
+- `TestPrintLoopSummary_BudgetExceeded`: Verifies BUDGET EXCEEDED status
+- `TestPrintLoopSummary_Timeout`: Verifies TIMEOUT status
+
+Updated existing test:
+- `TestPrintLoopSummary_Error`: Updated to expect "MAX ITERATIONS REACHED" instead of "TERMINATED"
+
+### Not Implemented
+
+The workflow step breakdown (per-step cost/duration) was mentioned in the spec but marked as a future enhancement. The core exit summary functionality is complete for all exit scenarios.
+
+### Verification
+
+All tests pass: `make check` successful
