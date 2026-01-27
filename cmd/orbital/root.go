@@ -504,14 +504,15 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		// On error or interrupt, preserve state for resume
 		// State is already saved by iteration callback, so no action needed
-		switch err {
-		case loop.ErrMaxIterationsReached:
+		// Use errors.Is() to handle wrapped errors correctly
+		switch {
+		case errors.Is(err, loop.ErrMaxIterationsReached):
 			os.Exit(1)
-		case loop.ErrBudgetExceeded:
+		case errors.Is(err, loop.ErrBudgetExceeded):
 			os.Exit(2)
-		case context.DeadlineExceeded:
+		case errors.Is(err, context.DeadlineExceeded):
 			os.Exit(3)
-		case context.Canceled:
+		case errors.Is(err, context.Canceled):
 			// Summary already printed above with resume instructions
 			os.Exit(130)
 		default:

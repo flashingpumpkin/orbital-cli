@@ -739,3 +739,80 @@ To avoid an import cycle (`output` -> `loop` -> `executor` -> `output`), the sen
 ### Verification
 
 All tests pass: `make check` successful
+
+## Code Review - Iteration 10
+
+### Security
+No issues. The changes are a straightforward refactoring to improve error handling correctness. No user input is processed, no shell commands are executed, no authentication boundaries are crossed. The sentinel errors are simple string constants with no security implications. The SessionID exposure is unchanged from previous iterations.
+
+### Design
+_ISSUES_FOUND
+
+1. **Inconsistent Error Comparison Strategies** (MEDIUM): The formatter (`formatter.go`) was correctly updated to use `errors.Is()`, but `cmd/orbital/root.go` and `cmd/orbital/continue.go` still use direct equality comparison (`switch err { case loop.ErrMaxIterationsReached: ... }`). If any code wraps these errors, the exit code logic will fall through to `default` (exit code 4) while the formatter correctly displays the right status.
+
+2. **Aliasing Creates Fragile Package Coupling** (LOW): The aliases in `loop/controller.go` (`var ErrBudgetExceeded = orberrors.ErrBudgetExceeded`) create two "homes" for the same errors. While `errors.Is()` works correctly, the codebase now has two import paths for the same concept, and the exit code handlers still use direct comparison.
+
+3. **Controller Has Direct Console Output (SRP Violation)** (LOW): The `Controller` writes directly to stdout via `fmt.Println` instead of using the `Formatter`, violating Single Responsibility Principle.
+
+### Logic
+_ISSUES_FOUND
+
+1. **Exit Code Handlers Use == Not errors.Is()** (HIGH): In `cmd/orbital/root.go` (lines 507-519) and `cmd/orbital/continue.go` (lines 325-337), the exit code handling uses direct equality (`switch err { case ... }`). Wrapped errors will fall through to `default` and exit with code 4, creating inconsistency where the formatter displays the correct status but the exit code is wrong.
+
+### Error Handling
+_ISSUES_FOUND
+
+1. **Inconsistent Error Comparison** (HIGH): Same as Logic issue. The formatter uses `errors.Is()` but exit code handlers use `==`, creating potential for wrong exit codes with wrapped errors.
+
+2. **Variable Aliasing Identity Problems** (LOW): The aliases point to the same sentinel, so `errors.Is()` works correctly, but the dual-location approach adds maintenance complexity.
+
+### Data Integrity
+No issues. The changes show good data handling practices. Nil safety is properly handled. The sentinel errors are correctly defined and the aliasing maintains error identity for `errors.Is()` comparisons.
+
+### Verdict
+**FAIL**
+
+The refactoring to introduce `internal/errors` and use `errors.Is()` in the formatter is correct. However, the migration is incomplete:
+
+1. **Exit code handlers in root.go and continue.go still use direct equality comparison** - If any code path wraps these errors (e.g., `fmt.Errorf("context: %w", loop.ErrBudgetExceeded)`), the formatter will correctly display "BUDGET EXCEEDED" but the process will exit with code 4 instead of code 2.
+
+Currently the code works because errors are not wrapped when returned from the loop controller, but this creates an inconsistency between the displayed status and the exit code behaviour for wrapped errors. The fix is simple: update both exit code handlers to use `errors.Is()`:
+
+```go
+switch {
+case errors.Is(err, loop.ErrMaxIterationsReached):
+    os.Exit(1)
+case errors.Is(err, loop.ErrBudgetExceeded):
+    os.Exit(2)
+case errors.Is(err, context.DeadlineExceeded):
+    os.Exit(3)
+case errors.Is(err, context.Canceled):
+    os.Exit(130)
+default:
+    os.Exit(4)
+}
+```
+
+## Iteration 11 - Code Review Fixes
+
+### Issues Addressed
+
+The critical issue from the Iteration 10 code review has been fixed:
+
+**1. Exit code handlers use == not errors.Is() (HIGH)**
+- Updated `cmd/orbital/root.go` (lines 507-520) to use `switch { case errors.Is(err, ...): }` pattern instead of `switch err { case ... }`
+- Updated `cmd/orbital/continue.go` (lines 325-338) with the same pattern
+- Added `errors` import to `continue.go` (was missing)
+- Added comment explaining why `errors.Is()` is used: "Use errors.Is() to handle wrapped errors correctly"
+
+### Why This Fix Matters
+
+The previous code used direct equality comparison (`switch err { case loop.ErrMaxIterationsReached: }`). This works for unwrapped sentinel errors, but fails silently when errors are wrapped using `fmt.Errorf("context: %w", err)`. With the fix:
+
+- If any code path wraps these errors in the future, the exit codes will still be correct
+- This is now consistent with the formatter in `internal/output/formatter.go` which already uses `errors.Is()`
+- The displayed status and exit code will always match, even for wrapped errors
+
+### Verification
+
+All tests pass: `make check` successful

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -322,14 +323,15 @@ func runContinue(cmd *cobra.Command, args []string) error {
 
 	// Handle state cleanup or preservation
 	if err != nil {
-		switch err {
-		case loop.ErrMaxIterationsReached:
+		// Use errors.Is() to handle wrapped errors correctly
+		switch {
+		case errors.Is(err, loop.ErrMaxIterationsReached):
 			os.Exit(1)
-		case loop.ErrBudgetExceeded:
+		case errors.Is(err, loop.ErrBudgetExceeded):
 			os.Exit(2)
-		case context.DeadlineExceeded:
+		case errors.Is(err, context.DeadlineExceeded):
 			os.Exit(3)
-		case context.Canceled:
+		case errors.Is(err, context.Canceled):
 			// Summary already printed above with resume instructions
 			os.Exit(130)
 		default:
