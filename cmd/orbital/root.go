@@ -225,7 +225,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		spec.NotesFile = generateNotesFilePath(specPath)
 	}
 
-	// Sanitise notes file path to prevent directory traversal
+	// Sanitise notes file path to prevent directory traversal (including via symlinks)
 	absNotesPath, err := filepath.Abs(spec.NotesFile)
 	if err != nil {
 		return fmt.Errorf("invalid notes file path: %w", err)
@@ -234,14 +234,29 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid working directory: %w", err)
 	}
+	// Resolve symlinks to prevent bypass attacks
+	// For working dir, it must exist so we can resolve it
+	realWorkingDir, err := filepath.EvalSymlinks(absWorkingDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve working directory: %w", err)
+	}
+	// For notes path, resolve parent dir (file may not exist yet)
+	notesDir := filepath.Dir(absNotesPath)
+	if _, err := os.Stat(notesDir); err == nil {
+		realNotesDir, err := filepath.EvalSymlinks(notesDir)
+		if err != nil {
+			return fmt.Errorf("failed to resolve notes directory: %w", err)
+		}
+		absNotesPath = filepath.Join(realNotesDir, filepath.Base(absNotesPath))
+	}
 	// Ensure notes file is within the working directory
-	if !strings.HasPrefix(absNotesPath, absWorkingDir+string(filepath.Separator)) && absNotesPath != absWorkingDir {
+	if !strings.HasPrefix(absNotesPath, realWorkingDir+string(filepath.Separator)) && absNotesPath != realWorkingDir {
 		return fmt.Errorf("notes file path must be within working directory: %s is outside %s", spec.NotesFile, workingDir)
 	}
 	spec.NotesFile = absNotesPath
 
-	// Ensure notes directory exists
-	notesDir := filepath.Dir(spec.NotesFile)
+	// Ensure notes directory exists (recalculate after symlink resolution)
+	notesDir = filepath.Dir(spec.NotesFile)
 	if err := os.MkdirAll(notesDir, 0755); err != nil {
 		return fmt.Errorf("failed to create notes directory %s: %w", notesDir, err)
 	}
@@ -461,8 +476,9 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			tuiProgram.Kill()
 		} else {
 			tuiProgram.Quit()
-			<-tuiDone
 		}
+		// Wait for TUI goroutine to finish before cleanup
+		<-tuiDone
 		// Clean up the Bridge's message pump goroutine
 		tuiProgram.Close()
 	} else {

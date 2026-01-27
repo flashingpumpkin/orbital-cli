@@ -440,3 +440,97 @@ The following issues were noted but not fixed as they are pre-existing technical
 - `os.Exit` bypasses defer cleanup (existing behaviour)
 - Silent file access errors in TUI (existing behaviour)
 - Exported Set* methods on Model without synchronisation (safe in current usage)
+
+## Code Review - Iteration 7
+
+### Security
+_ISSUES_FOUND
+
+1. **Path traversal validation missing in continue.go** (MEDIUM): The notes file path sanitisation added in `root.go` is not present in `continue.go`. The `continue` command loads `st.NotesFile` from state without validating it stays within the working directory. A malicious state file could inject a path like `../../.bashrc`.
+
+2. **Symlink bypass in path traversal check** (MEDIUM): The validation uses `filepath.Abs()` which does NOT resolve symlinks. An attacker could create a symlink inside the working directory pointing outside (e.g., `ln -s /etc/passwd ./docs/notes/my-notes.md`) and the check would pass.
+
+3. **Queue file path injection** (LOW-MEDIUM): The queue stores arbitrary file paths without validation. A malicious `.orbital/state/queue.json` could inject paths that are processed without sanitisation.
+
+4. **TUI file reading without validation** (LOW): The TUI loads file content from paths in `SessionInfo` without path validation. If an attacker controls the state file, they could read arbitrary files.
+
+### Design
+No issues. The changes are:
+- Consistent with existing patterns in the codebase
+- Follow Single Responsibility Principle
+- Introduce no new coupling
+- Use appropriate error handling with `%w` wrapping
+- Tests are properly updated
+
+### Logic
+_ISSUES_FOUND
+
+1. **Symlink bypass in path traversal check** (HIGH): `filepath.Abs()` does not resolve symlinks. The validation can be bypassed with symlinks pointing outside the working directory. Should use `filepath.EvalSymlinks()`.
+
+2. **Race condition when Kill() is used** (MEDIUM): In root.go lines 459-467, when `Kill()` is called (on Ctrl+C), `<-tuiDone` is not waited on before calling `Close()`. The TUI goroutine may still be running when cleanup happens.
+
+3. **truncateFromStart returns wrong width** (MEDIUM): The function returns a string of width `targetWidth + 3` instead of `targetWidth` because the "..." prefix is not accounted for.
+
+4. **MaxOutputSize negative values accepted** (LOW): Config validation doesn't check for negative `MaxOutputSize`, which could cause undefined behaviour.
+
+### Error Handling
+_ISSUES_FOUND
+
+1. **Parse errors silently dropped in Bridge** (HIGH): In `bridge.go`, when `parser.ParseLine()` fails, the error is silently swallowed with no logging. Makes debugging "missing output" issues extremely difficult.
+
+2. **Message queue drops without visibility** (MEDIUM): In `bridge.go`, when the queue is full, messages are dropped with no indication. Critical messages like the completion promise could theoretically be lost.
+
+3. **Double error wrapping in generateSessionID** (LOW): The function wraps the error, then the call site wraps again, resulting in duplicate context: "failed to generate session ID: failed to generate session ID: ...".
+
+4. **Notes file error doesn't clear path** (LOW): When `ensureNotesFile()` fails, the error is logged but `spec.NotesFile` is not cleared, causing downstream operations to attempt to use an invalid path.
+
+5. **Bridge cleanup not panic-safe** (LOW): If the loop execution panics, `tuiProgram.Close()` is never called, leaving the goroutine leaked.
+
+### Data Integrity
+_ISSUES_FOUND
+
+1. **Currency formatting missing NaN/Inf handling** (MEDIUM): `formatCurrency()` doesn't handle `NaN` or `+Inf` values. `int(NaN)` is undefined behaviour in Go, and `int(+Inf)` overflows to a large negative number.
+
+2. **Session ID collision risk at scale** (LOW): 8 bytes (64 bits) of entropy means birthday paradox collisions at ~2^32 sessions. For production CI/CD with parallel execution, 16 bytes (128 bits) would be safer.
+
+3. **nil bridge dereference race** (LOW): The nil check in `Close()` is not atomic. In concurrent usage (e.g., signal handler), could cause nil dereference.
+
+### Verdict
+**FAIL**
+
+Critical issues requiring attention before this iteration can be considered complete:
+
+1. **Path traversal validation missing in continue.go**: The security fix was applied to `root.go` but the same vulnerability exists in `continue.go` where notes file path is loaded from state without validation.
+
+2. **Symlink bypass**: The path traversal check uses `filepath.Abs()` which does not follow symlinks. An attacker can bypass the check with a symlink inside the working directory pointing to an external location.
+
+3. **Race condition on Kill()**: When the user presses Ctrl+C, `tuiProgram.Kill()` is called but `<-tuiDone` is not waited on, meaning `Close()` is called while the TUI goroutine may still be running.
+
+The design changes are solid. The config validation, error return for generateSessionID, and Bridge cleanup are correctly implemented. The issues are primarily around incomplete application of the security fix and edge cases in the existing code that were exposed during review.
+
+## Iteration 8 - Code Review Fixes
+
+### Issues Addressed
+
+All three critical issues from the Iteration 7 code review have been fixed:
+
+**1. Path traversal validation missing in continue.go (MEDIUM)**
+- Added the same path sanitisation logic from `root.go` to `continue.go`
+- Validates that notes file path is within working directory
+- Added `strings` import to continue.go
+
+**2. Symlink bypass in path traversal check (HIGH)**
+- Changed from `filepath.Abs()` to `filepath.EvalSymlinks()` in both `root.go` and `continue.go`
+- Working directory is resolved via `EvalSymlinks` since it must exist
+- Notes directory is resolved only if it exists (file may not exist yet)
+- After symlink resolution, the absNotesPath is recalculated to reflect the real path
+- Prevents attackers from creating symlinks inside working directory pointing outside
+
+**3. Race condition on Kill() (MEDIUM)**
+- Moved `<-tuiDone` outside the if/else block so it executes for both `Kill()` and `Quit()` paths
+- Previously, when `Kill()` was called (on CTRL-C), `Close()` was called while TUI goroutine was still running
+- Now both code paths wait for the TUI goroutine to finish before calling `Close()`
+
+### Verification
+
+All tests pass: `make check` successful
