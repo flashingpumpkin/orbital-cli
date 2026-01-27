@@ -53,6 +53,7 @@ var (
 	nonInteractive bool
 	dangerous      bool
 	maxOutputSize  int
+	themeFlag      string
 )
 
 var rootCmd = &cobra.Command{
@@ -114,6 +115,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "Error if interactive selection would be needed")
 	rootCmd.PersistentFlags().BoolVar(&dangerous, "dangerous", false, "Enable --dangerously-skip-permissions for Claude CLI (allows execution without permission prompts)")
 	rootCmd.PersistentFlags().IntVar(&maxOutputSize, "max-output-size", config.DefaultMaxOutputSize, "Maximum output size in bytes to retain (0 = unlimited)")
+	rootCmd.PersistentFlags().StringVar(&themeFlag, "theme", "auto", "Colour theme: auto (detect), dark, light")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {
@@ -151,6 +153,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		MaxTurns:                   maxTurns,
 		DangerouslySkipPermissions: dangerous,
 		MaxOutputSize:              maxOutputSize,
+		Theme:                      themeFlag,
 	}
 
 	// Validate configuration
@@ -316,7 +319,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			Budget:        cfg.MaxBudget,
 			ContextWindow: config.GetContextWindow(cfg.Model),
 		}
-		tuiProgram = tui.New(session, progress)
+		tuiProgram = tui.New(session, progress, cfg.Theme)
 		exec.SetStreamWriter(tuiProgram.Bridge())
 	} else if cfg.Verbose || cfg.ShowUnhandled || todosOnly {
 		// Minimal/verbose mode: formatted output

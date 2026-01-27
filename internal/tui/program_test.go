@@ -21,7 +21,7 @@ func TestNewProgram(t *testing.T) {
 		Budget:       100.0,
 	}
 
-	prog := New(session, progress)
+	prog := New(session, progress, "auto")
 
 	if prog == nil {
 		t.Fatal("expected non-nil Program")
@@ -44,7 +44,7 @@ func TestProgramBridge(t *testing.T) {
 	session := SessionInfo{}
 	progress := ProgressInfo{}
 
-	prog := New(session, progress)
+	prog := New(session, progress, "auto")
 	bridge := prog.Bridge()
 
 	if bridge == nil {

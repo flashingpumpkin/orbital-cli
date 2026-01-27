@@ -2249,3 +2249,102 @@ func TestModelInitReturnsBothTicks(t *testing.T) {
 		t.Error("expected Init() to return a non-nil command")
 	}
 }
+
+func TestNewModelWithTheme(t *testing.T) {
+	tests := []struct {
+		name  string
+		theme Theme
+	}{
+		{
+			name:  "dark theme",
+			theme: ThemeDark,
+		},
+		{
+			name:  "light theme",
+			theme: ThemeLight,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := NewModelWithTheme(tt.theme)
+
+			// Model should be created successfully
+			if model.outputLines == nil {
+				t.Error("expected outputLines to be initialized")
+			}
+
+			// Styles should be set - verify by rendering a styled string
+			// A non-empty rendered string indicates styles are working
+			rendered := model.styles.Border.Render("test")
+			if rendered == "" {
+				t.Error("expected styles to produce non-empty rendered output")
+			}
+		})
+	}
+}
+
+func TestGetStyles(t *testing.T) {
+	tests := []struct {
+		name  string
+		theme Theme
+	}{
+		{name: "dark theme", theme: ThemeDark},
+		{name: "light theme", theme: ThemeLight},
+		{name: "unknown defaults to dark", theme: Theme("unknown")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			styles := GetStyles(tt.theme)
+
+			// Should return valid styles - verify by rendering
+			borderRendered := styles.Border.Render("test")
+			if borderRendered == "" {
+				t.Error("expected Border style to produce non-empty output")
+			}
+			headerRendered := styles.Header.Render("test")
+			if headerRendered == "" {
+				t.Error("expected Header style to produce non-empty output")
+			}
+		})
+	}
+}
+
+func TestResolveTheme(t *testing.T) {
+	// Test that explicit themes are returned unchanged
+	if ResolveTheme(ThemeDark) != ThemeDark {
+		t.Error("expected ThemeDark to be returned unchanged")
+	}
+	if ResolveTheme(ThemeLight) != ThemeLight {
+		t.Error("expected ThemeLight to be returned unchanged")
+	}
+
+	// Test that ThemeAuto resolves to either Dark or Light (depends on terminal)
+	resolved := ResolveTheme(ThemeAuto)
+	if resolved != ThemeDark && resolved != ThemeLight {
+		t.Errorf("expected ThemeAuto to resolve to ThemeDark or ThemeLight, got %v", resolved)
+	}
+}
+
+func TestValidTheme(t *testing.T) {
+	tests := []struct {
+		theme string
+		valid bool
+	}{
+		{"auto", true},
+		{"dark", true},
+		{"light", true},
+		{"", false},
+		{"invalid", false},
+		{"DARK", false}, // Case-sensitive
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.theme, func(t *testing.T) {
+			if got := ValidTheme(tt.theme); got != tt.valid {
+				t.Errorf("ValidTheme(%q) = %v, want %v", tt.theme, got, tt.valid)
+			}
+		})
+	}
+}

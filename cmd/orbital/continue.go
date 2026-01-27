@@ -18,6 +18,7 @@ import (
 	"github.com/flashingpumpkin/orbital/internal/session"
 	"github.com/flashingpumpkin/orbital/internal/spec"
 	"github.com/flashingpumpkin/orbital/internal/state"
+	"github.com/flashingpumpkin/orbital/internal/tui"
 	"github.com/flashingpumpkin/orbital/internal/tui/selector"
 )
 
@@ -74,7 +75,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 	}
 
 	// Select session based on flags or interactive TUI
-	selected, _, selectErr := selectSession(sessions, collector)
+	selected, _, selectErr := selectSession(sessions, collector, themeFlag)
 
 	if selectErr != nil {
 		return selectErr
@@ -148,6 +149,7 @@ func runContinue(cmd *cobra.Command, args []string) error {
 		MaxTurns:                   maxTurns,
 		DangerouslySkipPermissions: dangerous,
 		MaxOutputSize:              maxOutputSize,
+		Theme:                      themeFlag,
 	}
 
 	// Validate configuration
@@ -356,7 +358,8 @@ type sessionValidator interface {
 // Priority:
 // 1. Single valid session: auto-select
 // 2. Multiple sessions: TUI selector (unless --non-interactive)
-func selectSession(sessions []session.Session, validator sessionValidator) (*session.Session, []string, error) {
+// The theme parameter is used for the TUI selector colours.
+func selectSession(sessions []session.Session, validator sessionValidator, theme string) (*session.Session, []string, error) {
 	validSessions := validator.ValidSessions(sessions)
 
 	// Auto-resume if only one valid session
@@ -376,8 +379,25 @@ func selectSession(sessions []session.Session, validator sessionValidator) (*ses
 		return nil, nil, fmt.Errorf("multiple sessions found:\n%s", formatSessionList(sessions))
 	}
 
+	// Resolve theme for selector
+	var selectorTheme selector.Theme
+	switch theme {
+	case "light":
+		selectorTheme = selector.ThemeLight
+	default:
+		// "auto" detection or explicit "dark"
+		selectorTheme = selector.ThemeDark
+		if theme == "auto" {
+			// Use the TUI's theme detection
+			resolvedTheme := tui.ResolveTheme(tui.Theme(theme))
+			if resolvedTheme == tui.ThemeLight {
+				selectorTheme = selector.ThemeLight
+			}
+		}
+	}
+
 	// Run TUI selector
-	result, err := selector.Run(sessions)
+	result, err := selector.RunWithTheme(sessions, selectorTheme)
 	if err != nil {
 		return nil, nil, fmt.Errorf("session selection failed: %w", err)
 	}

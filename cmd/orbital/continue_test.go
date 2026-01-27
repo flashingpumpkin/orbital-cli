@@ -233,7 +233,7 @@ func TestSelectSession_SingleValidSession(t *testing.T) {
 	nonInteractive = false
 	collector := &mockCollector{validSessions: sessions}
 
-	selected, cleanupPaths, err := selectSession(sessions, collector)
+	selected, cleanupPaths, err := selectSession(sessions, collector, "auto")
 	if err != nil {
 		t.Fatalf("selectSession() error = %v", err)
 	}
@@ -265,7 +265,7 @@ func TestSelectSession_NonInteractiveMultiple(t *testing.T) {
 	defer func() { nonInteractive = false }()
 	collector := &mockCollector{validSessions: sessions}
 
-	_, _, err := selectSession(sessions, collector)
+	_, _, err := selectSession(sessions, collector, "auto")
 	if err == nil {
 		t.Fatal("selectSession() should return error in non-interactive mode with multiple sessions")
 	}
@@ -289,7 +289,7 @@ func TestSelectSession_NoValidSessions_NonInteractive(t *testing.T) {
 	defer func() { nonInteractive = false }()
 	collector := &mockCollector{validSessions: nil}
 
-	_, _, err := selectSession(sessions, collector)
+	_, _, err := selectSession(sessions, collector, "auto")
 	if err == nil {
 		t.Fatal("selectSession() should return error when no valid sessions")
 	}

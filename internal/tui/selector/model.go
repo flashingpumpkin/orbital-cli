@@ -38,13 +38,18 @@ type Model struct {
 	styles Styles
 }
 
-// New creates a new session selector model.
+// New creates a new session selector model with dark theme.
 func New(sessions []session.Session) Model {
+	return NewWithTheme(sessions, ThemeDark)
+}
+
+// NewWithTheme creates a new session selector model with the specified theme.
+func NewWithTheme(sessions []session.Session, theme Theme) Model {
 	return Model{
 		sessions:      sessions,
 		cursor:        0,
 		cleanupChoice: 1, // Default to "No"
-		styles:        DefaultStyles(),
+		styles:        GetStyles(theme),
 	}
 }
 
@@ -409,9 +414,14 @@ func (m Model) Result() Result {
 	return m.result
 }
 
-// Run executes the selector and returns the result.
+// Run executes the selector with dark theme and returns the result.
 func Run(sessions []session.Session) (*Result, error) {
-	model := New(sessions)
+	return RunWithTheme(sessions, ThemeDark)
+}
+
+// RunWithTheme executes the selector with the specified theme and returns the result.
+func RunWithTheme(sessions []session.Session, theme Theme) (*Result, error) {
+	model := NewWithTheme(sessions, theme)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {

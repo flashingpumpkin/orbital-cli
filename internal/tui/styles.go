@@ -3,10 +3,10 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Amber Terminal colour palette
-// These constants define the visual identity of the Orbital TUI.
+// Dark theme colour palette (for dark terminal backgrounds)
+// These constants define the visual identity of the Orbital TUI in dark mode.
 const (
-	// Primary colours
+	// Primary colours (dark theme)
 	ColourAmber      = lipgloss.Color("214") // #FFB000 - Headers, active states, borders
 	ColourAmberDim   = lipgloss.Color("136") // #996600 - Inactive borders, separators
 	ColourAmberLight = lipgloss.Color("222") // #FFD966 - Body text, values
@@ -15,6 +15,19 @@ const (
 	ColourSuccess    = lipgloss.Color("82")  // #00FF00 - Completed tasks, valid states
 	ColourWarning    = lipgloss.Color("208") // #FFAA00 - >80% budget/iterations
 	ColourError      = lipgloss.Color("196") // #FF3300 - Errors, invalid states
+)
+
+// Light theme colour palette (for light terminal backgrounds)
+// Uses darker, more saturated colours for visibility on light backgrounds.
+const (
+	ColourAmberDark       = lipgloss.Color("94")  // #8B6914 - Headers, active states, borders
+	ColourAmberDarkDim    = lipgloss.Color("58")  // #5C4A0A - Inactive borders, separators
+	ColourAmberDarkMid    = lipgloss.Color("94")  // #6B5A1E - Body text, values
+	ColourAmberDarkFaded  = lipgloss.Color("101") // #7A6A30 - Labels, secondary text
+	ColourBackgroundLight = lipgloss.Color("231") // #FFFFFF - Light background reference
+	ColourSuccessDark     = lipgloss.Color("22")  // #008000 - Completed tasks, valid states
+	ColourWarningDark     = lipgloss.Color("166") // #CC5500 - >80% budget/iterations
+	ColourErrorDark       = lipgloss.Color("160") // #CC0000 - Errors, invalid states
 )
 
 // Box drawing characters for the UI frame.
@@ -97,8 +110,8 @@ type Styles struct {
 	Brand lipgloss.Style
 }
 
-// defaultStyles returns the amber terminal style configuration.
-func defaultStyles() Styles {
+// DarkStyles returns the amber theme optimised for dark terminal backgrounds.
+func DarkStyles() Styles {
 	return Styles{
 		// Frame and borders
 		Border:    lipgloss.NewStyle().Foreground(ColourAmber),
@@ -134,6 +147,58 @@ func defaultStyles() Styles {
 
 		// Brand
 		Brand: lipgloss.NewStyle().Foreground(ColourAmber).Bold(true),
+	}
+}
+
+// LightStyles returns the amber theme optimised for light terminal backgrounds.
+// Uses darker, more saturated colours for better contrast on light backgrounds.
+func LightStyles() Styles {
+	return Styles{
+		// Frame and borders
+		Border:    lipgloss.NewStyle().Foreground(ColourAmberDark),
+		BorderDim: lipgloss.NewStyle().Foreground(ColourAmberDarkDim),
+
+		// Text hierarchy
+		Header: lipgloss.NewStyle().Foreground(ColourAmberDark).Bold(true),
+		Label:  lipgloss.NewStyle().Foreground(ColourAmberDarkFaded),
+		Value:  lipgloss.NewStyle().Foreground(ColourAmberDarkMid),
+
+		// Status colours
+		Success: lipgloss.NewStyle().Foreground(ColourSuccessDark),
+		Warning: lipgloss.NewStyle().Foreground(ColourWarningDark),
+		Error:   lipgloss.NewStyle().Foreground(ColourErrorDark),
+
+		// Task states
+		TaskPending:    lipgloss.NewStyle().Foreground(ColourAmberDarkDim),
+		TaskInProgress: lipgloss.NewStyle().Foreground(ColourAmberDark),
+		TaskComplete:   lipgloss.NewStyle().Foreground(ColourSuccessDark),
+
+		// Special areas
+		ScrollArea:      lipgloss.NewStyle(),
+		TooSmallMessage: lipgloss.NewStyle().Foreground(ColourWarningDark).Bold(true),
+
+		// Tab bar - active tab with dark amber background
+		TabActive:   lipgloss.NewStyle().Foreground(ColourBackgroundLight).Background(ColourAmberDark).Bold(true).Padding(0, 1),
+		TabInactive: lipgloss.NewStyle().Foreground(ColourAmberDarkFaded).Padding(0, 1),
+		TabBar:      lipgloss.NewStyle().Foreground(ColourAmberDarkDim),
+
+		// Help bar
+		HelpBar: lipgloss.NewStyle().Foreground(ColourAmberDarkDim),
+		HelpKey: lipgloss.NewStyle().Foreground(ColourAmberDarkFaded),
+
+		// Brand
+		Brand: lipgloss.NewStyle().Foreground(ColourAmberDark).Bold(true),
+	}
+}
+
+// GetStyles returns the Styles for the given theme.
+// Falls back to dark theme for unknown theme values.
+func GetStyles(theme Theme) Styles {
+	switch theme {
+	case ThemeLight:
+		return LightStyles()
+	default:
+		return DarkStyles()
 	}
 }
 

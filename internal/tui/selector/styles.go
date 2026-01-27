@@ -3,7 +3,17 @@ package selector
 
 import "github.com/charmbracelet/lipgloss"
 
-// Amber Terminal colour palette for session selector
+// Theme represents the colour theme for the selector.
+type Theme string
+
+const (
+	// ThemeDark uses colours optimised for dark terminal backgrounds.
+	ThemeDark Theme = "dark"
+	// ThemeLight uses colours optimised for light terminal backgrounds.
+	ThemeLight Theme = "light"
+)
+
+// Dark theme colour palette for session selector
 const (
 	colourAmber       = lipgloss.Color("214") // #FFB000 - Primary amber
 	colourAmberDim    = lipgloss.Color("136") // #996600 - Inactive, separators
@@ -12,6 +22,17 @@ const (
 	colourBackground  = lipgloss.Color("0")   // #000000 - Background
 	colourSuccess     = lipgloss.Color("82")  // #00FF00 - Valid states
 	colourWarning     = lipgloss.Color("208") // #FFAA00 - Warnings
+)
+
+// Light theme colour palette
+const (
+	colourAmberDark       = lipgloss.Color("94")  // #8B6914 - Primary dark amber
+	colourAmberDarkDim    = lipgloss.Color("58")  // #5C4A0A - Inactive, separators
+	colourAmberDarkMid    = lipgloss.Color("94")  // #6B5A1E - Body text, values
+	colourAmberDarkFaded  = lipgloss.Color("101") // #7A6A30 - Labels, secondary
+	colourBackgroundLight = lipgloss.Color("231") // #FFFFFF - Light background
+	colourSuccessDark     = lipgloss.Color("22")  // #008000 - Valid states
+	colourWarningDark     = lipgloss.Color("166") // #CC5500 - Warnings
 )
 
 // Box drawing characters
@@ -86,8 +107,13 @@ type Styles struct {
 	Brand lipgloss.Style
 }
 
-// DefaultStyles returns the amber terminal style configuration.
+// DefaultStyles returns the dark theme style configuration.
 func DefaultStyles() Styles {
+	return DarkStyles()
+}
+
+// DarkStyles returns the amber terminal style configuration for dark backgrounds.
+func DarkStyles() Styles {
 	return Styles{
 		Border:         lipgloss.NewStyle().Foreground(colourAmber),
 		Title:          lipgloss.NewStyle().Bold(true).Foreground(colourAmber),
@@ -108,6 +134,42 @@ func DefaultStyles() Styles {
 		ButtonActive:   lipgloss.NewStyle().Bold(true).Foreground(colourBackground).Background(colourAmber).Padding(0, 2),
 		ButtonInactive: lipgloss.NewStyle().Foreground(colourAmberFaded).Padding(0, 2),
 		Brand:          lipgloss.NewStyle().Bold(true).Foreground(colourAmber),
+	}
+}
+
+// LightStyles returns the style configuration for light backgrounds.
+func LightStyles() Styles {
+	return Styles{
+		Border:         lipgloss.NewStyle().Foreground(colourAmberDark),
+		Title:          lipgloss.NewStyle().Bold(true).Foreground(colourAmberDark),
+		Separator:      lipgloss.NewStyle().Foreground(colourAmberDark),
+		SessionValid:   lipgloss.NewStyle().Foreground(colourAmberDarkMid),
+		SessionInvalid: lipgloss.NewStyle().Foreground(colourAmberDarkDim),
+		Cursor:         lipgloss.NewStyle().Foreground(colourAmberDark).Bold(true),
+		CursorInvalid:  lipgloss.NewStyle().Foreground(colourWarningDark).Bold(true),
+		Label:          lipgloss.NewStyle().Foreground(colourAmberDarkFaded),
+		Value:          lipgloss.NewStyle().Foreground(colourAmberDarkMid),
+		ValueDim:       lipgloss.NewStyle().Foreground(colourAmberDarkDim),
+		Warning:        lipgloss.NewStyle().Foreground(colourWarningDark),
+		Success:        lipgloss.NewStyle().Foreground(colourSuccessDark),
+		Help:           lipgloss.NewStyle().Foreground(colourAmberDarkDim),
+		HelpKey:        lipgloss.NewStyle().Foreground(colourAmberDarkFaded),
+		DialogTitle:    lipgloss.NewStyle().Bold(true).Foreground(colourAmberDark),
+		DialogText:     lipgloss.NewStyle().Foreground(colourAmberDarkMid),
+		ButtonActive:   lipgloss.NewStyle().Bold(true).Foreground(colourBackgroundLight).Background(colourAmberDark).Padding(0, 2),
+		ButtonInactive: lipgloss.NewStyle().Foreground(colourAmberDarkFaded).Padding(0, 2),
+		Brand:          lipgloss.NewStyle().Bold(true).Foreground(colourAmberDark),
+	}
+}
+
+// GetStyles returns the Styles for the given theme.
+// Falls back to dark theme for unknown values.
+func GetStyles(theme Theme) Styles {
+	switch theme {
+	case ThemeLight:
+		return LightStyles()
+	default:
+		return DarkStyles()
 	}
 }
 

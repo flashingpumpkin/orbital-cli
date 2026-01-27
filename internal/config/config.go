@@ -66,6 +66,11 @@ type Config struct {
 	// When exceeded, older output is truncated to preserve the most recent content
 	// where completion promises typically appear. Set to 0 to disable truncation.
 	MaxOutputSize int
+
+	// Theme is the colour theme for the TUI: "auto", "dark", or "light".
+	// "auto" detects the terminal background colour automatically.
+	// Default: "auto".
+	Theme string
 }
 
 // DefaultMaxOutputSize is the default maximum output size in bytes (10MB).
@@ -101,6 +106,7 @@ func NewConfig() *Config {
 		WorkingDir:        ".",
 		IterationTimeout:  5 * time.Minute,
 		MaxOutputSize:     DefaultMaxOutputSize,
+		Theme:             "auto",
 	}
 }
 

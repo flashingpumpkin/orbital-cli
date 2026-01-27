@@ -98,8 +98,13 @@ type Model struct {
 	ready bool
 }
 
-// NewModel creates a new TUI model.
+// NewModel creates a new TUI model with default dark theme.
 func NewModel() Model {
+	return NewModelWithTheme(ThemeDark)
+}
+
+// NewModelWithTheme creates a new TUI model with the specified theme.
+func NewModelWithTheme(theme Theme) Model {
 	vp := viewport.New(0, 0)
 	return Model{
 		outputLines:   NewRingBuffer(DefaultMaxOutputLines),
@@ -111,7 +116,7 @@ func NewModel() Model {
 		fileViewports: make(map[string]viewport.Model),
 		fileModTimes:  make(map[string]time.Time),
 		outputTailing: true,
-		styles:        defaultStyles(),
+		styles:        GetStyles(theme),
 		progress: ProgressInfo{
 			Iteration:    1,
 			MaxIteration: 50,

@@ -17,14 +17,19 @@ type Program struct {
 
 // New creates a new TUI program with the given initial session and progress.
 // Returns the Program wrapper which provides access to both the tea.Program and Bridge.
-func New(session SessionInfo, progress ProgressInfo) *Program {
+// The theme parameter specifies the colour theme: "auto", "dark", or "light".
+// If theme is "auto", it will be resolved using DetectTheme().
+func New(session SessionInfo, progress ProgressInfo, theme string) *Program {
 	// Handle NO_COLOR environment variable
 	if os.Getenv("NO_COLOR") != "" {
 		lipgloss.SetColorProfile(termenv.Ascii)
 	}
 
-	// Create the model with initial values
-	model := NewModel()
+	// Resolve theme
+	resolvedTheme := ResolveTheme(Theme(theme))
+
+	// Create the model with initial values and resolved theme
+	model := NewModelWithTheme(resolvedTheme)
 	model.session = session
 	model.tabs = model.buildTabs()
 	model.progress = progress

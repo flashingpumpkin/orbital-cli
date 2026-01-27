@@ -13,6 +13,9 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 7. **Iteration countdown timer**: Display remaining time in the current iteration
 8. **Light and dark mode**: Support both terminal themes with auto-detection
 9. **Display active workflow**: Show which workflow preset is running in the TUI
+10. **Refactor template variables**: Split `{{files}}` into `{{spec_file}}`, `{{context_files}}`, `{{notes_file}}`
+11. **Tighten autonomous 'implement' prompt**: Enforce single-task discipline
+12. **Tighten autonomous 'fix' prompt**: Only address review feedback, no new tasks
 
 ## Story Mapping Overview
 
@@ -39,6 +42,14 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 | Must Have | Add iteration countdown timer | Users see time remaining before iteration timeout |
 | Must Have | Add light and dark mode with auto-detection | TUI is readable on both light and dark terminal backgrounds |
 | Must Have | Display active workflow name | Users know which workflow preset is driving the iteration loop |
+
+**Epic 4**: Workflow Improvements
+
+| Priority | Story | Value |
+|----------|-------|-------|
+| Must Have | Refactor template variables | Distinct placeholders clarify spec vs context vs notes |
+| Must Have | Tighten autonomous 'implement' prompt | Enforces single-task discipline per iteration |
+| Must Have | Tighten autonomous 'fix' prompt | Prevents scope creep when fixing review issues |
 
 ## Epic: File Management Improvements
 
@@ -553,7 +564,7 @@ For future enhancement:
 
 ---
 
-### [ ] **Ticket: Add light and dark mode with auto-detection**
+### [x] **Ticket: Add light and dark mode with auto-detection**
 
 **As a** user
 **I want** the TUI to automatically adapt to my terminal's colour scheme
@@ -643,25 +654,25 @@ The project already uses lipgloss/termenv which provides `HasDarkBackground()` f
 | Background | (terminal default) | (terminal default) |
 
 **Acceptance Criteria**:
-- [ ] Given a dark terminal background, when the TUI starts with theme "auto", then the dark colour palette is applied
-- [ ] Given a light terminal background, when the TUI starts with theme "auto", then the light colour palette is applied
-- [ ] Given `--theme dark` flag, when the TUI starts, then the dark palette is used regardless of terminal background
-- [ ] Given `--theme light` flag, when the TUI starts, then the light palette is used regardless of terminal background
-- [ ] Given `theme = "light"` in config file, when the TUI starts without flag, then the light palette is used
-- [ ] Given the light palette is active, when viewing the TUI on a light terminal, then all text has sufficient contrast for readability
-- [ ] Given the session selector is displayed, when theme is applied, then selector uses matching colour palette
+- [x] Given a dark terminal background, when the TUI starts with theme "auto", then the dark colour palette is applied
+- [x] Given a light terminal background, when the TUI starts with theme "auto", then the light colour palette is applied
+- [x] Given `--theme dark` flag, when the TUI starts, then the dark palette is used regardless of terminal background
+- [x] Given `--theme light` flag, when the TUI starts, then the light palette is used regardless of terminal background
+- [x] Given `theme = "light"` in config file, when the TUI starts without flag, then the light palette is used
+- [x] Given the light palette is active, when viewing the TUI on a light terminal, then all text has sufficient contrast for readability
+- [x] Given the session selector is displayed, when theme is applied, then selector uses matching colour palette
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Theme detection using `termenv.HasDarkBackground()`
-- [ ] Dark palette (current amber theme) preserved
-- [ ] Light palette with adjusted colours created
-- [ ] CLI flag `--theme` added
-- [ ] Config file support for theme setting
-- [ ] Session selector themed consistently
-- [ ] Fallback to dark theme if detection fails
-- [ ] Unit test for theme detection logic
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] Theme detection using `termenv.HasDarkBackground()`
+- [x] Dark palette (current amber theme) preserved
+- [x] Light palette with adjusted colours created
+- [x] CLI flag `--theme` added
+- [x] Config file support for theme setting
+- [x] Session selector themed consistently
+- [x] Fallback to dark theme if detection fails
+- [x] Unit test for theme detection logic
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - Uses existing `termenv` package (already a dependency)
@@ -749,6 +760,143 @@ For future enhancement:
 
 ---
 
+## Epic: Workflow Improvements
+
+### [ ] **Ticket: Refactor template variables and tighten autonomous workflow prompts**
+
+**As a** user
+**I want** clearer template variables and more disciplined prompts
+**So that** the autonomous workflow works on exactly one task per iteration and the fix step only addresses review feedback
+
+**Context**: The current autonomous workflow has two issues:
+
+1. **Template variables are ambiguous**: `{{files}}` bundles spec files and context files together without distinguishing their purpose. Claude cannot tell which file contains the tasks vs which files are reference material.
+
+2. **The 'implement' step sometimes works on multiple tasks**: The prompt says "pick the highest-leverage task" but does not explicitly forbid working on multiple items. Claude sometimes completes several tasks in one iteration, which violates the "one task per iteration" principle.
+
+3. **The 'fix' step picks up new tasks**: When the review gate fails, the fix step should ONLY address the review feedback. Instead, Claude sometimes reads the spec file and picks up new work, conflating "fixing review issues" with "continuing implementation".
+
+**Description**: Refactor the template variable system to provide distinct placeholders for spec file, context files, and notes file. Then tighten the autonomous workflow prompts to enforce single-task discipline and prevent scope creep in the fix step.
+
+**Implementation Requirements**:
+
+1. **Add new template variables** in `internal/workflow/executor.go` and `internal/spec/loader.go`:
+   ```go
+   // New placeholders:
+   {{spec_file}}      // Primary spec/stories file (first file argument)
+   {{context_files}}  // Additional reference files (remaining file arguments)
+   {{notes_file}}     // Notes file path (already exists in system prompt)
+
+   // Keep for backwards compatibility:
+   {{files}}          // All files (existing behaviour)
+   {{plural}}         // "s" if multiple files
+   ```
+
+2. **Update Runner.SetFilePaths** to track spec vs context:
+   ```go
+   func (r *Runner) SetFilePaths(specFile string, contextFiles []string) {
+       r.specFile = specFile
+       r.contextFiles = contextFiles
+   }
+   ```
+
+3. **Update buildPrompt** to handle new placeholders:
+   ```go
+   result = strings.ReplaceAll(result, "{{spec_file}}", r.specFile)
+   if len(r.contextFiles) > 0 {
+       result = strings.ReplaceAll(result, "{{context_files}}", formatFileList(r.contextFiles))
+   } else {
+       result = strings.ReplaceAll(result, "{{context_files}}", "(none)")
+   }
+   ```
+
+4. **Tighten the 'implement' step prompt**:
+   ```
+   Study the spec file to understand the remaining work:
+   {{spec_file}}
+
+   Context files (reference only, do not modify):
+   {{context_files}}
+
+   Notes file for cross-iteration context:
+   {{notes_file}}
+
+   TASK SELECTION:
+   Pick exactly ONE task from the spec file. Choose the highest-leverage task:
+   the one that unblocks the most work or provides the most value.
+
+   CONSTRAINTS:
+   - Complete ONE task only. Do not start additional tasks.
+   - Do not work on multiple items even if they seem related.
+   - If you finish early, exit. Do not fill time with extra work.
+
+   EXECUTION:
+   1. Implement the single chosen task fully
+   2. Verify the outcome is correct (tests, lint, typecheck)
+   3. Document in notes: which task, why chosen, key decisions
+   4. Check off the completed item in the spec file
+   5. Commit all changes with a descriptive message
+   6. Exit (do not output completion promise)
+   ```
+
+5. **Tighten the 'fix' step prompt**:
+   ```
+   Read the notes file for review feedback from the previous iteration:
+   {{notes_file}}
+
+   YOUR ONLY JOB: Fix the issues identified by the reviewers.
+
+   CONSTRAINTS:
+   - Do NOT read the spec file for new tasks
+   - Do NOT pick up additional work
+   - Do NOT implement new features
+   - ONLY address the specific issues listed in the review feedback
+
+   EXECUTION:
+   1. Read the review feedback in the notes file
+   2. For each issue raised, implement a fix
+   3. Verify fixes are correct (tests, lint, typecheck)
+   4. Update notes with what was fixed and why
+   5. Commit with message describing the fixes
+   6. Exit
+   ```
+
+6. **Update other presets** that use `{{files}}` to use the new variables where appropriate.
+
+**Acceptance Criteria**:
+- [ ] Given `{{spec_file}}` in a prompt, when the prompt is built, then only the first file path is substituted
+- [ ] Given `{{context_files}}` in a prompt, when the prompt is built, then remaining file paths are substituted (or "(none)" if empty)
+- [ ] Given `{{notes_file}}` in a prompt, when the prompt is built, then the notes file path is substituted
+- [ ] Given the autonomous 'implement' step runs, when Claude executes, then only one task is completed per iteration
+- [ ] Given the autonomous 'fix' step runs after review failure, when Claude executes, then only review issues are addressed (no new tasks)
+- [ ] Given existing presets using `{{files}}`, when they run, then behaviour is unchanged (backwards compatible)
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] New template variables `{{spec_file}}` and `{{context_files}}` implemented
+- [ ] Runner tracks spec file vs context files separately
+- [ ] Autonomous 'implement' prompt tightened for single-task discipline
+- [ ] Autonomous 'fix' prompt tightened to only fix review issues
+- [ ] Existing `{{files}}` placeholder still works
+- [ ] Unit tests for new template substitution
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Modifies `internal/workflow/executor.go` (buildPrompt)
+- Modifies `internal/workflow/presets.go` (autonomous prompts)
+- May need to update `cmd/orbital/root.go` to pass files differently
+
+**Risks**:
+- Breaking existing custom prompts using `{{files}}` (mitigated: keep `{{files}}` working)
+- Claude may still try to work on multiple tasks (mitigated: stronger language in prompt)
+- Fix step may fail if review feedback is unclear (mitigated: review prompt should be specific)
+
+**Notes**: The "one task per iteration" principle is fundamental to the autonomous loop methodology. Working on multiple tasks increases context rot risk and makes debugging harder. The fix step scope creep is particularly problematic because it conflates two different modes of operation: "fix what's broken" vs "continue building".
+
+**Effort Estimate**: M (3-4 hours)
+
+---
+
 ## Backlog Prioritisation
 
 **Must Have (Sprint 1):**
@@ -762,6 +910,7 @@ For future enhancement:
 8. Add iteration countdown timer to TUI (S)
 9. Add light and dark mode with auto-detection (M)
 10. Display active workflow name in TUI (XS)
+11. Refactor template variables and tighten autonomous prompts (M)
 
 **Should Have (Future):**
 - Configurable refresh interval via flag

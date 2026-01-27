@@ -870,3 +870,60 @@ Added tests in `internal/tui/model_test.go`:
 ### Verification
 
 All tests pass: `make check` successful
+
+## Iteration 13 - Light and Dark Mode with Auto-Detection
+
+### Task Selected
+
+**Add light and dark mode with auto-detection**
+
+### Implementation
+
+**1. Created theme infrastructure** (`internal/tui/themes.go`):
+- Added `Theme` type with constants `ThemeAuto`, `ThemeDark`, `ThemeLight`
+- Added `DetectTheme()` using `termenv.HasDarkBackground()`
+- Added `ResolveTheme()` to convert "auto" to actual detected theme
+- Added `ValidTheme()` helper for validation
+
+**2. Updated styles** (`internal/tui/styles.go`):
+- Added light theme colour constants (`ColourAmberDark`, `ColourAmberDarkDim`, etc.)
+- Renamed `defaultStyles()` to `DarkStyles()` and made it public
+- Added `LightStyles()` for light terminal backgrounds
+- Added `GetStyles(theme Theme)` factory function
+- Removed unused `defaultStyles()` function
+
+**3. Updated model** (`internal/tui/model.go`):
+- `NewModel()` now calls `NewModelWithTheme(ThemeDark)`
+- Added `NewModelWithTheme(theme Theme)` which uses `GetStyles(theme)`
+
+**4. Updated program** (`internal/tui/program.go`):
+- `New()` now accepts theme string parameter
+- Calls `ResolveTheme()` before creating model
+- Passes resolved theme to `NewModelWithTheme()`
+
+**5. Added Theme to config** (`internal/config/config.go`):
+- Added `Theme string` field to `Config` struct
+- Default value: "auto"
+
+**6. Added CLI flag** (`cmd/orbital/root.go` and `cmd/orbital/continue.go`):
+- Added `--theme` flag with options: auto, dark, light
+- Added `themeFlag` variable
+- Pass theme to `tui.New()` and config
+
+**7. Updated session selector** (`internal/tui/selector/`):
+- Added theme infrastructure in `styles.go` (ThemeDark, ThemeLight)
+- Added `DarkStyles()`, `LightStyles()`, `GetStyles(theme Theme)`
+- Added `NewWithTheme()` and `RunWithTheme()` in `model.go`
+- Updated `continue.go` to resolve and pass theme to selector
+
+### Testing
+
+Added tests in `internal/tui/model_test.go`:
+- `TestNewModelWithTheme`: Tests model creation with dark and light themes
+- `TestGetStyles`: Tests style factory returns valid styles
+- `TestResolveTheme`: Tests auto resolution and explicit themes
+- `TestValidTheme`: Tests theme string validation
+
+### Verification
+
+All tests pass: `make check` successful
