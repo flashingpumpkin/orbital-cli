@@ -762,7 +762,7 @@ For future enhancement:
 
 ## Epic: Workflow Improvements
 
-### [ ] **Ticket: Refactor template variables for workflow prompts**
+### [x] **Ticket: Refactor template variables for workflow prompts**
 
 **As a** user
 **I want** distinct template variables for spec file, context files, and notes file
@@ -817,19 +817,19 @@ For future enhancement:
    - Notes file from config/flag
 
 **Acceptance Criteria**:
-- [ ] Given `{{spec_file}}` in a prompt, when the prompt is built, then only the first file path is substituted
-- [ ] Given `{{context_files}}` in a prompt with multiple files, when the prompt is built, then files 2..N are listed
-- [ ] Given `{{context_files}}` in a prompt with one file, when the prompt is built, then "(none provided)" is shown
-- [ ] Given `{{notes_file}}` in a prompt, when the prompt is built, then the notes file path is substituted
-- [ ] Given `{{files}}` in a prompt, when the prompt is built, then all files are listed (backwards compatible)
+- [x] Given `{{spec_file}}` in a prompt, when the prompt is built, then only the first file path is substituted
+- [x] Given `{{context_files}}` in a prompt with multiple files, when the prompt is built, then files 2..N are listed
+- [x] Given `{{context_files}}` in a prompt with one file, when the prompt is built, then "(none provided)" is shown
+- [x] Given `{{notes_file}}` in a prompt, when the prompt is built, then the notes file path is substituted
+- [x] Given `{{files}}` in a prompt, when the prompt is built, then all files are listed (backwards compatible)
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] New template variables implemented in executor.go
-- [ ] Runner tracks spec file, context files, and notes file separately
-- [ ] Existing `{{files}}` placeholder still works
-- [ ] Unit tests for new template substitution
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] New template variables implemented in executor.go
+- [x] Runner tracks spec file, context files, and notes file separately
+- [x] Existing `{{files}}` placeholder still works
+- [x] Unit tests for new template substitution
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - Modifies `internal/workflow/executor.go`

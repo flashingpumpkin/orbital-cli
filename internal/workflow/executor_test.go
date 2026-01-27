@@ -591,3 +591,174 @@ func TestRunner_Run_MultipleDeferredStepsSkipped(t *testing.T) {
 		}
 	}
 }
+
+func TestRunner_Run_SpecFileSubstitution(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Read spec: {{spec_file}}"},
+		},
+	}
+
+	var capturedPrompt string
+	exec := newMockExecutor()
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		capturedPrompt = prompt
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+	}
+
+	runner := NewRunner(w, exec)
+	runner.SetSpecFile("/path/to/spec.md")
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	expected := "Read spec: /path/to/spec.md"
+	if capturedPrompt != expected {
+		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
+	}
+}
+
+func TestRunner_Run_ContextFilesSubstitution(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Context:\n{{context_files}}"},
+		},
+	}
+
+	var capturedPrompt string
+	exec := newMockExecutor()
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		capturedPrompt = prompt
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+	}
+
+	runner := NewRunner(w, exec)
+	runner.SetContextFiles([]string{"/path/to/context1.md", "/path/to/context2.md"})
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	expected := "Context:\n- /path/to/context1.md\n- /path/to/context2.md"
+	if capturedPrompt != expected {
+		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
+	}
+}
+
+func TestRunner_Run_ContextFilesEmptySubstitution(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Context: {{context_files}}"},
+		},
+	}
+
+	var capturedPrompt string
+	exec := newMockExecutor()
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		capturedPrompt = prompt
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+	}
+
+	runner := NewRunner(w, exec)
+	// No context files set
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	expected := "Context: (none provided)"
+	if capturedPrompt != expected {
+		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
+	}
+}
+
+func TestRunner_Run_NotesFileSubstitution(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Notes: {{notes_file}}"},
+		},
+	}
+
+	var capturedPrompt string
+	exec := newMockExecutor()
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		capturedPrompt = prompt
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+	}
+
+	runner := NewRunner(w, exec)
+	runner.SetNotesFile("/path/to/notes.md")
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	expected := "Notes: /path/to/notes.md"
+	if capturedPrompt != expected {
+		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
+	}
+}
+
+func TestRunner_Run_NotesFileEmptySubstitution(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Notes: {{notes_file}}"},
+		},
+	}
+
+	var capturedPrompt string
+	exec := newMockExecutor()
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		capturedPrompt = prompt
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+	}
+
+	runner := NewRunner(w, exec)
+	// No notes file set
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	expected := "Notes: (no notes file)"
+	if capturedPrompt != expected {
+		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
+	}
+}
+
+func TestRunner_Run_AllTemplateVariables(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Spec: {{spec_file}}\nContext: {{context_files}}\nNotes: {{notes_file}}\nAll: {{files}}"},
+		},
+	}
+
+	var capturedPrompt string
+	exec := newMockExecutor()
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		capturedPrompt = prompt
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+	}
+
+	runner := NewRunner(w, exec)
+	runner.SetFilePaths([]string{"/path/to/spec.md", "/path/to/context.md"})
+	runner.SetSpecFile("/path/to/spec.md")
+	runner.SetContextFiles([]string{"/path/to/context.md"})
+	runner.SetNotesFile("/path/to/notes.md")
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	expected := "Spec: /path/to/spec.md\nContext: - /path/to/context.md\nNotes: /path/to/notes.md\nAll: - /path/to/spec.md\n- /path/to/context.md"
+	if capturedPrompt != expected {
+		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
+	}
+}

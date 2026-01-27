@@ -69,8 +69,17 @@ type Runner struct {
 	callback      RunnerCallback
 	startCallback StepStartCallback
 
-	// filePaths is used for template substitution in prompts.
+	// filePaths is used for template substitution in prompts (all files).
 	filePaths []string
+
+	// specFile is the primary spec/stories file (first file argument).
+	specFile string
+
+	// contextFiles are additional reference files (remaining file arguments).
+	contextFiles []string
+
+	// notesFile is the path to the notes file for cross-iteration context.
+	notesFile string
 }
 
 // NewRunner creates a new workflow runner.
@@ -94,6 +103,21 @@ func (r *Runner) SetStartCallback(cb StepStartCallback) {
 // SetFilePaths sets the file paths for template substitution.
 func (r *Runner) SetFilePaths(paths []string) {
 	r.filePaths = paths
+}
+
+// SetSpecFile sets the primary spec file path.
+func (r *Runner) SetSpecFile(path string) {
+	r.specFile = path
+}
+
+// SetContextFiles sets the additional context file paths.
+func (r *Runner) SetContextFiles(paths []string) {
+	r.contextFiles = paths
+}
+
+// SetNotesFile sets the notes file path.
+func (r *Runner) SetNotesFile(path string) {
+	r.notesFile = path
 }
 
 // RunResult contains the result of running the entire workflow.
@@ -258,7 +282,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 func (r *Runner) buildPrompt(template string) string {
 	result := template
 
-	// Handle {{files}} placeholder
+	// Handle {{files}} placeholder (backwards compatible - all files)
 	if len(r.filePaths) > 0 {
 		var fileList strings.Builder
 		for _, path := range r.filePaths {
@@ -267,6 +291,31 @@ func (r *Runner) buildPrompt(template string) string {
 			fileList.WriteString("\n")
 		}
 		result = strings.ReplaceAll(result, "{{files}}", strings.TrimSuffix(fileList.String(), "\n"))
+	}
+
+	// Handle {{spec_file}} placeholder (primary spec/stories file)
+	if r.specFile != "" {
+		result = strings.ReplaceAll(result, "{{spec_file}}", r.specFile)
+	}
+
+	// Handle {{context_files}} placeholder (additional reference files)
+	if len(r.contextFiles) > 0 {
+		var contextList strings.Builder
+		for _, path := range r.contextFiles {
+			contextList.WriteString("- ")
+			contextList.WriteString(path)
+			contextList.WriteString("\n")
+		}
+		result = strings.ReplaceAll(result, "{{context_files}}", strings.TrimSuffix(contextList.String(), "\n"))
+	} else {
+		result = strings.ReplaceAll(result, "{{context_files}}", "(none provided)")
+	}
+
+	// Handle {{notes_file}} placeholder
+	if r.notesFile != "" {
+		result = strings.ReplaceAll(result, "{{notes_file}}", r.notesFile)
+	} else {
+		result = strings.ReplaceAll(result, "{{notes_file}}", "(no notes file)")
 	}
 
 	// Handle {{plural}} placeholder

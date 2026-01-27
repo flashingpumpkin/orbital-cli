@@ -971,3 +971,59 @@ Added tests in `internal/tui/model_test.go`:
 ### Verification
 
 All tests pass: `make check` successful
+
+## Iteration 15 - Refactor Template Variables for Workflow Prompts
+
+### Task Selected
+
+**Refactor template variables for workflow prompts**
+
+### Why Highest Leverage
+
+This task unblocks the two remaining workflow improvement stories:
+1. "Tighten autonomous 'implement' step" depends on `{{spec_file}}`, `{{context_files}}`, `{{notes_file}}`
+2. "Tighten autonomous 'fix' step" depends on `{{notes_file}}`
+
+Without these template variables, the prompt improvements cannot be implemented.
+
+### Implementation
+
+**1. Extended Runner struct** (`internal/workflow/executor.go`):
+- Added `specFile string` for the primary spec/stories file
+- Added `contextFiles []string` for additional reference files
+- Added `notesFile string` for cross-iteration notes
+
+**2. Added setter methods**:
+- `SetSpecFile(path string)`
+- `SetContextFiles(paths []string)`
+- `SetNotesFile(path string)`
+
+**3. Updated buildPrompt()** to handle new placeholders:
+- `{{spec_file}}` - substitutes the primary spec file path
+- `{{context_files}}` - lists context files or "(none provided)" if empty
+- `{{notes_file}}` - substitutes the notes file path or "(no notes file)" if empty
+- `{{files}}` - preserved for backwards compatibility (all files)
+
+**4. Updated runWorkflowLoop()** (`cmd/orbital/root.go`):
+- Changed function signature to accept `notesFile string` parameter
+- Set up template variables after creating runner:
+  - `specFiles[0]` becomes the spec file
+  - `specFiles[1:]` become context files
+  - Notes file passed from `spec.NotesFile`
+
+**5. Updated call sites**:
+- Both TUI and non-TUI paths now pass `spec.NotesFile` to `runWorkflowLoop()`
+
+### Testing
+
+Added seven new tests in `internal/workflow/executor_test.go`:
+- `TestRunner_Run_SpecFileSubstitution`: Verifies `{{spec_file}}` substitution
+- `TestRunner_Run_ContextFilesSubstitution`: Verifies `{{context_files}}` with files
+- `TestRunner_Run_ContextFilesEmptySubstitution`: Verifies "(none provided)" fallback
+- `TestRunner_Run_NotesFileSubstitution`: Verifies `{{notes_file}}` substitution
+- `TestRunner_Run_NotesFileEmptySubstitution`: Verifies "(no notes file)" fallback
+- `TestRunner_Run_AllTemplateVariables`: Verifies all variables work together
+
+### Verification
+
+All tests pass: `make check` successful

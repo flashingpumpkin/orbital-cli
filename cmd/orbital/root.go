@@ -476,7 +476,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 
 		// Check if workflow has gates (multi-step workflow)
 		if wf.HasGates() {
-			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, sm, st, tuiProgram)
+			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, tuiProgram)
 		} else {
 			loopState, err = controller.Run(ctx, prompt)
 		}
@@ -494,7 +494,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	} else {
 		// Check if workflow has gates (multi-step workflow)
 		if wf.HasGates() {
-			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, sm, st, nil)
+			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, nil)
 		} else {
 			loopState, err = controller.Run(ctx, prompt)
 		}
@@ -832,6 +832,7 @@ func runWorkflowLoop(
 	exec *executor.Executor,
 	wf *workflow.Workflow,
 	specFiles []string,
+	notesFile string,
 	sm *stateManagerAdapter,
 	st *state.State,
 	tuiProgram *tui.Program,
@@ -846,6 +847,18 @@ func runWorkflowLoop(
 	// Create workflow runner
 	runner := workflow.NewRunner(wf, stepExec)
 	runner.SetFilePaths(specFiles)
+
+	// Set up template variables for prompts:
+	// - First file is the spec file (primary task source)
+	// - Remaining files are context files (reference material)
+	// - Notes file for cross-iteration context
+	if len(specFiles) > 0 {
+		runner.SetSpecFile(specFiles[0])
+		if len(specFiles) > 1 {
+			runner.SetContextFiles(specFiles[1:])
+		}
+	}
+	runner.SetNotesFile(notesFile)
 
 	// Create formatter for non-TUI output
 	formatter := output.NewFormatter(cfg.Verbose, false, os.Stdout)
