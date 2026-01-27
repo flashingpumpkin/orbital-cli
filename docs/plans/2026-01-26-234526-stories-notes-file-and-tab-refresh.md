@@ -174,7 +174,7 @@ The root cause is in `cmd/orbital/root.go`: the `runWorkflowLoop()` function onl
 
 ---
 
-### [ ] **Ticket: Fix cost display resetting to zero when step/iteration starts**
+### [x] **Ticket: Fix cost display resetting to zero when step/iteration starts**
 
 **As a** user
 **I want** the cost display to show accumulated cost continuously
@@ -195,16 +195,16 @@ The root cause is in `cmd/orbital/root.go`: the `runWorkflowLoop()` function onl
 - Alternative: Change TUI to merge ProgressMsg fields instead of replacing entire struct
 
 **Acceptance Criteria**:
-- [ ] Given a workflow is running and step 1 completes with $0.50 cost, when step 2 starts, then cost display shows $0.50 (not $0.00)
-- [ ] Given iteration 1 completes with $1.00 cost, when iteration 2 starts, then cost display shows $1.00 (not $0.00)
-- [ ] Given Claude is streaming output, when cost is not yet available, then display shows previous accumulated cost (not $0.00)
+- [x] Given a workflow is running and step 1 completes with $0.50 cost, when step 2 starts, then cost display shows $0.50 (not $0.00)
+- [x] Given iteration 1 completes with $1.00 cost, when iteration 2 starts, then cost display shows $1.00 (not $0.00)
+- [x] Given Claude is streaming output, when cost is not yet available, then display shows previous accumulated cost (not $0.00)
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Step start callbacks include accumulated cost/tokens
-- [ ] Iteration start callbacks include accumulated cost/tokens
-- [ ] Cost display never resets to zero mid-session
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] Step start callbacks include accumulated cost/tokens
+- [x] Iteration start callbacks include accumulated cost/tokens
+- [x] Cost display never resets to zero mid-session
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - None (standalone fix)

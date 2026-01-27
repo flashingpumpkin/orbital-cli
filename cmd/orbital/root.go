@@ -340,6 +340,10 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	// Track iteration timing for non-TUI mode
 	var iterationStartTime time.Time
 
+	// Track accumulated cost/tokens for TUI display continuity
+	var accumulatedCost float64
+	var accumulatedTokensIn, accumulatedTokensOut int
+
 	// Set iteration start callback
 	controller.SetIterationStartCallback(func(iteration, maxIterations int) {
 		iterationStartTime = time.Now()
@@ -347,10 +351,14 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			formatter.PrintIterationStart(iteration, maxIterations)
 		}
 		// Send progress update to TUI immediately when iteration starts
+		// Include accumulated cost/tokens to prevent display reset
 		if tuiProgram != nil {
 			tuiProgram.SendProgress(tui.ProgressInfo{
 				Iteration:    iteration,
 				MaxIteration: maxIterations,
+				TokensIn:     accumulatedTokensIn,
+				TokensOut:    accumulatedTokensOut,
+				Cost:         accumulatedCost,
 				Budget:       cfg.MaxBudget,
 			})
 		}
@@ -358,6 +366,11 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 
 	// Set iteration callback to update state after each iteration
 	controller.SetIterationCallback(func(iteration int, totalCost float64, totalTokensIn, totalTokensOut int) error {
+		// Update accumulated values for next iteration's start callback
+		accumulatedCost = totalCost
+		accumulatedTokensIn = totalTokensIn
+		accumulatedTokensOut = totalTokensOut
+
 		// Update state
 		if err := updateState(st, iteration, totalCost); err != nil {
 			return err
@@ -802,12 +815,16 @@ func runWorkflowLoop(
 			formatter.PrintStepStart(info.Name, info.Position, info.Total)
 		} else {
 			// TUI mode: send progress update immediately when step starts
+			// Include accumulated cost/tokens to prevent display reset
 			tuiProgram.SendProgress(tui.ProgressInfo{
 				Iteration:    loopState.Iteration,
 				MaxIteration: cfg.MaxIterations,
 				StepName:     info.Name,
 				StepPosition: info.Position,
 				StepTotal:    info.Total,
+				TokensIn:     loopState.TotalTokensIn,
+				TokensOut:    loopState.TotalTokensOut,
+				Cost:         loopState.TotalCost,
 				Budget:       cfg.MaxBudget,
 			})
 		}

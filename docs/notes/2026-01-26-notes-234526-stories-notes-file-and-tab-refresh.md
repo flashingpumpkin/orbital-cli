@@ -201,3 +201,31 @@ Added `TestModelFileRefreshTick` with subtests for:
 Updated `TestModelInit` to expect a tick command instead of nil.
 
 All tests pass: `make check` successful
+
+## Iteration 5 - Fix Cost Display Reset
+
+### Task Selected
+
+**Fix cost display resetting to zero when step/iteration starts**
+
+### Root Cause
+
+The TUI's `ProgressMsg` handler replaces the entire `progress` struct. When step/iteration start callbacks sent `ProgressInfo` without cost/token fields, those fields defaulted to zero, causing the display to reset.
+
+### Implementation
+
+Fixed two callbacks in `cmd/orbital/root.go`:
+
+1. **Workflow step start callback** (line 805-816):
+   - Now includes `loopState.TotalCost`, `loopState.TotalTokensIn`, `loopState.TotalTokensOut`
+
+2. **Iteration start callback** (line 356-368):
+   - Added tracking variables: `accumulatedCost`, `accumulatedTokensIn`, `accumulatedTokensOut`
+   - Iteration callback now updates these values after each iteration
+   - Start callback includes accumulated values in `ProgressInfo`
+
+### Result
+
+Cost and token displays now persist across step/iteration boundaries instead of resetting to zero.
+
+All tests pass: `make check` successful
