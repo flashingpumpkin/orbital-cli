@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -80,6 +81,7 @@ type Model struct {
 	activeTab     int                        // Index of active tab
 	fileContents  map[string]string          // Cached file contents by path
 	fileViewports map[string]viewport.Model  // Viewport per file tab
+	fileModTimes  map[string]time.Time       // Last known modification times per file
 
 	// Output scrolling
 	outputTailing bool // Whether the output window is locked to the bottom (auto-scrolling)
@@ -102,6 +104,7 @@ func NewModel() Model {
 		activeTab:     0,
 		fileContents:  make(map[string]string),
 		fileViewports: make(map[string]viewport.Model),
+		fileModTimes:  make(map[string]time.Time),
 		outputTailing: true,
 		styles:        defaultStyles(),
 		progress: ProgressInfo{
@@ -112,9 +115,22 @@ func NewModel() Model {
 }
 
 
+// fileRefreshInterval is the interval between file refresh checks.
+const fileRefreshInterval = 2 * time.Second
+
+// fileRefreshTickMsg signals that it's time to check for file changes.
+type fileRefreshTickMsg time.Time
+
+// fileRefreshTick creates a tick command for file refresh.
+func fileRefreshTick() tea.Cmd {
+	return tea.Tick(fileRefreshInterval, func(t time.Time) tea.Msg {
+		return fileRefreshTickMsg(t)
+	})
+}
+
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return nil
+	return fileRefreshTick()
 }
 
 // FileContentMsg contains loaded file content.
@@ -229,9 +245,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.fileContents[msg.Path] = msg.Content
 		}
+		// Update modification time
+		if info, err := os.Stat(msg.Path); err == nil {
+			m.fileModTimes[msg.Path] = info.ModTime()
+		}
 		// Create or update viewport for this file
 		m.syncFileViewport(msg.Path)
 		return m, nil
+
+	case fileRefreshTickMsg:
+		// Schedule next tick
+		cmd := fileRefreshTick()
+
+		// Only check file changes when on a file tab (not Output tab)
+		if m.activeTab > 0 && m.activeTab < len(m.tabs) {
+			tab := m.tabs[m.activeTab]
+			if tab.Type == TabFile && tab.FilePath != "" {
+				// Check if file has been modified
+				if info, err := os.Stat(tab.FilePath); err == nil {
+					lastMod, exists := m.fileModTimes[tab.FilePath]
+					if !exists || info.ModTime().After(lastMod) {
+						// File changed, reload it
+						return m, tea.Batch(cmd, loadFileCmd(tab.FilePath))
+					}
+				}
+			}
+		}
+		return m, cmd
 
 	case tea.KeyMsg:
 		switch msg.String() {

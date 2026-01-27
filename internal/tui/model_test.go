@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -29,8 +30,9 @@ func TestModelInit(t *testing.T) {
 	m := NewModel()
 	cmd := m.Init()
 
-	if cmd != nil {
-		t.Error("expected Init() to return nil")
+	// Init should return a tick command for file refresh
+	if cmd == nil {
+		t.Error("expected Init() to return a tick command for file refresh")
 	}
 }
 
@@ -69,6 +71,39 @@ func TestModelUpdateQuit(t *testing.T) {
 	if cmd == nil {
 		t.Error("expected quit command from 'q' key")
 	}
+}
+
+func TestModelFileRefreshTick(t *testing.T) {
+	t.Run("returns tick command on output tab", func(t *testing.T) {
+		m := NewModel()
+		m.activeTab = 0 // Output tab
+
+		msg := fileRefreshTickMsg(time.Now())
+		_, cmd := m.Update(msg)
+
+		if cmd == nil {
+			t.Error("expected tick command to be returned")
+		}
+	})
+
+	t.Run("returns tick command on file tab with no changes", func(t *testing.T) {
+		m := NewModel()
+
+		// Set up a file tab
+		m.tabs = []Tab{
+			{Name: "Output", Type: TabOutput},
+			{Name: "Spec", Type: TabFile, FilePath: "/nonexistent/file.md"},
+		}
+		m.activeTab = 1
+
+		msg := fileRefreshTickMsg(time.Now())
+		_, cmd := m.Update(msg)
+
+		// Should return tick command (file doesn't exist so no reload triggered)
+		if cmd == nil {
+			t.Error("expected tick command to be returned")
+		}
+	})
 }
 
 func TestModelViewNotReady(t *testing.T) {

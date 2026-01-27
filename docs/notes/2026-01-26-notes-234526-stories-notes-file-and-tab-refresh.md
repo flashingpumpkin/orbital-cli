@@ -163,3 +163,41 @@ Added three tests in `cmd/orbital/root_test.go`:
 - `TestEnsureNotesFile_HandlesNestedPath`: Verifies function works with existing directories
 
 All tests pass: `make check` successful
+
+## Iteration 4 - Periodic File Content Refresh
+
+### Task Selected
+
+**Add periodic file content refresh for spec and notes tabs**
+
+### Implementation
+
+Added automatic file refresh mechanism in `internal/tui/model.go`:
+
+1. **New types and constants**:
+   - `fileRefreshInterval = 2 * time.Second`
+   - `fileRefreshTickMsg` - tick message type
+   - `fileRefreshTick()` - creates the tick command
+
+2. **Model changes**:
+   - Added `fileModTimes map[string]time.Time` to track file modification times
+   - `Init()` now returns `fileRefreshTick()` to start the tick loop
+
+3. **Update handler for `fileRefreshTickMsg`**:
+   - Always schedules next tick
+   - Only checks file changes when on a file tab (not Output tab)
+   - Compares file mtime with cached mtime
+   - Triggers `loadFileCmd` only if file has changed
+
+4. **FileContentMsg handler update**:
+   - Now records file mtime in `fileModTimes` when content is loaded
+
+### Testing
+
+Added `TestModelFileRefreshTick` with subtests for:
+- Returns tick command on output tab (no reload)
+- Returns tick command on file tab with no changes
+
+Updated `TestModelInit` to expect a tick command instead of nil.
+
+All tests pass: `make check` successful

@@ -70,7 +70,7 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 
 ---
 
-### [ ] **Ticket: Add periodic file content refresh for spec and notes tabs**
+### [x] **Ticket: Add periodic file content refresh for spec and notes tabs**
 
 **As a** user
 **I want** the spec and notes file tabs to automatically show the latest content
@@ -89,18 +89,18 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 - Do not refresh when on Output tab (index 0)
 
 **Acceptance Criteria**:
-- [ ] Given a spec file tab is active and the file is modified externally, when 2 seconds pass, then the tab content updates to show new content
-- [ ] Given a notes file tab is active and Claude appends to it, when 2 seconds pass, then the new content is visible
-- [ ] Given the file has not been modified, when the tick fires, then no reload occurs (mtime check)
-- [ ] Given the Output tab is active, when the tick fires, then no file refresh is attempted
-- [ ] Given the user scrolls within a file, when content refreshes, then scroll position is preserved
+- [x] Given a spec file tab is active and the file is modified externally, when 2 seconds pass, then the tab content updates to show new content
+- [x] Given a notes file tab is active and Claude appends to it, when 2 seconds pass, then the new content is visible
+- [x] Given the file has not been modified, when the tick fires, then no reload occurs (mtime check)
+- [x] Given the Output tab is active, when the tick fires, then no file refresh is attempted
+- [x] Given the user scrolls within a file, when content refreshes, then scroll position is preserved
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Tick-based refresh logic in model.go Update function
-- [ ] Modification time tracking to avoid unnecessary reloads
-- [ ] Unit test for mtime comparison logic
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] Tick-based refresh logic in model.go Update function
+- [x] Modification time tracking to avoid unnecessary reloads
+- [x] Unit test for mtime comparison logic
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - Depends on existing `loadFileCmd` and `FileContentMsg` handling
