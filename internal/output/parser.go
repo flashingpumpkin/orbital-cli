@@ -158,7 +158,7 @@ func (p *Parser) ParseLine(line []byte) (*StreamEvent, error) {
 			p.unknownTypes[eventType]++
 			// Log warning on first occurrence of each unknown type
 			if p.warnWriter != nil && p.unknownTypes[eventType] == 1 {
-				fmt.Fprintf(p.warnWriter, "warning: unrecognised event type %q in Claude CLI output; "+
+				_, _ = fmt.Fprintf(p.warnWriter, "warning: unrecognised event type %q in Claude CLI output; "+
 					"this may indicate a Claude CLI version incompatibility\n", eventType)
 			}
 		}

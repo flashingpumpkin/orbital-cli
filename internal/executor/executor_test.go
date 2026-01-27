@@ -687,7 +687,7 @@ printf '%s\n'
 	result, err := e.Execute(ctx, "test prompt")
 
 	// Close write end and restore stderr
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStderr
 
 	// Read captured stderr
@@ -756,7 +756,7 @@ func TestExecute_OutputTruncation_Streaming(t *testing.T) {
 	result, err := e.Execute(ctx, "test prompt")
 
 	// Close write end and restore stderr
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStderr
 
 	// Read captured stderr
@@ -835,7 +835,7 @@ func TestExecute_OutputTruncation_NonStreaming(t *testing.T) {
 	ctx := context.Background()
 	result, err := e.Execute(ctx, "test prompt")
 
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStderr
 
 	var stderrBuf bytes.Buffer
