@@ -231,6 +231,12 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create notes directory %s: %w", notesDir, err)
 	}
 
+	// Create notes file with header if it doesn't exist
+	if err := ensureNotesFile(spec.NotesFile, specPath); err != nil {
+		// Log warning but don't fail startup
+		fmt.Fprintf(os.Stderr, "Warning: could not create notes file: %v\n", err)
+	}
+
 	// Set system prompt (from flag or build default)
 	if systemPrompt != "" {
 		cfg.SystemPrompt = systemPrompt
@@ -655,6 +661,28 @@ func toKebabCase(s string) string {
 	kebab = strings.Trim(kebab, "-")
 
 	return kebab
+}
+
+// ensureNotesFile creates the notes file with a header if it doesn't exist.
+// It preserves existing file content if the file already exists.
+func ensureNotesFile(notesPath, specPath string) error {
+	// Check if file already exists
+	if _, err := os.Stat(notesPath); err == nil {
+		// File exists, preserve it
+		return nil
+	}
+
+	// Create header content
+	specName := filepath.Base(specPath)
+	date := time.Now().Format("2006-01-02")
+	header := fmt.Sprintf("# Notes\n\nSpec: %s\nDate: %s\n", specName, date)
+
+	// Create the file
+	if err := os.WriteFile(notesPath, []byte(header), 0644); err != nil {
+		return fmt.Errorf("failed to write notes file: %w", err)
+	}
+
+	return nil
 }
 
 // shouldUseTUI determines whether to use the TUI based on flags and environment.

@@ -138,3 +138,28 @@ The following design issues were noted but not fixed in this iteration as they a
 ### Verification
 
 All tests pass: `make check` successful
+
+## Iteration 3 - Auto-create Notes File
+
+### Task Selected
+
+**Auto-create notes file when CLI starts**
+
+### Implementation
+
+Added `ensureNotesFile()` function in `cmd/orbital/root.go` that:
+1. Checks if the notes file already exists (preserves existing content)
+2. Creates the file with a header if it doesn't exist
+3. Header format: `# Notes\n\nSpec: <spec-basename>\nDate: <YYYY-MM-DD>\n`
+4. Logs a warning on error but doesn't fail startup
+
+Integrated the function call after the notes directory is created (line 232) in `runOrbit()`.
+
+### Testing
+
+Added three tests in `cmd/orbital/root_test.go`:
+- `TestEnsureNotesFile_CreatesNewFile`: Verifies file creation with proper header
+- `TestEnsureNotesFile_PreservesExistingFile`: Verifies existing files are not overwritten
+- `TestEnsureNotesFile_HandlesNestedPath`: Verifies function works with existing directories
+
+All tests pass: `make check` successful

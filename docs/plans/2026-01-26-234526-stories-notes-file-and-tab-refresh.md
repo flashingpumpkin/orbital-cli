@@ -27,7 +27,7 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 
 ## Epic: File Management Improvements
 
-### [ ] **Ticket: Auto-create notes file when CLI starts**
+### [x] **Ticket: Auto-create notes file when CLI starts**
 
 **As a** user
 **I want** the notes file to be created automatically when I start the CLI
@@ -45,17 +45,17 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 - Preserve existing file content if file already exists
 
 **Acceptance Criteria**:
-- [ ] Given the CLI starts with a notes file path that does not exist, when the TUI loads, then the notes file is created with a header
-- [ ] Given the CLI starts with a notes file that already exists, when the TUI loads, then the existing content is preserved
-- [ ] Given the notes file parent directory does not exist, when the CLI starts, then the directory is created
-- [ ] Given file creation fails (permissions), when the CLI starts, then a warning is logged but startup continues
+- [x] Given the CLI starts with a notes file path that does not exist, when the TUI loads, then the notes file is created with a header
+- [x] Given the CLI starts with a notes file that already exists, when the TUI loads, then the existing content is preserved
+- [x] Given the notes file parent directory does not exist, when the CLI starts, then the directory is created
+- [x] Given file creation fails (permissions), when the CLI starts, then a warning is logged but startup continues
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Unit test for notes file creation logic
-- [ ] Integration with existing root.go startup flow
-- [ ] Error handling for permission issues
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] Unit test for notes file creation logic
+- [x] Integration with existing root.go startup flow
+- [x] Error handling for permission issues
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - None (standalone change)
@@ -174,6 +174,50 @@ The root cause is in `cmd/orbital/root.go`: the `runWorkflowLoop()` function onl
 
 ---
 
+### [ ] **Ticket: Fix cost display resetting to zero when step/iteration starts**
+
+**As a** user
+**I want** the cost display to show accumulated cost continuously
+**So that** I can track spending during long-running steps without the display resetting
+
+**Context**: The TUI cost display (`$X.XX/$100.00`) resets to `$0.00` every time a new step or iteration starts. This happens because `ProgressInfo` messages sent at step/iteration start do not include the accumulated cost/token values, and the TUI's `ProgressMsg` handler replaces the entire progress struct (setting missing fields to zero).
+
+**Root Cause Analysis**:
+1. Step start callback (root.go:777-784) sends `ProgressInfo` without Cost/TokensIn/TokensOut
+2. Iteration start callback (root.go:345-350) sends `ProgressInfo` without Cost/TokensIn/TokensOut
+3. TUI model.go:213-214 does `m.progress = ProgressInfo(msg)` which replaces entire struct
+4. Any field not set in the message becomes 0
+
+**Implementation Requirements**:
+- In workflow step start callback (root.go:777-784): Include `loopState.TotalCost`, `loopState.TotalTokensIn`, `loopState.TotalTokensOut`
+- In workflow step callback (root.go:817-829): Already correct (includes cost)
+- For standard loop iteration start callback: Track accumulated cost at root.go level and include in ProgressInfo
+- Alternative: Change TUI to merge ProgressMsg fields instead of replacing entire struct
+
+**Acceptance Criteria**:
+- [ ] Given a workflow is running and step 1 completes with $0.50 cost, when step 2 starts, then cost display shows $0.50 (not $0.00)
+- [ ] Given iteration 1 completes with $1.00 cost, when iteration 2 starts, then cost display shows $1.00 (not $0.00)
+- [ ] Given Claude is streaming output, when cost is not yet available, then display shows previous accumulated cost (not $0.00)
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] Step start callbacks include accumulated cost/tokens
+- [ ] Iteration start callbacks include accumulated cost/tokens
+- [ ] Cost display never resets to zero mid-session
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- None (standalone fix)
+
+**Risks**:
+- None significant
+
+**Notes**: The `StatsMsg` from the Bridge does provide streaming updates for tokens (from `assistant` events), but cost data only arrives in the `result` event at the end of a Claude invocation. This fix ensures the ACCUMULATED cost persists across step/iteration boundaries.
+
+**Effort Estimate**: XS (1 hour)
+
+---
+
 ### [x] **Ticket: Reduce default iteration timeout from 30 minutes to 5 minutes**
 
 **As a** user
@@ -219,10 +263,11 @@ The root cause is in `cmd/orbital/root.go`: the `runWorkflowLoop()` function onl
 ## Backlog Prioritisation
 
 **Must Have (Sprint 1):**
-1. Reduce default iteration timeout to 5 minutes (XS - quick win)
-2. Fix gate-based workflow completion promise detection (S - bug fix)
-3. Auto-create notes file when CLI starts (XS)
-4. Add periodic file content refresh for spec and notes tabs (S)
+1. Reduce default iteration timeout to 5 minutes (XS - quick win) ✓
+2. Fix gate-based workflow completion promise detection (S - bug fix) ✓
+3. Fix cost display resetting to zero when step/iteration starts (XS - bug fix)
+4. Auto-create notes file when CLI starts (XS)
+5. Add periodic file content refresh for spec and notes tabs (S)
 
 **Should Have (Future):**
 - Configurable refresh interval via flag

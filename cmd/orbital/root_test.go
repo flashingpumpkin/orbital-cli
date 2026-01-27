@@ -147,6 +147,96 @@ func TestGetAbsolutePaths_ConvertsRelativePaths(t *testing.T) {
 	}
 }
 
+func TestEnsureNotesFile_CreatesNewFile(t *testing.T) {
+	tempDir := t.TempDir()
+	notesPath := filepath.Join(tempDir, "notes.md")
+	specPath := "/path/to/spec.md"
+
+	err := ensureNotesFile(notesPath, specPath)
+	if err != nil {
+		t.Fatalf("ensureNotesFile() error = %v", err)
+	}
+
+	// Verify file was created
+	content, err := os.ReadFile(notesPath)
+	if err != nil {
+		t.Fatalf("failed to read notes file: %v", err)
+	}
+
+	// Check header content
+	if !contains(string(content), "# Notes") {
+		t.Error("notes file missing header")
+	}
+	if !contains(string(content), "Spec: spec.md") {
+		t.Error("notes file missing spec reference")
+	}
+	if !contains(string(content), "Date:") {
+		t.Error("notes file missing date")
+	}
+}
+
+func TestEnsureNotesFile_PreservesExistingFile(t *testing.T) {
+	tempDir := t.TempDir()
+	notesPath := filepath.Join(tempDir, "notes.md")
+	specPath := "/path/to/spec.md"
+
+	// Create existing file with custom content
+	existingContent := "# My Custom Notes\n\nImportant stuff here."
+	if err := os.WriteFile(notesPath, []byte(existingContent), 0644); err != nil {
+		t.Fatalf("failed to write existing notes file: %v", err)
+	}
+
+	err := ensureNotesFile(notesPath, specPath)
+	if err != nil {
+		t.Fatalf("ensureNotesFile() error = %v", err)
+	}
+
+	// Verify existing content was preserved
+	content, err := os.ReadFile(notesPath)
+	if err != nil {
+		t.Fatalf("failed to read notes file: %v", err)
+	}
+
+	if string(content) != existingContent {
+		t.Errorf("existing content was not preserved, got %q, want %q", string(content), existingContent)
+	}
+}
+
+func TestEnsureNotesFile_HandlesNestedPath(t *testing.T) {
+	tempDir := t.TempDir()
+	// Parent directory already exists but notes file doesn't
+	notesDir := filepath.Join(tempDir, "docs", "notes")
+	if err := os.MkdirAll(notesDir, 0755); err != nil {
+		t.Fatalf("failed to create notes directory: %v", err)
+	}
+	notesPath := filepath.Join(notesDir, "session-notes.md")
+	specPath := "my-spec.md"
+
+	err := ensureNotesFile(notesPath, specPath)
+	if err != nil {
+		t.Fatalf("ensureNotesFile() error = %v", err)
+	}
+
+	// Verify file was created
+	if _, err := os.Stat(notesPath); os.IsNotExist(err) {
+		t.Error("notes file was not created in nested directory")
+	}
+}
+
+// contains is a helper to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestPromiseDetectionInWorkflowSteps(t *testing.T) {
 	promise := "<promise>COMPLETE</promise>"
 	detector := completion.New(promise)
