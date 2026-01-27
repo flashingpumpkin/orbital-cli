@@ -222,11 +222,23 @@ func TestAutonomousPreset(t *testing.T) {
 	if impl.Name != "implement" {
 		t.Errorf("first step name = %q, want \"implement\"", impl.Name)
 	}
-	if !strings.Contains(impl.Prompt, "{{files}}") {
-		t.Error("implement prompt should contain {{files}} placeholder")
+	if !strings.Contains(impl.Prompt, "{{spec_file}}") {
+		t.Error("implement prompt should contain {{spec_file}} placeholder")
+	}
+	if !strings.Contains(impl.Prompt, "{{context_files}}") {
+		t.Error("implement prompt should contain {{context_files}} placeholder")
+	}
+	if !strings.Contains(impl.Prompt, "{{notes_file}}") {
+		t.Error("implement prompt should contain {{notes_file}} placeholder")
 	}
 	if !strings.Contains(impl.Prompt, "highest-leverage") {
 		t.Error("implement prompt should mention highest-leverage task selection")
+	}
+	if !strings.Contains(impl.Prompt, "CONSTRAINTS:") {
+		t.Error("implement prompt should contain CONSTRAINTS section")
+	}
+	if !strings.Contains(impl.Prompt, "ONE task only") {
+		t.Error("implement prompt should enforce single-task discipline")
 	}
 	if impl.Deferred {
 		t.Error("implement step should not be deferred")

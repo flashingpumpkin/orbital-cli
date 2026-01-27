@@ -221,22 +221,33 @@ func autonomousPreset() *Workflow {
 		Steps: []Step{
 			{
 				Name: "implement",
-				Prompt: `Study the spec file{{plural}} to understand the full scope:
-{{files}}
+				Prompt: `Study the spec file to understand the remaining work:
+{{spec_file}}
 
-If a plan exists in the same directory, study it to understand the approach.
+Context files (reference only, do not modify):
+{{context_files}}
 
-Pick the highest-leverage task: the one that unblocks the most work or provides the most value.
+Notes file for cross-iteration context:
+{{notes_file}}
 
-Complete the task fully. Verify the outcome is correct.
+TASK SELECTION:
+Pick exactly ONE task from the spec file. Choose the highest-leverage task:
+the one that unblocks the most work or provides the most value.
 
-Document your work:
-- In the notes file, record: which task you chose, why it was highest leverage, key decisions made
-- Check off completed items in the spec file
+CONSTRAINTS:
+- Complete ONE task only. Do not start additional tasks.
+- Do not work on multiple items even if they seem related.
+- If you finish early, exit. Do not fill time with extra work.
+- Small, focused changes are better than large, sweeping ones.
 
-Commit all changes with a descriptive message.
-
-Do not output the completion promise. Exit so the next iteration can begin.`,
+EXECUTION:
+1. Identify the single highest-leverage unchecked task
+2. Implement that task fully
+3. Verify the outcome (tests, lint, typecheck)
+4. Document in notes: which task, why chosen, key decisions
+5. Check off the completed item in the spec file
+6. Commit all changes with a descriptive message
+7. Exit (do not output completion promise)`,
 			},
 			{
 				Name:     "fix",

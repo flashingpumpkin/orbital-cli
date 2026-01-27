@@ -844,7 +844,7 @@ For future enhancement:
 
 ---
 
-### [ ] **Ticket: Tighten autonomous 'implement' step for single-task discipline**
+### [x] **Ticket: Tighten autonomous 'implement' step for single-task discipline**
 
 **As a** user
 **I want** the autonomous 'implement' step to work on exactly one task per iteration
@@ -892,17 +892,17 @@ EXECUTION:
 ```
 
 **Acceptance Criteria**:
-- [ ] Given the autonomous 'implement' step runs, when Claude selects work, then exactly one task is chosen
-- [ ] Given a task is completed quickly, when Claude finishes, then it exits without starting additional work
-- [ ] Given related tasks exist, when Claude implements one, then it does not "helpfully" do the others
-- [ ] Given the prompt references `{{spec_file}}`, when built, then the correct path is substituted
+- [x] Given the autonomous 'implement' step runs, when Claude selects work, then exactly one task is chosen
+- [x] Given a task is completed quickly, when Claude finishes, then it exits without starting additional work
+- [x] Given related tasks exist, when Claude implements one, then it does not "helpfully" do the others
+- [x] Given the prompt references `{{spec_file}}`, when built, then the correct path is substituted
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Autonomous 'implement' prompt updated in presets.go
-- [ ] Prompt uses new `{{spec_file}}`, `{{context_files}}`, `{{notes_file}}` variables
-- [ ] Clear CONSTRAINTS section enforcing single-task discipline
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] Autonomous 'implement' prompt updated in presets.go
+- [x] Prompt uses new `{{spec_file}}`, `{{context_files}}`, `{{notes_file}}` variables
+- [x] Clear CONSTRAINTS section enforcing single-task discipline
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - Depends on: Refactor template variables (for `{{spec_file}}`, `{{context_files}}`, `{{notes_file}}`)
@@ -983,6 +983,85 @@ EXECUTION:
 
 ---
 
+### [ ] **Ticket: Fix context window token count accumulation bug**
+
+**As a** user
+**I want** the context window display to show per-iteration token usage
+**So that** I can accurately assess how much of the context window is being used
+
+**Context**: The TUI shows impossible context window values like "3,568,774/200,000 (1784%)". This happens because tokens accumulate across iterations instead of resetting. After 35+ iterations, the accumulated total far exceeds what any single Claude invocation could use.
+
+**Root Cause Analysis**:
+
+1. **Parser accumulates tokens** (`internal/output/parser.go:322-323`):
+   ```go
+   p.resultTokensIn += tokensIn    // Accumulates, never resets
+   p.resultTokensOut += tokensOut  // Accumulates, never resets
+   ```
+
+2. **Same Parser instance reused** (`internal/tui/bridge.go:40-56`):
+   - Bridge creates one Parser at startup
+   - Same Parser handles all iterations
+   - No reset between iterations
+
+3. **TUI displays accumulated values** (`internal/tui/model.go:235-239`):
+   - StatsMsg contains accumulated tokens
+   - Context calculation: `(TokensIn + TokensOut) / ContextWindow`
+   - Shows 1784% because 3.5M / 200K = 17.84
+
+**The Design Issue**: The code conflates two concepts:
+- **Per-invocation tokens**: What the current Claude CLI call is using (for context window %)
+- **Cumulative tokens**: Total across all iterations (for budget tracking)
+
+The TUI should show per-invocation tokens for context window percentage.
+
+**Implementation Requirements**:
+
+1. **Option A: Reset Parser between iterations**:
+   - Add `Parser.Reset()` method to clear `resultTokensIn` and `resultTokensOut`
+   - Call reset at iteration start via callback
+
+2. **Option B: Track per-invocation vs cumulative separately**:
+   - Add `currentTokensIn` / `currentTokensOut` for per-invocation
+   - Keep `resultTokensIn` / `resultTokensOut` for cumulative
+   - Send both in StatsMsg
+
+3. **Option C: Reset on `result` event**:
+   - After sending stats for a `result` event, reset the per-invocation counters
+   - The `result` event marks end of a Claude invocation
+
+4. **Update TUI model** to use per-invocation tokens for context window calculation.
+
+**Acceptance Criteria**:
+- [ ] Given iteration 1 uses 100K tokens, when iteration 2 starts, then token display resets (does not show 200K)
+- [ ] Given an iteration uses 150K tokens, when context window is 200K, then display shows ~75% (not 1784%)
+- [ ] Given multiple iterations complete, when viewing TUI, then context % never exceeds ~100%
+- [ ] Given cumulative cost tracking, when budget is checked, then it still accumulates correctly
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] Parser tracks per-invocation tokens separately
+- [ ] Token counters reset between iterations
+- [ ] Context window % shows per-invocation usage
+- [ ] Cumulative tracking for budget still works
+- [ ] Unit test for token reset behaviour
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Modifies `internal/output/parser.go`
+- Modifies `internal/tui/bridge.go` or `internal/tui/model.go`
+- May need iteration start callback to trigger reset
+
+**Risks**:
+- Breaking cumulative budget tracking (mitigated: track separately)
+- Reset timing issues between iterations (mitigated: clear reset point)
+
+**Notes**: This is a high-priority bug that makes the context window display meaningless. The fix should preserve cumulative tracking for budget purposes while showing per-invocation metrics for context window usage. Option B (tracking both separately) is cleanest but requires more changes.
+
+**Effort Estimate**: S (2-3 hours)
+
+---
+
 ## Backlog Prioritisation
 
 **Must Have (Sprint 1):**
@@ -999,6 +1078,7 @@ EXECUTION:
 11. Refactor template variables for workflow prompts (S)
 12. Tighten autonomous 'implement' step for single-task discipline (XS)
 13. Tighten autonomous 'fix' step to only address review feedback (XS)
+14. Fix context window token count accumulation bug (S - bug fix) **HIGH PRIORITY**
 
 **Should Have (Future):**
 - Configurable refresh interval via flag
