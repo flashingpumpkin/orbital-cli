@@ -10,15 +10,16 @@ import (
 
 	"github.com/flashingpumpkin/orbital/internal/completion"
 	"github.com/flashingpumpkin/orbital/internal/config"
+	orberrors "github.com/flashingpumpkin/orbital/internal/errors"
 	"github.com/flashingpumpkin/orbital/internal/executor"
 	"github.com/flashingpumpkin/orbital/internal/spec"
 )
 
-// ErrBudgetExceeded is returned when the execution cost exceeds the configured maximum budget.
-var ErrBudgetExceeded = errors.New("budget exceeded")
+// ErrBudgetExceeded is an alias for compatibility with existing code.
+var ErrBudgetExceeded = orberrors.ErrBudgetExceeded
 
-// ErrMaxIterationsReached is returned when the maximum number of iterations is reached without completion.
-var ErrMaxIterationsReached = errors.New("max iterations reached")
+// ErrMaxIterationsReached is an alias for compatibility with existing code.
+var ErrMaxIterationsReached = orberrors.ErrMaxIterationsReached
 
 // LoopState represents the current state of the execution loop.
 type LoopState struct {

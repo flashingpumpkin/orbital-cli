@@ -2,6 +2,8 @@
 package output
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
+	orberrors "github.com/flashingpumpkin/orbital/internal/errors"
 )
 
 // Formatter handles formatted output for orbit.
@@ -184,16 +187,15 @@ func (f *Formatter) PrintLoopSummary(summary LoopSummary) {
 	if summary.Completed {
 		_, _ = green.Fprintln(f.writer, "  Status:       COMPLETED")
 	} else if summary.Error != nil {
-		// Check for specific error types
-		errStr := summary.Error.Error()
+		// Check for specific error types using errors.Is for proper wrapped error handling
 		switch {
-		case errStr == "context canceled":
+		case errors.Is(summary.Error, context.Canceled):
 			_, _ = yellow.Fprintln(f.writer, "  Status:       INTERRUPTED")
-		case errStr == "max iterations reached":
+		case errors.Is(summary.Error, orberrors.ErrMaxIterationsReached):
 			_, _ = red.Fprintln(f.writer, "  Status:       MAX ITERATIONS REACHED")
-		case errStr == "budget exceeded":
+		case errors.Is(summary.Error, orberrors.ErrBudgetExceeded):
 			_, _ = red.Fprintln(f.writer, "  Status:       BUDGET EXCEEDED")
-		case errStr == "context deadline exceeded":
+		case errors.Is(summary.Error, context.DeadlineExceeded):
 			_, _ = red.Fprintln(f.writer, "  Status:       TIMEOUT")
 		default:
 			_, _ = red.Fprintf(f.writer, "  Status:       FAILED (%v)\n", summary.Error)
@@ -202,8 +204,9 @@ func (f *Formatter) PrintLoopSummary(summary LoopSummary) {
 		_, _ = red.Fprintln(f.writer, "  Status:       NOT COMPLETED")
 	}
 
-	// Show resume instructions if session was interrupted and we have a session ID
-	if summary.SessionID != "" && summary.Error != nil && summary.Error.Error() == "context canceled" {
+	// Show resume instructions if session has a session ID and can be resumed
+	// This includes interrupted sessions and other non-completed states
+	if summary.SessionID != "" && !summary.Completed {
 		_, _ = fmt.Fprintln(f.writer, "")
 		_, _ = white.Fprintln(f.writer, "  Resume with:")
 		_, _ = white.Fprintf(f.writer, "    orbital continue\n")

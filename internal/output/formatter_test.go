@@ -2,11 +2,14 @@ package output
 
 import (
 	"bytes"
-	"errors"
+	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	orberrors "github.com/flashingpumpkin/orbital/internal/errors"
 )
 
 func TestNewFormatter(t *testing.T) {
@@ -598,13 +601,13 @@ func TestPrintLoopSummary_Error(t *testing.T) {
 		TotalTokens: 15000,
 		Duration:    5 * time.Minute,
 		Completed:   false,
-		Error:       errors.New("max iterations reached"),
+		Error:       orberrors.ErrMaxIterationsReached,
 	}
 
 	f.PrintLoopSummary(summary)
 	output := buf.String()
 
-	// The new implementation shows "MAX ITERATIONS REACHED" for this error type
+	// The implementation shows "MAX ITERATIONS REACHED" for this error type
 	if !strings.Contains(output, "MAX ITERATIONS REACHED") {
 		t.Errorf("expected output to indicate max iterations reached, got: %s", output)
 	}
@@ -667,7 +670,7 @@ func TestPrintLoopSummary_Interrupted(t *testing.T) {
 		TokensOut:  1500,
 		Duration:   1 * time.Minute,
 		Completed:  false,
-		Error:      errors.New("context canceled"),
+		Error:      context.Canceled,
 		SessionID:  "abc123def",
 	}
 
@@ -694,7 +697,8 @@ func TestPrintLoopSummary_BudgetExceeded(t *testing.T) {
 		TotalCost:  5.00,
 		Duration:   10 * time.Minute,
 		Completed:  false,
-		Error:      errors.New("budget exceeded"),
+		Error:      orberrors.ErrBudgetExceeded,
+		SessionID:  "abc123def",
 	}
 
 	f.PrintLoopSummary(summary)
@@ -702,6 +706,10 @@ func TestPrintLoopSummary_BudgetExceeded(t *testing.T) {
 
 	if !strings.Contains(output, "BUDGET EXCEEDED") {
 		t.Errorf("expected output to show BUDGET EXCEEDED status, got: %s", output)
+	}
+	// Should also show resume instructions since session can be resumed
+	if !strings.Contains(output, "Resume with") {
+		t.Errorf("expected output to show resume instructions, got: %s", output)
 	}
 }
 
@@ -714,7 +722,8 @@ func TestPrintLoopSummary_Timeout(t *testing.T) {
 		TotalCost:  0.05,
 		Duration:   5 * time.Minute,
 		Completed:  false,
-		Error:      errors.New("context deadline exceeded"),
+		Error:      context.DeadlineExceeded,
+		SessionID:  "abc123def",
 	}
 
 	f.PrintLoopSummary(summary)
@@ -722,5 +731,61 @@ func TestPrintLoopSummary_Timeout(t *testing.T) {
 
 	if !strings.Contains(output, "TIMEOUT") {
 		t.Errorf("expected output to show TIMEOUT status, got: %s", output)
+	}
+	// Should also show resume instructions since session can be resumed
+	if !strings.Contains(output, "Resume with") {
+		t.Errorf("expected output to show resume instructions, got: %s", output)
+	}
+}
+
+func TestPrintLoopSummary_WrappedErrors(t *testing.T) {
+	tests := []struct {
+		name           string
+		err            error
+		expectedStatus string
+	}{
+		{
+			name:           "wrapped context canceled",
+			err:            fmt.Errorf("execution failed: %w", context.Canceled),
+			expectedStatus: "INTERRUPTED",
+		},
+		{
+			name:           "wrapped max iterations",
+			err:            fmt.Errorf("loop terminated: %w", orberrors.ErrMaxIterationsReached),
+			expectedStatus: "MAX ITERATIONS REACHED",
+		},
+		{
+			name:           "wrapped budget exceeded",
+			err:            fmt.Errorf("cost limit hit: %w", orberrors.ErrBudgetExceeded),
+			expectedStatus: "BUDGET EXCEEDED",
+		},
+		{
+			name:           "wrapped deadline exceeded",
+			err:            fmt.Errorf("iteration timed out: %w", context.DeadlineExceeded),
+			expectedStatus: "TIMEOUT",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			f := NewFormatter(false, false, &buf)
+
+			summary := LoopSummary{
+				Iterations: 5,
+				TotalCost:  0.25,
+				Duration:   2 * time.Minute,
+				Completed:  false,
+				Error:      tt.err,
+				SessionID:  "test123",
+			}
+
+			f.PrintLoopSummary(summary)
+			output := buf.String()
+
+			if !strings.Contains(output, tt.expectedStatus) {
+				t.Errorf("expected output to show %s for wrapped error, got: %s", tt.expectedStatus, output)
+			}
+		})
 	}
 }

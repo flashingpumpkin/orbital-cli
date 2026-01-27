@@ -650,3 +650,92 @@ The workflow step breakdown (per-step cost/duration) was mentioned in the spec b
 ### Verification
 
 All tests pass: `make check` successful
+
+## Code Review - Iteration 9
+
+### Security
+No issues. The changes involve summary formatting and display only. No user input is processed unsafely, no shell commands are executed, no authentication boundaries are crossed, and the SessionID (already used elsewhere) presents no new exposure risk.
+
+### Design
+_ISSUES_FOUND
+
+1. **Error String Matching is Fragile** (MEDIUM): The formatter uses `error.Error() == "context canceled"` string comparison instead of `errors.Is()`. This creates hidden coupling between the formatter and the exact string representation of errors in the loop package and Go's context package. If error messages change or errors are wrapped, the matches will silently fail.
+
+2. **LoopSummary Accumulating Presentation Concerns** (LOW): `SessionID` is included "for resume instructions on interrupt" - this is a presentation concern leaking into what should be a data transfer object.
+
+3. **Code Duplication Between root.go and continue.go** (LOW): The exit code handling logic (lines 504-519 in root.go and 324-338 in continue.go) is duplicated.
+
+4. **Tests Coupled to Implementation Details** (MEDIUM): Tests create errors with `errors.New("context canceled")` instead of using actual sentinel errors like `context.Canceled` and `loop.ErrMaxIterationsReached`. If the formatter is fixed to use `errors.Is()`, all these tests will fail.
+
+### Logic
+_ISSUES_FOUND
+
+1. **Fragile Error String Comparison** (HIGH): The code compares error messages by string representation. Wrapped errors (using `fmt.Errorf("context: %w", err)`) will NOT match. For example, if any code wraps `context.Canceled`, the user will see "FAILED (context: context canceled)" instead of "INTERRUPTED" and won't see resume instructions.
+
+2. **Resume Instructions Only for Interrupted Sessions** (MEDIUM): Users who hit "max iterations reached" or "budget exceeded" might also want to resume their session, but they don't see the resume instructions. This is a UX inconsistency.
+
+### Error Handling
+_ISSUES_FOUND
+
+1. **Error Type Comparison Using String Matching** (HIGH): String-based error matching is fragile. If any error message wording changes or errors are wrapped, the match fails silently and falls through to the default case showing "FAILED" instead of the appropriate status. Resume instructions won't be shown when they should be.
+
+2. **Missing Nil Check in continue.go** (LOW): `printSummary(formatter, loopState, sessID)` is called without checking if `loopState` is nil (unlike root.go which has `if loopState != nil`). While the current implementation always returns non-nil loopState, this is defensive programming gap.
+
+### Data Integrity
+_ISSUES_FOUND
+
+1. **String-Based Error Matching Breaks with Wrapped Errors** (HIGH): The same issue affects data integrity - the wrong status will be displayed if errors are wrapped, misleading users about what happened.
+
+2. **Zero-Value Token Display May Hide Data** (LOW): If both `TokensIn` and `TokensOut` are 0 and `TotalTokens` is also 0, no token line is displayed. This could hide the fact that a session ran.
+
+### Verdict
+**FAIL**
+
+Critical issues requiring attention:
+
+1. **Fragile error string comparison** (HIGH): The formatter uses `Error().Error() == "..."` string comparison instead of `errors.Is()`. This will break for wrapped errors and is inconsistent with error handling in root.go which uses `switch err { case context.Canceled: ...}`. Should use `errors.Is(summary.Error, context.Canceled)` etc.
+
+2. **Tests use fake errors** (MEDIUM): Tests use `errors.New("context canceled")` instead of actual sentinel errors. If the implementation is fixed to use `errors.Is()`, these tests will fail.
+
+3. **Resume instructions UX inconsistency** (MEDIUM): Only shown for interrupted sessions, but users hitting other error conditions may also want to resume.
+
+The design issues (DRY violation, presentation logic in data struct) are technical debt but not blocking. The string-based error matching is the primary concern as it can cause incorrect user feedback for wrapped errors.
+
+## Iteration 10 - Code Review Fixes
+
+### Issues Addressed
+
+All three critical issues from the Iteration 9 code review have been fixed:
+
+**1. Fragile error string comparison (HIGH)**
+- Changed `PrintLoopSummary()` in `internal/output/formatter.go` to use `errors.Is()` instead of string comparison
+- This properly handles wrapped errors where `fmt.Errorf("context: %w", err)` was used
+- Now correctly identifies `context.Canceled`, `context.DeadlineExceeded`, and sentinel errors
+
+**2. Tests use fake errors (MEDIUM)**
+- Updated all tests in `internal/output/formatter_test.go` to use actual sentinel errors:
+  - `context.Canceled` instead of `errors.New("context canceled")`
+  - `context.DeadlineExceeded` instead of `errors.New("context deadline exceeded")`
+  - `orberrors.ErrMaxIterationsReached` instead of `errors.New("max iterations reached")`
+  - `orberrors.ErrBudgetExceeded` instead of `errors.New("budget exceeded")`
+- Added `TestPrintLoopSummary_WrappedErrors` to verify wrapped errors are handled correctly
+
+**3. Resume instructions UX inconsistency (MEDIUM)**
+- Changed the resume instructions condition from:
+  `if summary.SessionID != "" && summary.Error != nil && summary.Error.Error() == "context canceled"`
+  to:
+  `if summary.SessionID != "" && !summary.Completed`
+- Resume instructions now show for all non-completed sessions with a session ID
+- This includes interrupted, budget exceeded, max iterations, and timeout scenarios
+
+### Architectural Change
+
+To avoid an import cycle (`output` -> `loop` -> `executor` -> `output`), the sentinel errors were moved to a new shared package:
+
+- Created `internal/errors/errors.go` with `ErrBudgetExceeded` and `ErrMaxIterationsReached`
+- Updated `internal/loop/controller.go` to re-export these errors for backward compatibility
+- Updated `internal/output/formatter.go` and tests to use the shared errors package
+
+### Verification
+
+All tests pass: `make check` successful
