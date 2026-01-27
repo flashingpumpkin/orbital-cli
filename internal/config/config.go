@@ -91,5 +91,8 @@ func (c *Config) Validate() error {
 	if c.SpecPath == "" {
 		return errors.New("spec path is required")
 	}
+	if c.CompletionPromise == "" {
+		return errors.New("completion promise cannot be empty")
+	}
 	return nil
 }

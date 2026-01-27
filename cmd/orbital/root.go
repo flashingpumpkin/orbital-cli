@@ -891,9 +891,11 @@ func runWorkflowLoop(
 
 		// Check if completion promise was detected in any step output
 		promiseDetected := false
-		detector := completion.New(cfg.CompletionPromise)
 		for _, stepResult := range runResult.Steps {
-			if detector.Check(stepResult.Output) {
+			if stepResult == nil {
+				continue
+			}
+			if strings.Contains(stepResult.Output, cfg.CompletionPromise) {
 				promiseDetected = true
 				if tuiProgram == nil {
 					fmt.Printf("\nCompletion promise detected in step %q. Running verification...\n", stepResult.StepName)
@@ -918,26 +920,36 @@ func runWorkflowLoop(
 			}
 
 			if verifyErr != nil {
-				if tuiProgram == nil {
-					fmt.Printf("Verification error: %v. Continuing.\n", verifyErr)
+				msg := fmt.Sprintf("Verification error: %v. Continuing.", verifyErr)
+				if tuiProgram != nil {
+					tuiProgram.SendOutput("⚠ " + msg)
+				} else {
+					fmt.Println(msg)
 				}
 				continue
 			}
 
 			if !verifyResult.Verified {
-				if tuiProgram == nil {
-					if verifyResult.Unchecked >= 0 {
-						fmt.Printf("Verification: %d unchecked item(s) remain. Continuing.\n", verifyResult.Unchecked)
-					} else {
-						fmt.Println("Verification: could not parse response. Continuing.")
-					}
+				var msg string
+				if verifyResult.Unchecked >= 0 {
+					msg = fmt.Sprintf("Verification: %d unchecked item(s) remain. Continuing.", verifyResult.Unchecked)
+				} else {
+					msg = "Verification: could not parse response. Continuing."
+				}
+				if tuiProgram != nil {
+					tuiProgram.SendOutput("⚠ " + msg)
+				} else {
+					fmt.Println(msg)
 				}
 				continue
 			}
 
 			// Verification passed
-			if tuiProgram == nil {
-				fmt.Printf("Verification: all items complete (%d checked).\n", verifyResult.Checked)
+			msg := fmt.Sprintf("Verification: all items complete (%d checked).", verifyResult.Checked)
+			if tuiProgram != nil {
+				tuiProgram.SendOutput("✓ " + msg)
+			} else {
+				fmt.Println(msg)
 			}
 
 			// Check queue for new files

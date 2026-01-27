@@ -80,6 +80,11 @@ func (p *Program) SendSession(session SessionInfo) {
 	p.program.Send(SessionMsg(session))
 }
 
+// SendOutput sends a formatted output line to the program.
+func (p *Program) SendOutput(line string) {
+	p.program.Send(OutputLineMsg(line))
+}
+
 // Kill forcefully terminates the program.
 func (p *Program) Kill() {
 	p.program.Kill()
