@@ -51,6 +51,9 @@ type StepInfo struct {
 
 	// MaxRetries is the maximum allowed gate retries.
 	MaxRetries int
+
+	// IsGate indicates whether this step is a gate step.
+	IsGate bool
 }
 
 // RunnerCallback is called after each step completes.
@@ -153,6 +156,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 				Total:       len(r.workflow.Steps),
 				GateRetries: gateRetries[step.Name],
 				MaxRetries:  r.workflow.EffectiveMaxGateRetries(),
+				IsGate:      step.Gate,
 			}
 			r.startCallback(info)
 		}
@@ -197,6 +201,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 				Total:       len(r.workflow.Steps),
 				GateRetries: gateRetries[step.Name],
 				MaxRetries:  r.workflow.EffectiveMaxGateRetries(),
+				IsGate:      step.Gate,
 			}
 			if err := r.callback(info, execResult, gateResult); err != nil {
 				return result, err

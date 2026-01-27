@@ -388,13 +388,15 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// Include accumulated cost/tokens to prevent display reset
 		if tuiProgram != nil {
 			tuiProgram.SendProgress(tui.ProgressInfo{
-				Iteration:     iteration,
-				MaxIteration:  maxIterations,
-				TokensIn:      accumulatedTokensIn,
-				TokensOut:     accumulatedTokensOut,
-				Cost:          accumulatedCost,
-				Budget:        cfg.MaxBudget,
-				ContextWindow: config.GetContextWindow(cfg.Model),
+				Iteration:        iteration,
+				MaxIteration:     maxIterations,
+				TokensIn:         accumulatedTokensIn,
+				TokensOut:        accumulatedTokensOut,
+				Cost:             accumulatedCost,
+				Budget:           cfg.MaxBudget,
+				ContextWindow:    config.GetContextWindow(cfg.Model),
+				IterationTimeout: cfg.IterationTimeout,
+				IterationStart:   iterationStartTime,
 			})
 		}
 	})
@@ -421,13 +423,15 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// Send progress update to TUI if active
 		if tuiProgram != nil {
 			tuiProgram.SendProgress(tui.ProgressInfo{
-				Iteration:     iteration,
-				MaxIteration:  cfg.MaxIterations,
-				TokensIn:      totalTokensIn,
-				TokensOut:     totalTokensOut,
-				Cost:          totalCost,
-				Budget:        cfg.MaxBudget,
-				ContextWindow: config.GetContextWindow(cfg.Model),
+				Iteration:        iteration,
+				MaxIteration:     cfg.MaxIterations,
+				TokensIn:         totalTokensIn,
+				TokensOut:        totalTokensOut,
+				Cost:             totalCost,
+				Budget:           cfg.MaxBudget,
+				ContextWindow:    config.GetContextWindow(cfg.Model),
+				IterationTimeout: cfg.IterationTimeout,
+				IterationStart:   iterationStartTime,
 			})
 		}
 
@@ -856,16 +860,19 @@ func runWorkflowLoop(
 			// TUI mode: send progress update immediately when step starts
 			// Include accumulated cost/tokens to prevent display reset
 			tuiProgram.SendProgress(tui.ProgressInfo{
-				Iteration:     loopState.Iteration,
-				MaxIteration:  cfg.MaxIterations,
-				StepName:      info.Name,
-				StepPosition:  info.Position,
-				StepTotal:     info.Total,
-				TokensIn:      loopState.TotalTokensIn,
-				TokensOut:     loopState.TotalTokensOut,
-				Cost:          loopState.TotalCost,
-				Budget:        cfg.MaxBudget,
-				ContextWindow: config.GetContextWindow(cfg.Model),
+				Iteration:        loopState.Iteration,
+				MaxIteration:     cfg.MaxIterations,
+				StepName:         info.Name,
+				StepPosition:     info.Position,
+				StepTotal:        info.Total,
+				TokensIn:         loopState.TotalTokensIn,
+				TokensOut:        loopState.TotalTokensOut,
+				Cost:             loopState.TotalCost,
+				Budget:           cfg.MaxBudget,
+				ContextWindow:    config.GetContextWindow(cfg.Model),
+				IterationTimeout: cfg.IterationTimeout,
+				IterationStart:   stepStartTime,
+				IsGateStep:       info.IsGate,
 			})
 		}
 	})
@@ -902,18 +909,21 @@ func runWorkflowLoop(
 		// Send progress update to TUI if active
 		if tuiProgram != nil {
 			tuiProgram.SendProgress(tui.ProgressInfo{
-				Iteration:     loopState.Iteration,
-				MaxIteration:  cfg.MaxIterations,
-				StepName:      info.Name,
-				StepPosition:  info.Position,
-				StepTotal:     info.Total,
-				GateRetries:   info.GateRetries,
-				MaxRetries:    info.MaxRetries,
-				TokensIn:      loopState.TotalTokensIn,
-				TokensOut:     loopState.TotalTokensOut,
-				Cost:          loopState.TotalCost,
-				Budget:        cfg.MaxBudget,
-				ContextWindow: config.GetContextWindow(cfg.Model),
+				Iteration:        loopState.Iteration,
+				MaxIteration:     cfg.MaxIterations,
+				StepName:         info.Name,
+				StepPosition:     info.Position,
+				StepTotal:        info.Total,
+				GateRetries:      info.GateRetries,
+				MaxRetries:       info.MaxRetries,
+				TokensIn:         loopState.TotalTokensIn,
+				TokensOut:        loopState.TotalTokensOut,
+				Cost:             loopState.TotalCost,
+				Budget:           cfg.MaxBudget,
+				ContextWindow:    config.GetContextWindow(cfg.Model),
+				IterationTimeout: cfg.IterationTimeout,
+				IterationStart:   stepStartTime,
+				IsGateStep:       info.IsGate,
 			})
 		}
 

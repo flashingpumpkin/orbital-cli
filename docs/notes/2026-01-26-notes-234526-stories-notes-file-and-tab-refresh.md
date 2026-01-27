@@ -816,3 +816,57 @@ The previous code used direct equality comparison (`switch err { case loop.ErrMa
 ### Verification
 
 All tests pass: `make check` successful
+
+## Iteration 12 - Iteration Countdown Timer
+
+### Task Selected
+
+**Add iteration countdown timer to TUI**
+
+### Implementation
+
+**1. Extended ProgressInfo struct** (`internal/tui/model.go`):
+- Added `IterationTimeout time.Duration` - configured timeout for iterations
+- Added `IterationStart time.Time` - when current iteration/step started
+- Added `IsGateStep bool` - true if current step is a gate (timer hidden for gates)
+
+**2. Added timer tick mechanism** (`internal/tui/model.go`):
+- Added `timerTickInterval = time.Second`
+- Added `timerTickMsg` message type
+- Added `timerTick()` function to create tick command
+- Updated `Init()` to start both file refresh and timer ticks with `tea.Batch()`
+- Added handler for `timerTickMsg` in `Update()` that schedules next tick
+
+**3. Added formatIterationTimer() helper** (`internal/tui/model.go`):
+- Returns empty string if no iteration running (zero start time)
+- Returns empty string if timeout not set
+- Returns empty string for gate steps
+- Calculates remaining time and formats as "Xm Ys"
+- Applies warning colour when < 1 minute remaining
+
+**4. Updated renderProgressPanel()** (`internal/tui/model.go`):
+- Timer appears on Line 1 after iteration bar, before step info
+- Format: `[████████░░] Iteration 2/50 │ 3m 42s │ Step: implement (1/2)`
+
+**5. Extended StepInfo struct** (`internal/workflow/executor.go`):
+- Added `IsGate bool` field to indicate whether step is a gate
+- Updated both `StepInfo` creation sites in `Run()` to populate `IsGate`
+
+**6. Updated all SendProgress calls** (`cmd/orbital/root.go`):
+- Iteration start callback: passes `IterationTimeout` and `IterationStart`
+- Iteration end callback: passes `IterationTimeout` and `IterationStart`
+- Workflow step start callback: passes timeout, start time, and `IsGateStep`
+- Workflow step end callback: passes timeout, start time, and `IsGateStep`
+
+### Testing
+
+Added tests in `internal/tui/model_test.go`:
+- `TestFormatIterationTimer`: Tests various timer states (no start, no timeout, gate step, active, expired)
+- `TestIterationTimerInProgressPanel`: Verifies timer appears in progress panel
+- `TestTimerHiddenForGateSteps`: Verifies timer is hidden during gate steps
+- `TestTimerTickReturnsNextTick`: Verifies tick handler schedules next tick
+- `TestModelInitReturnsBothTicks`: Verifies Init returns batch of both ticks
+
+### Verification
+
+All tests pass: `make check` successful

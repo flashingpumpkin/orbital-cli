@@ -2078,3 +2078,174 @@ func TestContextBarZeroWindow(t *testing.T) {
 		t.Error("expected non-empty view with zero context window")
 	}
 }
+
+func TestFormatIterationTimer(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions to initialise styles
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	tests := []struct {
+		name           string
+		timeout        time.Duration
+		start          time.Time
+		isGate         bool
+		wantEmpty      bool
+		wantContains   string
+	}{
+		{
+			name:      "no iteration running (zero start time)",
+			timeout:   5 * time.Minute,
+			start:     time.Time{}, // zero value
+			isGate:    false,
+			wantEmpty: true,
+		},
+		{
+			name:      "no timeout set",
+			timeout:   0,
+			start:     time.Now(),
+			isGate:    false,
+			wantEmpty: true,
+		},
+		{
+			name:      "gate step hides timer",
+			timeout:   5 * time.Minute,
+			start:     time.Now(),
+			isGate:    true,
+			wantEmpty: true,
+		},
+		{
+			name:         "active timer shows remaining time",
+			timeout:      5 * time.Minute,
+			start:        time.Now().Add(-2 * time.Minute), // 2 minutes elapsed
+			isGate:       false,
+			wantEmpty:    false,
+			wantContains: "m", // should contain minutes
+		},
+		{
+			name:         "expired timer shows 0m 0s",
+			timeout:      5 * time.Minute,
+			start:        time.Now().Add(-10 * time.Minute), // 10 minutes elapsed (expired)
+			isGate:       false,
+			wantEmpty:    false,
+			wantContains: "0m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model.SetProgress(ProgressInfo{
+				Iteration:        1,
+				MaxIteration:     50,
+				IterationTimeout: tt.timeout,
+				IterationStart:   tt.start,
+				IsGateStep:       tt.isGate,
+			})
+
+			result := model.formatIterationTimer()
+
+			if tt.wantEmpty && result != "" {
+				t.Errorf("formatIterationTimer() = %q, want empty", result)
+			}
+			if !tt.wantEmpty && result == "" {
+				t.Error("formatIterationTimer() returned empty, want non-empty")
+			}
+			if tt.wantContains != "" && !strings.Contains(result, tt.wantContains) {
+				t.Errorf("formatIterationTimer() = %q, want to contain %q", result, tt.wantContains)
+			}
+		})
+	}
+}
+
+func TestIterationTimerInProgressPanel(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set progress with active timer (not a gate step)
+	model.SetProgress(ProgressInfo{
+		Iteration:        5,
+		MaxIteration:     50,
+		TokensIn:         50000,
+		TokensOut:        25000,
+		Cost:             5.00,
+		Budget:           100.00,
+		ContextWindow:    200000,
+		IterationTimeout: 5 * time.Minute,
+		IterationStart:   time.Now().Add(-2 * time.Minute), // 2 minutes elapsed
+		IsGateStep:       false,
+	})
+
+	// Render progress panel
+	result := model.renderProgressPanel()
+	lines := strings.Split(result, "\n")
+
+	// Line 1 should contain the timer (shows "m" for minutes)
+	if !strings.Contains(lines[0], "m") {
+		t.Error("expected line 1 to contain timer with minutes indicator")
+	}
+}
+
+func TestTimerHiddenForGateSteps(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set progress with gate step
+	model.SetProgress(ProgressInfo{
+		Iteration:        5,
+		MaxIteration:     50,
+		StepName:         "review",
+		IterationTimeout: 5 * time.Minute,
+		IterationStart:   time.Now().Add(-30 * time.Second),
+		IsGateStep:       true, // This is a gate step
+	})
+
+	// Timer should be empty for gate steps
+	result := model.formatIterationTimer()
+	if result != "" {
+		t.Errorf("expected timer to be hidden for gate steps, got %q", result)
+	}
+}
+
+func TestTimerTickReturnsNextTick(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Send timer tick message
+	tickMsg := timerTickMsg(time.Now())
+	updatedModel, cmd := model.Update(tickMsg)
+
+	// Should return the next tick command
+	if cmd == nil {
+		t.Error("expected timerTickMsg to return a command for the next tick")
+	}
+
+	// Model should be unchanged (just schedules next tick)
+	if updatedModel == nil {
+		t.Error("expected model to be returned")
+	}
+}
+
+func TestModelInitReturnsBothTicks(t *testing.T) {
+	m := NewModel()
+
+	cmd := m.Init()
+
+	// Init should return a command (batch of file refresh and timer ticks)
+	if cmd == nil {
+		t.Error("expected Init() to return a non-nil command")
+	}
+}

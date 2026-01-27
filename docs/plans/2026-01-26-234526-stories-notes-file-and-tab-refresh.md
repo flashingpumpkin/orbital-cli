@@ -12,6 +12,7 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 6. **Exit summary**: Print a final summary when the app exits (via CTRL-C or completion promise)
 7. **Iteration countdown timer**: Display remaining time in the current iteration
 8. **Light and dark mode**: Support both terminal themes with auto-detection
+9. **Display active workflow**: Show which workflow preset is running in the TUI
 
 ## Story Mapping Overview
 
@@ -37,6 +38,7 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 | Must Have | Print exit summary on TUI shutdown | Users see completion status, cost, and metrics after exit |
 | Must Have | Add iteration countdown timer | Users see time remaining before iteration timeout |
 | Must Have | Add light and dark mode with auto-detection | TUI is readable on both light and dark terminal backgrounds |
+| Must Have | Display active workflow name | Users know which workflow preset is driving the iteration loop |
 
 ## Epic: File Management Improvements
 
@@ -448,7 +450,7 @@ The summary should print AFTER the TUI has fully exited, so it appears cleanly i
 
 ---
 
-### [ ] **Ticket: Add iteration countdown timer to TUI**
+### [x] **Ticket: Add iteration countdown timer to TUI**
 
 **As a** user
 **I want** to see a countdown showing time remaining in the current iteration
@@ -510,24 +512,24 @@ The TUI progress panel currently shows iteration count, budget, and context wind
    - Timer resets cleanly on iteration boundary
 
 **Acceptance Criteria**:
-- [ ] Given an implementor step is running, when 1 second passes, then the timer updates to show new remaining time
-- [ ] Given an implementor step starts, when the TUI renders, then the timer shows the full timeout duration as remaining
-- [ ] Given remaining time drops below 1 minute, when the TUI renders, then the timer displays in warning colour
-- [ ] Given an iteration completes, when a new iteration starts, then the timer resets to full timeout duration
-- [ ] Given no iteration is running (between iterations), when the TUI renders, then the timer shows a neutral state or is hidden
-- [ ] Given the timeout is 5 minutes and 3 minutes have elapsed, when the TUI renders, then the timer shows approximately 2 minutes remaining
-- [ ] Given a gate step (e.g., review) is running, when the TUI renders, then the timer is hidden or shows "—" (no timeout applies)
+- [x] Given an implementor step is running, when 1 second passes, then the timer updates to show new remaining time
+- [x] Given an implementor step starts, when the TUI renders, then the timer shows the full timeout duration as remaining
+- [x] Given remaining time drops below 1 minute, when the TUI renders, then the timer displays in warning colour
+- [x] Given an iteration completes, when a new iteration starts, then the timer resets to full timeout duration
+- [x] Given no iteration is running (between iterations), when the TUI renders, then the timer shows a neutral state or is hidden
+- [x] Given the timeout is 5 minutes and 3 minutes have elapsed, when the TUI renders, then the timer shows approximately 2 minutes remaining
+- [x] Given a gate step (e.g., review) is running, when the TUI renders, then the timer is hidden or shows "—" (no timeout applies)
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] ProgressInfo extended with timeout and start time fields
-- [ ] Timer tick implemented in TUI model
-- [ ] Countdown displayed inline with iteration bar (Format A)
-- [ ] Timer only active during implementor steps (not gates)
-- [ ] Warning colour at < 1 minute remaining
-- [ ] Timer resets on new iteration
-- [ ] Unit test for remaining time calculation
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] ProgressInfo extended with timeout and start time fields
+- [x] Timer tick implemented in TUI model
+- [x] Countdown displayed inline with iteration bar (Format A)
+- [x] Timer only active during implementor steps (not gates)
+- [x] Warning colour at < 1 minute remaining
+- [x] Timer resets on new iteration
+- [x] Unit test for remaining time calculation
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - Uses existing progress panel layout in view.go (Line 1 - iteration bar)
@@ -682,6 +684,71 @@ For future enhancement:
 
 ---
 
+### [ ] **Ticket: Display active workflow name in TUI**
+
+**As a** user
+**I want** to see which workflow is currently running in the TUI
+**So that** I understand the execution pattern and know what steps to expect
+
+**Context**: The TUI currently shows step information (step name, position, total steps) but does not display which workflow preset is active. Users running different workflows (fast, spec-driven, reviewed, tdd, autonomous) have no visual confirmation of which one is executing. This is especially important when workflows are configured via config file rather than CLI flag.
+
+**Description**: Display the workflow name in the TUI, either in the header panel or session info panel. The workflow name should be visible at all times so users can confirm the execution pattern. For the default `spec-driven` workflow, consider showing "spec-driven" or omitting it to reduce noise.
+
+**Implementation Requirements**:
+
+1. **Extend ProgressInfo struct** in `internal/tui/model.go`:
+   ```go
+   type ProgressInfo struct {
+       // ... existing fields ...
+       WorkflowName string  // e.g., "autonomous", "tdd", "reviewed"
+   }
+   ```
+
+2. **Pass workflow name to TUI** from `cmd/orbital/root.go`:
+   - Include `workflow.Name` in ProgressInfo when workflow is active
+   - For standard loop (no workflow), use "spec-driven" or empty string
+
+3. **Display in session info panel** (alongside spec file paths):
+   ```
+   Spec: docs/plans/my-spec.md
+   Workflow: autonomous
+   ```
+
+   Or in header panel:
+   ```
+   orbital v1.0.0  [autonomous]  Session: abc123
+   ```
+
+4. **Handle default workflow**:
+   - Option A: Always show workflow name
+   - Option B: Only show non-default workflows (hide "spec-driven")
+
+**Acceptance Criteria**:
+- [ ] Given a workflow is configured, when the TUI starts, then the workflow name is displayed
+- [ ] Given the `--workflow autonomous` flag, when the TUI renders, then "autonomous" is visible
+- [ ] Given a workflow in config file, when the TUI renders, then the workflow name from config is shown
+- [ ] Given no workflow is specified (default spec-driven), when the TUI renders, then either "spec-driven" is shown or the field is omitted
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] ProgressInfo extended with WorkflowName field
+- [ ] Workflow name passed from root.go to TUI
+- [ ] Workflow name displayed in session info or header
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Uses existing session info panel or header panel
+- Integrates with workflow configuration in root.go
+
+**Risks**:
+- None significant (simple display addition)
+
+**Notes**: The workflow name provides important context about how the iteration loop behaves. Users can verify their config is correct without checking CLI flags or config files. Consider also showing this in the exit summary.
+
+**Effort Estimate**: XS (1 hour)
+
+---
+
 ## Backlog Prioritisation
 
 **Must Have (Sprint 1):**
@@ -694,6 +761,7 @@ For future enhancement:
 7. Print exit summary when TUI shuts down (S)
 8. Add iteration countdown timer to TUI (S)
 9. Add light and dark mode with auto-detection (M)
+10. Display active workflow name in TUI (XS)
 
 **Should Have (Future):**
 - Configurable refresh interval via flag
@@ -1144,3 +1212,5 @@ rootCmd.Flags().StringVar(&cfg.Theme, "theme", "auto",
 | Theme flag override | --theme flag takes precedence over auto-detection |
 | Config file theme | theme setting in config.toml respected |
 | Fallback behaviour | Defaults to dark when detection fails |
+| Workflow name visible | Displayed in TUI when workflow is active |
+| Workflow name accuracy | Matches configured workflow preset |

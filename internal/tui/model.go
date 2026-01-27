@@ -45,18 +45,21 @@ type SessionInfo struct {
 
 // ProgressInfo contains iteration and cost metrics.
 type ProgressInfo struct {
-	Iteration     int
-	MaxIteration  int
-	StepName      string
-	StepPosition  int
-	StepTotal     int
-	GateRetries   int
-	MaxRetries    int
-	TokensIn      int
-	TokensOut     int
-	Cost          float64
-	Budget        float64
-	ContextWindow int // Model's context window size (e.g., 200000 for opus/sonnet/haiku)
+	Iteration        int
+	MaxIteration     int
+	StepName         string
+	StepPosition     int
+	StepTotal        int
+	GateRetries      int
+	MaxRetries       int
+	TokensIn         int
+	TokensOut        int
+	Cost             float64
+	Budget           float64
+	ContextWindow    int           // Model's context window size (e.g., 200000 for opus/sonnet/haiku)
+	IterationTimeout time.Duration // Configured timeout for iterations
+	IterationStart   time.Time     // When current iteration/step started
+	IsGateStep       bool          // True if current step is a gate (timer hidden for gates)
 }
 
 // StatsMsg is a message containing updated token and cost statistics.
@@ -130,9 +133,22 @@ func fileRefreshTick() tea.Cmd {
 	})
 }
 
+// timerTickInterval is the interval for the countdown timer updates.
+const timerTickInterval = time.Second
+
+// timerTickMsg signals that it's time to update the countdown timer.
+type timerTickMsg time.Time
+
+// timerTick creates a tick command for the countdown timer.
+func timerTick() tea.Cmd {
+	return tea.Tick(timerTickInterval, func(t time.Time) tea.Msg {
+		return timerTickMsg(t)
+	})
+}
+
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return fileRefreshTick()
+	return tea.Batch(fileRefreshTick(), timerTick())
 }
 
 // FileContentMsg contains loaded file content.
@@ -274,6 +290,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, cmd
+
+	case timerTickMsg:
+		// Just schedule next tick - the timer display updates on each render
+		return m, timerTick()
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -1074,8 +1094,12 @@ func (m Model) renderProgressPanel() string {
 	if p.GateRetries > 0 || p.MaxRetries > 0 {
 		gateStr = m.formatGateRetries(p.GateRetries, p.MaxRetries)
 	}
+	timerStr := m.formatIterationTimer()
 
 	line1Parts := []string{iterBar + " " + iterLabel + iterValue}
+	if timerStr != "" {
+		line1Parts = append(line1Parts, timerStr)
+	}
 	if stepStr != "" {
 		line1Parts = append(line1Parts, stepStr)
 	}
@@ -1191,6 +1215,46 @@ func (m Model) formatContext(used, window int, ratio float64) string {
 	}
 
 	return label + valueStr
+}
+
+// formatIterationTimer formats the iteration countdown timer.
+// Returns empty string if timer should be hidden (no iteration running or gate step).
+func (m Model) formatIterationTimer() string {
+	p := m.progress
+
+	// Hide timer if no iteration is running (start time not set)
+	if p.IterationStart.IsZero() {
+		return ""
+	}
+
+	// Hide timer if timeout is not set
+	if p.IterationTimeout <= 0 {
+		return ""
+	}
+
+	// Hide timer during gate steps
+	if p.IsGateStep {
+		return ""
+	}
+
+	elapsed := time.Since(p.IterationStart)
+	remaining := p.IterationTimeout - elapsed
+
+	// Clamp to zero if negative
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	// Format as "Xm Ys"
+	mins := int(remaining.Minutes())
+	secs := int(remaining.Seconds()) % 60
+	timerStr := util.IntToString(mins) + "m " + util.IntToString(secs) + "s"
+
+	// Apply warning colour if less than 1 minute remaining
+	if remaining < time.Minute {
+		return m.styles.Warning.Render(timerStr)
+	}
+	return m.styles.Label.Render(timerStr)
 }
 
 // renderSessionPanel renders the session info panel.
