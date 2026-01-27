@@ -229,3 +229,94 @@ Fixed two callbacks in `cmd/orbital/root.go`:
 Cost and token displays now persist across step/iteration boundaries instead of resetting to zero.
 
 All tests pass: `make check` successful
+
+## Code Review - Iteration 5
+
+### Security
+No issues. The changes involve simple variable tracking and passing numeric values to TUI display. No user input, no injection vectors, no authentication boundaries, no data exposure. The values come from trusted internal execution results.
+
+### Design
+_ISSUES_FOUND
+
+1. **Function-scoped mutable state via closures**: The `accumulatedCost`, `accumulatedTokensIn`, `accumulatedTokensOut` variables are shared between two callbacks via closures, creating implicit state that is not visible in function signatures and duplicates state already tracked in `loopState`.
+
+2. **God function**: `runOrbit` at 377 lines handles 15+ responsibilities (config, prompts, notes, state, TUI, callbacks, signal handling, etc.). The new variables add to this complexity.
+
+3. **Duplicated TUI progress update logic**: Four nearly-identical `tuiProgram.SendProgress()` calls construct `ProgressInfo` structs, risking inconsistency if fields are added.
+
+4. **Feature envy**: `runWorkflowLoop` at 264 lines takes 8 parameters and manipulates internals of many packages.
+
+### Logic
+No issues. The accumulated values pattern correctly bridges iteration end (when updated) to iteration start (when read). Zero-initialization is correct for first iteration. The workflow path uses `loopState` directly, which is properly shared. No race conditions (single goroutine access). Edge cases handled correctly.
+
+### Error Handling
+No issues. The changes add state tracking only. `SendProgress` is intentionally fire-and-forget (bubbletea pattern). Proper nil checks exist for `tuiProgram` and `formatter`. No new error paths introduced.
+
+### Data Integrity
+No issues. Values come from trusted internal sources. Go zero-value initialization is safe. Types are correct (float64 for cost, int for tokens). Sequential callback execution ensures consistency. The workflow path reads from `loopState` which is updated atomically within callbacks.
+
+### Verdict
+**PASS**
+
+The design issues are pre-existing technical debt, not introduced by this change. The change itself is a targeted fix for a UX bug (cost display resetting to zero) that:
+- Follows existing patterns in the codebase
+- Introduces no new bugs or security issues
+- Has correct logic for all edge cases
+- Is properly tested
+
+The accumulated variables are a pragmatic solution that works within the current architecture. While the broader design issues (god function, feature envy) warrant future refactoring, they do not block this specific fix.
+
+## Iteration 6 - Context Window Progress Bar
+
+### Task Selected
+
+**Add context window progress bar showing token usage**
+
+This was the final task in the spec, adding visibility into context window consumption.
+
+### Why Highest Leverage
+
+This is the last remaining task. It provides critical visibility into a fundamental constraint (context window limits) that users currently have no way to monitor.
+
+### Implementation
+
+**1. Model-to-context-window mapping** (`internal/config/config.go`):
+- Added `DefaultContextWindow = 200000` constant
+- Added `ModelContextWindows` map for opus, sonnet, haiku (all 200K)
+- Added `GetContextWindow(model)` function with fallback to default
+
+**2. Extended ProgressInfo struct** (`internal/tui/model.go`):
+- Added `ContextWindow int` field to track model's context window size
+
+**3. Pass context window to TUI** (`cmd/orbital/root.go`):
+- Added `ContextWindow: config.GetContextWindow(cfg.Model)` to all five `ProgressInfo` instantiations:
+  - Initial progress when creating TUI
+  - Iteration start callback
+  - Iteration end callback
+  - Workflow step start callback
+  - Workflow step end callback
+
+**4. Render context window progress bar** (`internal/tui/model.go`):
+- Updated `renderProgressPanel()` to add a third line for context usage
+- Added `formatContext()` helper function for consistent formatting
+- Displays: `[████████░░░░░░░░░░░░] Context: 75,000/200,000 (37%)`
+- Warning colour at 80% threshold
+
+**5. Updated layout** (`internal/tui/layout.go`):
+- Changed `ProgressPanelHeight` from 2 to 3 to accommodate the new line
+
+### Testing
+
+Added tests in:
+- `internal/config/config_test.go`: `TestGetContextWindow_ReturnsCorrectValueForKnownModels`, `TestGetContextWindow_ReturnsDefaultForUnknownModels`
+- `internal/tui/model_test.go`: `TestFormatContext`, `TestRenderProgressPanelContextBar`, `TestProgressPanelHasThreeLines`, `TestContextBarWarningColour`, `TestContextBarZeroWindow`
+
+Updated:
+- `internal/tui/layout_test.go`: Updated expected `ScrollAreaHeight` values (reduced by 1 due to new progress line)
+- Golden test files: Regenerated with `UPDATE_GOLDEN=true go test ./internal/tui/... -run 'TestGolden'`
+
+### Result
+
+The TUI now displays a context window progress bar on line 3 of the progress panel. Users can see real-time token usage relative to the model's 200K context window, with warning colour at 80% consumption.
+
+All tests pass: `make check` successful

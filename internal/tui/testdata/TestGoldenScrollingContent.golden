@@ -13,10 +13,10 @@
 ║This is output line content for testing scroll behaviour                      ║
 ║This is output line content for testing scroll behaviour                      ║
 ║This is output line content for testing scroll behaviour                      ║
-║This is output line content for testing scroll behaviour                      ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║ [████░░░░░░░░░░░░░░░░] Iteration 10/50                                       ║
 ║ [██████████░░░░░░░░░░] Tokens: 50,000 in / 25,000 out │ Cost: $5.00 / $10.00 ║
+║ [░░░░░░░░░░░░░░░░░░░░] Context: 75,000/0 (0%)                                ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║ Spec: (none)                                                                 ║
 ║                                                                              ║

@@ -140,3 +140,41 @@ func TestConfig_FieldsAreSettable(t *testing.T) {
 		t.Errorf("IterationTimeout = %v; want %v", cfg.IterationTimeout, 45*time.Minute)
 	}
 }
+
+func TestGetContextWindow_ReturnsCorrectValueForKnownModels(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{"opus", 200000},
+		{"sonnet", 200000},
+		{"haiku", 200000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got := GetContextWindow(tt.model)
+			if got != tt.want {
+				t.Errorf("GetContextWindow(%q) = %d; want %d", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetContextWindow_ReturnsDefaultForUnknownModels(t *testing.T) {
+	tests := []string{
+		"unknown-model",
+		"claude-3",
+		"",
+		"gpt-4",
+	}
+
+	for _, model := range tests {
+		t.Run(model, func(t *testing.T) {
+			got := GetContextWindow(model)
+			if got != DefaultContextWindow {
+				t.Errorf("GetContextWindow(%q) = %d; want %d (default)", model, got, DefaultContextWindow)
+			}
+		})
+	}
+}

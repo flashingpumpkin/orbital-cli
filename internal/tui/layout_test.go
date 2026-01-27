@@ -3,10 +3,10 @@ package tui
 import "testing"
 
 func TestCalculateLayout(t *testing.T) {
-	// New layout calculation:
-	// Fixed elements: Header(1) + TabBar(1) + Progress(2) + Session(2) + HelpBar(1) + BorderHeight(6) = 13
+	// Layout calculation:
+	// Fixed elements: Header(1) + TabBar(1) + Progress(3) + Session(2) + HelpBar(1) + BorderHeight(6) = 14
 	// With tasks: + TaskPanel + 1 extra border
-	// So: ScrollAreaHeight = height - 13 - TaskPanel - (1 if tasks > 0)
+	// So: ScrollAreaHeight = height - 14 - TaskPanel - (1 if tasks > 0)
 	tests := []struct {
 		name       string
 		width      int
@@ -22,7 +22,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        0,
 			wantTooSmall:     false,
-			wantScrollHeight: 27, // 40 - (1 + 1 + 0 + 2 + 2 + 1 + 6) = 40 - 13
+			wantScrollHeight: 26, // 40 - (1 + 1 + 0 + 3 + 2 + 1 + 6) = 40 - 14
 			wantTaskHeight:   0,
 		},
 		{
@@ -31,7 +31,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        3,
 			wantTooSmall:     false,
-			wantScrollHeight: 22, // 40 - (1 + 1 + 4 + 2 + 2 + 1 + 6 + 1) = 40 - 18
+			wantScrollHeight: 21, // 40 - (1 + 1 + 4 + 3 + 2 + 1 + 6 + 1) = 40 - 19
 			wantTaskHeight:   4,  // 3 tasks + 1 header
 		},
 		{
@@ -40,7 +40,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        6,
 			wantTooSmall:     false,
-			wantScrollHeight: 19, // 40 - (1 + 1 + 7 + 2 + 2 + 1 + 6 + 1) = 40 - 21
+			wantScrollHeight: 18, // 40 - (1 + 1 + 7 + 3 + 2 + 1 + 6 + 1) = 40 - 22
 			wantTaskHeight:   7,  // 6 tasks + 1 header
 		},
 		{
@@ -49,7 +49,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           40,
 			taskCount:        10,
 			wantTooSmall:     false,
-			wantScrollHeight: 19, // 40 - (1 + 1 + 7 + 2 + 2 + 1 + 6 + 1) capped at max
+			wantScrollHeight: 18, // 40 - (1 + 1 + 7 + 3 + 2 + 1 + 6 + 1) capped at max
 			wantTaskHeight:   7,  // max 6 + 1 header
 		},
 		{
@@ -72,7 +72,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           24,
 			taskCount:        0,
 			wantTooSmall:     false,
-			wantScrollHeight: 11, // 24 - 13
+			wantScrollHeight: 10, // 24 - 14
 			wantTaskHeight:   0,
 		},
 		{
@@ -81,7 +81,7 @@ func TestCalculateLayout(t *testing.T) {
 			height:           24,
 			taskCount:        6,
 			wantTooSmall:     false,
-			wantScrollHeight: 11, // Tasks collapsed because scroll area would be too small (24 - 21 = 3 < 4)
+			wantScrollHeight: 10, // Tasks collapsed because scroll area would be too small (24 - 22 = 2 < 4)
 			wantTaskHeight:   0,  // Collapsed
 		},
 	}

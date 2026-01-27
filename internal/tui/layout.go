@@ -12,8 +12,8 @@ const (
 	// HeaderPanelHeight is the height of the header panel (brand + metrics).
 	HeaderPanelHeight = 1
 
-	// ProgressPanelHeight is the height of the progress bar panel (iteration, step, tokens, cost).
-	ProgressPanelHeight = 2
+	// ProgressPanelHeight is the height of the progress bar panel (iteration, budget, context).
+	ProgressPanelHeight = 3
 
 	// SessionPanelHeight is the height of the session info panel (spec, notes, state paths).
 	SessionPanelHeight = 2

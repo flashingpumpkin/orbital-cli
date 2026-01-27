@@ -44,17 +44,18 @@ type SessionInfo struct {
 
 // ProgressInfo contains iteration and cost metrics.
 type ProgressInfo struct {
-	Iteration    int
-	MaxIteration int
-	StepName     string
-	StepPosition int
-	StepTotal    int
-	GateRetries  int
-	MaxRetries   int
-	TokensIn     int
-	TokensOut    int
-	Cost         float64
-	Budget       float64
+	Iteration     int
+	MaxIteration  int
+	StepName      string
+	StepPosition  int
+	StepTotal     int
+	GateRetries   int
+	MaxRetries    int
+	TokensIn      int
+	TokensOut     int
+	Cost          float64
+	Budget        float64
+	ContextWindow int // Model's context window size (e.g., 200000 for opus/sonnet/haiku)
 }
 
 // StatsMsg is a message containing updated token and cost statistics.
@@ -1106,10 +1107,27 @@ func (m Model) renderProgressPanel() string {
 		line2Padding = 0
 	}
 
+	// Line 3: Context window progress bar
+	var contextRatio float64
+	if p.ContextWindow > 0 {
+		contextRatio = float64(p.TokensIn+p.TokensOut) / float64(p.ContextWindow)
+	}
+	contextBar := RenderProgressBar(contextRatio, BarWidth, m.styles.Value, m.styles.Warning)
+	contextStr := m.formatContext(p.TokensIn+p.TokensOut, p.ContextWindow, contextRatio)
+	line3Content := " " + contextBar + " " + contextStr
+	line3Width := ansi.StringWidth(line3Content)
+	line3Padding := contentWidth - line3Width
+	if line3Padding < 0 {
+		// Content exceeds available width - truncate to fit
+		line3Content = ansi.Truncate(line3Content, contentWidth, "")
+		line3Padding = 0
+	}
+
 	line1 := border + line1Content + strings.Repeat(" ", line1Padding) + border
 	line2 := border + line2Content + strings.Repeat(" ", line2Padding) + border
+	line3 := border + line3Content + strings.Repeat(" ", line3Padding) + border
 
-	return line1 + "\n" + line2
+	return line1 + "\n" + line2 + "\n" + line3
 }
 
 // formatStep formats the step name and position.
@@ -1153,6 +1171,25 @@ func (m Model) formatCost(cost, budget float64) string {
 
 	budgetStr := m.styles.Label.Render(" / ") + m.styles.Value.Render(formatCurrency(budget))
 	return label + costStr + budgetStr
+}
+
+// formatContext formats context window usage with optional warning colour.
+func (m Model) formatContext(used, window int, ratio float64) string {
+	label := m.styles.Label.Render("Context: ")
+
+	usedStr := util.FormatNumber(used)
+	windowStr := util.FormatNumber(window)
+	percentStr := util.IntToString(int(ratio*100)) + "%"
+
+	// Apply warning colour if ratio exceeds 80%
+	var valueStr string
+	if ratio > 0.8 {
+		valueStr = m.styles.Warning.Render(usedStr + "/" + windowStr + " (" + percentStr + ")")
+	} else {
+		valueStr = m.styles.Value.Render(usedStr + "/" + windowStr + " (" + percentStr + ")")
+	}
+
+	return label + valueStr
 }
 
 // renderSessionPanel renders the session info panel.

@@ -8,6 +8,9 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 2. **Tab content refresh**: File tabs (notes, spec files) should automatically refresh to show the latest content when files are modified externally
 3. **Autonomous workflow exit bug**: The autonomous workflow does not exit when the completion promise is output during workflow steps
 4. **Iteration timeout default**: The 30-minute default is too long; reduce to 5 minutes
+5. **Context window progress bar**: Display token usage relative to model context window, updating on each streamed message
+6. **Exit summary**: Print a final summary when the app exits (via CTRL-C or completion promise)
+7. **Iteration countdown timer**: Display remaining time in the current iteration
 
 ## Story Mapping Overview
 
@@ -24,6 +27,14 @@ Orbital CLI is a Go tool that runs Claude Code in a loop for autonomous iteratio
 |----------|-------|-------|
 | Must Have | Fix autonomous workflow completion promise detection | Autonomous workflow exits correctly when work is complete |
 | Must Have | Reduce default iteration timeout to 5 minutes | Faster feedback on stuck iterations |
+
+**Epic 3**: TUI Improvements
+
+| Priority | Story | Value |
+|----------|-------|-------|
+| Must Have | Add context window progress bar | Users see real-time token usage relative to model limits |
+| Must Have | Print exit summary on TUI shutdown | Users see completion status, cost, and metrics after exit |
+| Must Have | Add iteration countdown timer | Users see time remaining before iteration timeout |
 
 ## Epic: File Management Improvements
 
@@ -260,23 +271,301 @@ The root cause is in `cmd/orbital/root.go`: the `runWorkflowLoop()` function onl
 
 ---
 
+## Epic: TUI Improvements
+
+### [x] **Ticket: Add context window progress bar showing token usage**
+
+**As a** user
+**I want** to see a progress bar showing token usage relative to the model's context window
+**So that** I can monitor how much context is being consumed and avoid hitting limits
+
+**Context**: The TUI currently displays raw token counts (`Tokens: 1,234 in / 5,678 out`) but provides no visual indication of how close the session is to the model's context window limit. Users cannot easily assess whether they are approaching capacity. A progress bar showing `tokens used / context window` would provide immediate visual feedback.
+
+Claude CLI stream-json output includes token counts in both `assistant` events (intermediate) and `result` events (final). The context window size is not provided in the stream but can be determined from the model being used (opus, sonnet, haiku all have 200K context windows).
+
+**Description**: Add a context window progress bar to the TUI progress panel. The bar shows the ratio of total tokens (input + output) to the model's context window. Update the bar on every streamed message. Reset the bar when a new Claude CLI session starts.
+
+**Implementation Requirements**:
+
+1. **Add model-to-context-window mapping** in `internal/config/config.go`:
+   ```go
+   var ModelContextWindows = map[string]int{
+       "opus":   200000,
+       "sonnet": 200000,
+       "haiku":  200000,
+   }
+   ```
+
+2. **Extend ProgressInfo struct** in `internal/tui/model.go`:
+   ```go
+   type ProgressInfo struct {
+       // ... existing fields ...
+       ContextWindow int  // Model's context window size
+   }
+   ```
+
+3. **Pass context window to TUI** from `cmd/orbital/root.go`:
+   - Look up context window from `ModelContextWindows[cfg.Model]`
+   - Include in `ProgressInfo` sent to TUI
+
+4. **Render context window progress bar** in `internal/tui/view.go`:
+   - Calculate ratio: `(TokensIn + TokensOut) / ContextWindow`
+   - Use existing `RenderProgressBar()` function
+   - Display format: `Context: [████████░░░░░░░░░░░░] 45,678/200,000 (23%)`
+   - Position: Line 3 of progress panel (after budget bar)
+
+5. **Update on every StatsMsg** in `internal/tui/model.go`:
+   - The existing `StatsMsg` handler already updates `TokensIn` and `TokensOut`
+   - Progress bar will automatically reflect new values on next render
+
+6. **Reset on new session**:
+   - When `ProgressInfo` is received with `Iteration == 1` and tokens are zero, reset context bar
+   - Alternatively: Add explicit `SessionStartMsg` to signal reset
+
+**Acceptance Criteria**:
+- [x] Given a Claude CLI session is running, when a message is streamed and parsed, then input/output tokens are extracted
+- [x] Given a message contains token data, when the TUI renders, then the context window progress bar reflects the current usage
+- [x] Given the model is opus/sonnet/haiku, when the TUI starts, then the context window is set to 200,000
+- [x] Given tokens approach 80% of context window, when the TUI renders, then the progress bar displays in warning colour
+- [x] Given a new Claude CLI session starts, when the first message arrives, then the progress bar resets to zero
+
+**Definition of Done** (Single Commit):
+- [x] Feature complete in one atomic commit
+- [x] Model-to-context-window mapping added to config
+- [x] ProgressInfo extended with ContextWindow field
+- [x] Context window progress bar rendered in view.go
+- [x] Progress bar updates on each StatsMsg
+- [x] Warning colour at 80% threshold
+- [x] Unit test for ratio calculation
+- [x] All tests passing (`make check`)
+
+**Dependencies**:
+- Uses existing `RenderProgressBar()` in styles.go
+- Uses existing `StatsMsg` flow from bridge.go
+- Builds on existing progress panel layout in view.go
+
+**Risks**:
+- Unknown model names could lack context window mapping (mitigated: default to 200,000)
+- Token counts from `assistant` events are intermediate and may differ from final (mitigated: final `result` event provides authoritative counts)
+- Cache tokens (creation + read) inflate input token count (mitigated: this is correct behaviour as cache tokens consume context)
+
+**Notes**: The context window progress bar provides critical visibility into a fundamental constraint. Unlike budget (which is cumulative across iterations), context window usage resets with each Claude CLI invocation since each invocation starts a fresh conversation. The bar should show per-invocation usage, not cumulative across the entire Orbital session.
+
+For future enhancement, consider:
+- Displaying context usage per iteration vs cumulative
+- Adding context window as a CLI flag for custom model configurations
+- Showing cache hit ratio alongside context usage
+
+**Effort Estimate**: S (2-3 hours)
+
+---
+
+### [ ] **Ticket: Print exit summary when TUI shuts down**
+
+**As a** user
+**I want** to see a summary of the session when the app exits
+**So that** I know the completion status, total cost, and key metrics without scrolling through output
+
+**Context**: Currently, TUI mode exits silently without printing any summary. Non-TUI mode prints a summary via `PrintLoopSummary()` and `PrintWorkflowSummary()`. When the TUI exits (either via CTRL-C interrupt or successful completion), users have no immediate visibility into what happened. They must mentally recall the last state of the progress panel or check logs.
+
+The summary should print AFTER the TUI has fully exited, so it appears cleanly in the terminal without interfering with the Bubbletea rendering.
+
+**Description**: After the TUI program exits (via `Quit()` or `Kill()`), print a final summary to stdout. The summary should include completion status, iterations, cost, tokens, duration, and any error information. For workflows, include step-by-step breakdown. For interrupts, include resume instructions.
+
+**Implementation Requirements**:
+
+1. **Ensure TUI cleanup completes** before printing:
+   - After `tuiProgram.Quit()` or `tuiProgram.Kill()`, wait for TUI goroutine to finish
+   - Call `tuiProgram.Wait()` if available, or use existing channel synchronisation
+
+2. **Print summary in all TUI exit paths** in `cmd/orbital/root.go`:
+   - Success path (completion promise verified): Print success summary
+   - Error path (budget exceeded, max iterations, timeout): Print error summary
+   - Interrupt path (CTRL-C): Print interrupt summary with resume instructions
+
+3. **Summary content** (reuse existing `output.Formatter` methods):
+   ```
+   ═══════════════════════════════════════════════════════════
+   Session Complete
+   ═══════════════════════════════════════════════════════════
+   Status:     ✓ Completed (or ✗ Interrupted / ✗ Failed)
+   Iterations: 5
+   Duration:   3m 42s
+   Cost:       $1.23
+   Tokens:     45,678 in / 12,345 out
+
+   [For workflows with multiple steps:]
+   Steps:
+     1. implement  ✓  $0.80  (2m 10s)
+     2. review     ✓  $0.43  (1m 32s)
+
+   [For interrupts:]
+   Resume with: orbital --resume abc123 spec.md
+   ═══════════════════════════════════════════════════════════
+   ```
+
+4. **Extend existing formatter** in `internal/output/formatter.go`:
+   - Add `PrintTUISummary()` method that works after TUI exit
+   - Handle case where formatter was used by TUI (colour output safe)
+
+5. **Pass necessary data** from loop to summary:
+   - `LoopState` contains iterations, cost, tokens, duration, completion status
+   - Workflow step results available from `runWorkflowLoop()` return
+   - Session ID for resume instructions
+
+**Acceptance Criteria**:
+- [ ] Given the TUI is running and I press CTRL-C, when the app exits, then a summary is printed showing "Interrupted" status, accumulated cost, tokens, and resume instructions
+- [ ] Given the TUI is running and the completion promise is emitted, when the app exits, then a summary is printed showing "Completed" status with final metrics
+- [ ] Given the TUI is running and budget is exceeded, when the app exits, then a summary is printed showing "Budget Exceeded" status and accumulated metrics
+- [ ] Given the TUI is running and max iterations reached, when the app exits, then a summary is printed showing "Max Iterations" status
+- [ ] Given a workflow with multiple steps completes, when the app exits, then the summary includes per-step breakdown
+- [ ] Given the TUI is running, when the app exits, then the summary appears AFTER the TUI has fully cleared the screen
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] Summary printed for all TUI exit scenarios (success, error, interrupt)
+- [ ] Existing `PrintLoopSummary()` reused or extended
+- [ ] Resume instructions included for interrupts
+- [ ] Workflow step breakdown included when applicable
+- [ ] Summary prints cleanly after TUI exits (no rendering artifacts)
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Uses existing `LoopState` struct for metrics
+- Uses existing `output.Formatter` for styled output
+- Integrates with TUI shutdown in root.go
+
+**Risks**:
+- TUI may not fully clear screen before summary prints (mitigated: wait for TUI goroutine)
+- Summary may be lost if terminal closes immediately (mitigated: flush stdout)
+- Colour codes may render incorrectly after TUI (mitigated: reset terminal state)
+
+**Notes**: The summary serves as a "receipt" for the session. Users can screenshot or copy it for records. The resume instructions are critical for interrupted sessions, as users need the session ID to continue. Consider also writing summary to a log file for longer-term record keeping (future enhancement).
+
+**Effort Estimate**: S (2-3 hours)
+
+---
+
+### [ ] **Ticket: Add iteration countdown timer to TUI**
+
+**As a** user
+**I want** to see a countdown showing time remaining in the current iteration
+**So that** I know how long until the iteration times out and can plan accordingly
+
+**Context**: The iteration timeout is configurable via `--timeout` flag (default 5 minutes), but there is no visual indication of time elapsed or remaining. Users cannot tell if an iteration is about to timeout or has just started. This lack of visibility makes it difficult to assess whether an iteration is stuck or simply working on a complex task.
+
+The TUI progress panel currently shows iteration count, budget, and context window. Time remaining would complement these metrics by showing the temporal dimension of iteration progress.
+
+**Description**: Add a countdown timer to the TUI that displays time remaining in the current iteration. The timer should update every second, showing elapsed time and/or remaining time. When time is running low (under 1 minute), the display should change to warning colour. The timer resets when a new iteration starts.
+
+**Implementation Requirements**:
+
+1. **Extend ProgressInfo struct** in `internal/tui/model.go`:
+   ```go
+   type ProgressInfo struct {
+       // ... existing fields ...
+       IterationTimeout  time.Duration // Configured timeout
+       IterationStart    time.Time     // When current iteration started
+   }
+   ```
+
+2. **Pass timeout info to TUI** from `cmd/orbital/root.go`:
+   - Include `cfg.IterationTimeout` in ProgressInfo
+   - Set `IterationStart` in iteration start callback (line 350)
+   - Reset `IterationStart` on each new iteration
+
+3. **Add timer tick** in TUI model:
+   ```go
+   type timerTickMsg time.Time
+
+   func timerTick() tea.Cmd {
+       return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+           return timerTickMsg(t)
+       })
+   }
+   ```
+
+4. **Calculate remaining time** in view rendering:
+   ```go
+   elapsed := time.Since(m.progress.IterationStart)
+   remaining := m.progress.IterationTimeout - elapsed
+   ```
+
+5. **Display format options** (inline with iteration bar):
+   - Format A: `Iteration 2/50 [████░░░░░░] 3m 42s remaining`
+   - Format B: `Iteration 2/50 [████░░░░░░] 1m 18s / 5m 00s`
+   - Format C: Separate line with dedicated timer bar
+
+6. **Warning state** when remaining time < 1 minute:
+   - Change timer text to warning colour (orange)
+   - Optionally pulse or highlight
+
+7. **Handle edge cases**:
+   - Timer shows "—" when no iteration is running
+   - Timer shows "0s" (not negative) when timeout exceeded
+   - Timer resets cleanly on iteration boundary
+
+**Acceptance Criteria**:
+- [ ] Given an iteration is running, when 1 second passes, then the timer display updates to show new remaining time
+- [ ] Given an iteration starts, when the TUI renders, then the timer shows the full timeout duration as remaining
+- [ ] Given remaining time drops below 1 minute, when the TUI renders, then the timer displays in warning colour
+- [ ] Given an iteration completes, when a new iteration starts, then the timer resets to full timeout duration
+- [ ] Given no iteration is running (between iterations), when the TUI renders, then the timer shows a neutral state
+- [ ] Given the timeout is 5 minutes and 3 minutes have elapsed, when the TUI renders, then the timer shows approximately 2 minutes remaining
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] ProgressInfo extended with timeout and start time fields
+- [ ] Timer tick implemented in TUI model
+- [ ] Countdown displayed in progress panel
+- [ ] Warning colour at < 1 minute remaining
+- [ ] Timer resets on new iteration
+- [ ] Unit test for remaining time calculation
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Uses existing progress panel layout in view.go
+- Uses existing tick pattern (similar to file refresh tick)
+- Integrates with iteration callbacks in root.go
+
+**Risks**:
+- High-frequency ticks (every second) could impact TUI performance (mitigated: single tick, minimal work)
+- Timer drift if system clock changes (mitigated: use monotonic time via time.Since)
+- Iteration start time not available if iteration crashes before callback (mitigated: show "—")
+
+**Notes**: The countdown timer provides critical temporal awareness during long iterations. Combined with the existing iteration count and budget displays, users have complete visibility into session constraints. Consider making the timer format configurable in future (elapsed vs remaining vs both).
+
+For future enhancement:
+- Add audio/visual alert when timeout approaches
+- Show iteration duration after completion in summary
+- Configurable warning threshold (currently hardcoded to 1 minute)
+
+**Effort Estimate**: S (2-3 hours)
+
+---
+
 ## Backlog Prioritisation
 
 **Must Have (Sprint 1):**
 1. Reduce default iteration timeout to 5 minutes (XS - quick win) ✓
 2. Fix gate-based workflow completion promise detection (S - bug fix) ✓
-3. Fix cost display resetting to zero when step/iteration starts (XS - bug fix)
-4. Auto-create notes file when CLI starts (XS)
-5. Add periodic file content refresh for spec and notes tabs (S)
+3. Fix cost display resetting to zero when step/iteration starts (XS - bug fix) ✓
+4. Auto-create notes file when CLI starts (XS) ✓
+5. Add periodic file content refresh for spec and notes tabs (S) ✓
+6. Add context window progress bar showing token usage (S)
+7. Print exit summary when TUI shuts down (S)
+8. Add iteration countdown timer to TUI (S)
 
 **Should Have (Future):**
 - Configurable refresh interval via flag
 - Visual indicator when file content has changed
 - fsnotify-based watching (more efficient than polling)
+- Context window as CLI flag for custom model configurations
 
 **Could Have (Future):**
 - Live diff view showing what changed
 - Notification when spec items are checked off
+- Cache hit ratio display alongside context usage
 
 **Won't Have:**
 - Real-time collaborative editing
@@ -322,6 +611,254 @@ if info.ModTime().After(m.fileModTimes[path]) {
 }
 ```
 
+### Context Window Progress Bar Architecture
+
+**Model-to-Context Mapping:**
+```go
+// internal/config/config.go
+var ModelContextWindows = map[string]int{
+    "opus":   200000,
+    "sonnet": 200000,
+    "haiku":  200000,
+}
+
+func GetContextWindow(model string) int {
+    if window, ok := ModelContextWindows[model]; ok {
+        return window
+    }
+    return 200000 // Default for unknown models
+}
+```
+
+**Extended ProgressInfo:**
+```go
+// internal/tui/model.go
+type ProgressInfo struct {
+    Iteration     int
+    MaxIteration  int
+    StepName      string
+    StepPosition  int
+    StepTotal     int
+    GateRetries   int
+    MaxRetries    int
+    TokensIn      int
+    TokensOut     int
+    Cost          float64
+    Budget        float64
+    ContextWindow int  // NEW: Model's context window size
+}
+```
+
+**Progress Panel Layout (view.go):**
+```go
+// Line 1: Iteration progress
+// Line 2: Budget progress + token counts
+// Line 3: Context window progress (NEW)
+
+contextRatio := float64(m.progress.TokensIn+m.progress.TokensOut) / float64(m.progress.ContextWindow)
+contextBar := RenderProgressBar(contextRatio, BarWidth, normalStyle, warningStyle)
+totalTokens := m.progress.TokensIn + m.progress.TokensOut
+contextLine := fmt.Sprintf("Context: %s %s/%s (%d%%)",
+    contextBar,
+    formatNumber(totalTokens),
+    formatNumber(m.progress.ContextWindow),
+    int(contextRatio*100))
+```
+
+**Token Update Flow:**
+```
+Claude CLI stream-json
+    ↓
+parser.go: Extract tokens from assistant/result events
+    ↓
+bridge.go: Send StatsMsg{TokensIn, TokensOut, Cost}
+    ↓
+model.go: Update m.progress.TokensIn, m.progress.TokensOut
+    ↓
+view.go: Render context bar with (TokensIn + TokensOut) / ContextWindow
+```
+
+**Reset Behaviour:**
+The context bar shows per-invocation usage. When a new Claude CLI invocation starts:
+- Parser resets intermediate token counters
+- Bridge sends StatsMsg with initial token values
+- TUI updates to reflect new invocation's usage
+
+This differs from cost/budget which accumulates across the entire Orbital session.
+
+### Exit Summary Architecture
+
+**Exit Paths in root.go:**
+```
+TUI Exit Scenarios:
+├── Success (completion promise verified)
+│   └── tuiProgram.Quit() → Wait() → PrintSuccessSummary()
+├── Error (budget/iterations/timeout)
+│   └── tuiProgram.Quit() → Wait() → PrintErrorSummary()
+└── Interrupt (CTRL-C)
+    └── tuiProgram.Kill() → PrintInterruptSummary()
+```
+
+**Summary Data Structure:**
+```go
+type SessionSummary struct {
+    Status       string        // "Completed", "Interrupted", "Failed"
+    ExitReason   string        // Detailed reason (e.g., "Budget exceeded")
+    Iterations   int           // Total iterations run
+    Duration     time.Duration // Total session duration
+    Cost         float64       // Total cost in USD
+    TokensIn     int           // Total input tokens
+    TokensOut    int           // Total output tokens
+    SessionID    string        // For resume instructions
+    WorkflowSteps []StepSummary // Per-step breakdown (if workflow)
+}
+
+type StepSummary struct {
+    Name     string
+    Status   string  // "✓" or "✗"
+    Cost     float64
+    Duration time.Duration
+}
+```
+
+**Print Location in root.go:**
+```go
+// After TUI exits (around line 442-450)
+if useTUI {
+    tuiProgram.Quit()
+    tuiProgram.Wait() // Ensure TUI fully exits
+
+    // Now safe to print to stdout
+    summary := buildSessionSummary(loopState, workflowResults, sessionID, err)
+    printSessionSummary(formatter, summary)
+}
+```
+
+**Summary Format:**
+```
+═══════════════════════════════════════════════════════════
+Session Complete
+═══════════════════════════════════════════════════════════
+Status:     ✓ Completed
+Iterations: 5
+Duration:   3m 42s
+Cost:       $1.23
+Tokens:     45,678 in / 12,345 out
+═══════════════════════════════════════════════════════════
+```
+
+**Interrupt Format (with resume instructions):**
+```
+═══════════════════════════════════════════════════════════
+Session Interrupted
+═══════════════════════════════════════════════════════════
+Status:     ⚠ Interrupted by user
+Iterations: 3
+Duration:   2m 15s
+Cost:       $0.87
+Tokens:     32,100 in / 8,450 out
+
+Resume with:
+  orbital --resume abc123def spec.md
+═══════════════════════════════════════════════════════════
+```
+
+**Terminal State Reset:**
+After TUI exits, terminal may be in alternate screen mode. Bubbletea handles this, but ensure:
+- `tuiProgram.Wait()` completes before printing
+- Use `fmt.Println()` not TUI rendering
+- Flush stdout after summary
+
+### Iteration Countdown Timer Architecture
+
+**Extended ProgressInfo:**
+```go
+type ProgressInfo struct {
+    // ... existing fields ...
+    IterationTimeout time.Duration // Configured timeout (e.g., 5m)
+    IterationStart   time.Time     // When current iteration began
+}
+```
+
+**Timer Tick in TUI:**
+```go
+type timerTickMsg time.Time
+
+func timerTick() tea.Cmd {
+    return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+        return timerTickMsg(t)
+    })
+}
+
+// In Update()
+case timerTickMsg:
+    // Just trigger re-render, time calculation happens in view
+    return m, timerTick()
+```
+
+**Time Calculation in View:**
+```go
+func (m Model) renderIterationTimer() string {
+    if m.progress.IterationStart.IsZero() {
+        return "—"
+    }
+
+    elapsed := time.Since(m.progress.IterationStart)
+    remaining := m.progress.IterationTimeout - elapsed
+
+    if remaining < 0 {
+        remaining = 0
+    }
+
+    // Format as "Xm Ys remaining"
+    mins := int(remaining.Minutes())
+    secs := int(remaining.Seconds()) % 60
+
+    style := normalStyle
+    if remaining < time.Minute {
+        style = warningStyle
+    }
+
+    return style.Render(fmt.Sprintf("%dm %02ds remaining", mins, secs))
+}
+```
+
+**Display Integration (Line 1 of progress panel):**
+```go
+// Current: Iteration 2/50 [████░░░░░░]
+// New:     Iteration 2/50 [████░░░░░░] 3m 42s remaining
+
+iterLine := fmt.Sprintf("Iteration %d/%d %s %s",
+    m.progress.Iteration,
+    m.progress.MaxIteration,
+    iterBar,
+    m.renderIterationTimer())
+```
+
+**Iteration Start Callback (root.go):**
+```go
+controller.SetIterationStartCallback(func(iteration int) {
+    tuiProgram.SendProgress(tui.ProgressInfo{
+        Iteration:        iteration,
+        MaxIteration:     cfg.MaxIterations,
+        IterationTimeout: cfg.IterationTimeout,
+        IterationStart:   time.Now(),
+        // ... preserve other fields ...
+    })
+})
+```
+
+**Timer Lifecycle:**
+```
+Iteration 1 starts → IterationStart = now, timer shows "5m 00s"
+    ↓ (1 second tick)
+Timer shows "4m 59s"
+    ↓ (continues ticking)
+Timer shows "0m 30s" (warning colour)
+    ↓
+Iteration 1 completes → Iteration 2 starts → IterationStart = now, timer resets
+```
+
 ## Success Metrics
 
 | Metric | Target |
@@ -330,3 +867,17 @@ if info.ModTime().After(m.fileModTimes[path]) {
 | File changes visible within | 3 seconds of modification |
 | Unnecessary file reads | 0 (mtime gating) |
 | Scroll position preserved on refresh | 100% |
+| Context bar updates per streamed message | Every message with token data |
+| Context bar accuracy | Matches final token counts from result event |
+| Context bar reset on new session | Immediate reset when new invocation starts |
+| Warning colour threshold | Triggered at 80% of context window |
+| Exit summary printed on CTRL-C | 100% (always shows interrupt summary) |
+| Exit summary printed on completion | 100% (always shows success summary) |
+| Exit summary printed on error | 100% (budget, iterations, timeout) |
+| Summary appears after TUI clears | No rendering artifacts or overlap |
+| Resume instructions on interrupt | Session ID and command provided |
+| Timer updates every second | Continuous 1-second tick during iteration |
+| Timer accuracy | Within 1 second of actual remaining time |
+| Timer resets on new iteration | Immediate reset when iteration starts |
+| Warning colour threshold | Triggered at < 1 minute remaining |
+| Timer shows neutral state between iterations | Displays "—" when no iteration active |

@@ -1864,3 +1864,217 @@ func TestRenderLineWidthsWithLargeValues(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatContext(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions to initialise styles
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	tests := []struct {
+		name     string
+		used     int
+		window   int
+		ratio    float64
+		wantStr  string
+	}{
+		{
+			name:    "zero usage",
+			used:    0,
+			window:  200000,
+			ratio:   0.0,
+			wantStr: "0/200,000 (0%)",
+		},
+		{
+			name:    "50% usage",
+			used:    100000,
+			window:  200000,
+			ratio:   0.5,
+			wantStr: "100,000/200,000 (50%)",
+		},
+		{
+			name:    "80% threshold",
+			used:    160000,
+			window:  200000,
+			ratio:   0.8,
+			wantStr: "160,000/200,000 (80%)",
+		},
+		{
+			name:    "90% usage triggers warning",
+			used:    180000,
+			window:  200000,
+			ratio:   0.9,
+			wantStr: "180,000/200,000 (90%)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := model.formatContext(tt.used, tt.window, tt.ratio)
+			if !strings.Contains(result, tt.wantStr) {
+				t.Errorf("formatContext() = %q, want to contain %q", result, tt.wantStr)
+			}
+			if !strings.Contains(result, "Context:") {
+				t.Errorf("formatContext() = %q, want to contain 'Context:'", result)
+			}
+		})
+	}
+}
+
+func TestRenderProgressPanelContextBar(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set progress with context window
+	model.SetProgress(ProgressInfo{
+		Iteration:     5,
+		MaxIteration:  50,
+		TokensIn:      50000,
+		TokensOut:     25000,
+		Cost:          5.00,
+		Budget:        100.00,
+		ContextWindow: 200000,
+	})
+
+	view := model.View()
+
+	// Context bar should be visible in the progress panel
+	if !strings.Contains(view, "Context") {
+		t.Error("expected 'Context' label in view")
+	}
+
+	// Should show the usage ratio
+	if !strings.Contains(view, "75,000") {
+		t.Error("expected total token count '75,000' in context bar")
+	}
+
+	if !strings.Contains(view, "200,000") {
+		t.Error("expected context window size '200,000' in view")
+	}
+}
+
+func TestProgressPanelHasThreeLines(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set progress with context window
+	model.SetProgress(ProgressInfo{
+		Iteration:     5,
+		MaxIteration:  50,
+		TokensIn:      50000,
+		TokensOut:     25000,
+		Cost:          5.00,
+		Budget:        100.00,
+		ContextWindow: 200000,
+	})
+
+	// Render progress panel directly
+	result := model.renderProgressPanel()
+	lines := strings.Split(result, "\n")
+
+	// Progress panel should have exactly 3 lines
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines in progress panel, got %d", len(lines))
+	}
+
+	// Line 1 should contain Iteration
+	if !strings.Contains(lines[0], "Iteration") {
+		t.Error("expected line 1 to contain 'Iteration'")
+	}
+
+	// Line 2 should contain Tokens
+	if !strings.Contains(lines[1], "Tokens") {
+		t.Error("expected line 2 to contain 'Tokens'")
+	}
+
+	// Line 3 should contain Context
+	if !strings.Contains(lines[2], "Context") {
+		t.Error("expected line 3 to contain 'Context'")
+	}
+}
+
+func TestContextBarWarningColour(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	t.Run("below 80% threshold", func(t *testing.T) {
+		model.SetProgress(ProgressInfo{
+			Iteration:     5,
+			MaxIteration:  50,
+			TokensIn:      50000,
+			TokensOut:     25000, // Total: 75,000 = 37.5%
+			Cost:          5.00,
+			Budget:        100.00,
+			ContextWindow: 200000,
+		})
+
+		view := model.View()
+		// View should contain context info
+		if !strings.Contains(view, "Context") {
+			t.Error("expected 'Context' in view")
+		}
+	})
+
+	t.Run("above 80% threshold", func(t *testing.T) {
+		model.SetProgress(ProgressInfo{
+			Iteration:     5,
+			MaxIteration:  50,
+			TokensIn:      100000,
+			TokensOut:     70000, // Total: 170,000 = 85%
+			Cost:          5.00,
+			Budget:        100.00,
+			ContextWindow: 200000,
+		})
+
+		view := model.View()
+		// View should contain context info (warning colour applied via style)
+		if !strings.Contains(view, "Context") {
+			t.Error("expected 'Context' in view")
+		}
+		// The warning colour is applied via lipgloss style, which we can't easily test
+		// but we verify the content is present
+		if !strings.Contains(view, "170,000") {
+			t.Error("expected token count '170,000' in view")
+		}
+	})
+}
+
+func TestContextBarZeroWindow(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set progress with zero context window (should not divide by zero)
+	model.SetProgress(ProgressInfo{
+		Iteration:     5,
+		MaxIteration:  50,
+		TokensIn:      50000,
+		TokensOut:     25000,
+		Cost:          5.00,
+		Budget:        100.00,
+		ContextWindow: 0, // Zero context window
+	})
+
+	// Should not panic
+	view := model.View()
+	if view == "" {
+		t.Error("expected non-empty view with zero context window")
+	}
+}

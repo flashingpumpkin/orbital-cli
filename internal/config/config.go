@@ -71,6 +71,25 @@ type Config struct {
 // DefaultMaxOutputSize is the default maximum output size in bytes (10MB).
 const DefaultMaxOutputSize = 10 * 1024 * 1024
 
+// DefaultContextWindow is the default context window size for unknown models.
+const DefaultContextWindow = 200000
+
+// ModelContextWindows maps model names to their context window sizes.
+var ModelContextWindows = map[string]int{
+	"opus":   200000,
+	"sonnet": 200000,
+	"haiku":  200000,
+}
+
+// GetContextWindow returns the context window size for the given model.
+// Returns DefaultContextWindow for unknown models.
+func GetContextWindow(model string) int {
+	if window, ok := ModelContextWindows[model]; ok {
+		return window
+	}
+	return DefaultContextWindow
+}
+
 // NewConfig returns a new Config with default values.
 func NewConfig() *Config {
 	return &Config{
