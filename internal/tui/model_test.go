@@ -2348,3 +2348,95 @@ func TestValidTheme(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkflowNameInSessionPanel(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set session and progress with workflow name
+	model.SetSession(SessionInfo{
+		SpecFiles: []string{"/path/to/spec.md"},
+		NotesFile: "/path/to/notes.md",
+	})
+	model.SetProgress(ProgressInfo{
+		Iteration:    1,
+		MaxIteration: 50,
+		WorkflowName: "autonomous",
+	})
+
+	// Render session panel
+	result := model.renderSessionPanel()
+
+	// Line 1 should contain workflow name
+	if !strings.Contains(result, "Workflow:") {
+		t.Error("expected session panel to contain 'Workflow:' label")
+	}
+	if !strings.Contains(result, "autonomous") {
+		t.Error("expected session panel to contain workflow name 'autonomous'")
+	}
+}
+
+func TestWorkflowNameHiddenWhenEmpty(t *testing.T) {
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set session and progress without workflow name
+	model.SetSession(SessionInfo{
+		SpecFiles: []string{"/path/to/spec.md"},
+		NotesFile: "/path/to/notes.md",
+	})
+	model.SetProgress(ProgressInfo{
+		Iteration:    1,
+		MaxIteration: 50,
+		WorkflowName: "", // Empty workflow name
+	})
+
+	// Render session panel
+	result := model.renderSessionPanel()
+
+	// Should not contain workflow label when empty
+	if strings.Contains(result, "Workflow:") {
+		t.Error("expected session panel to NOT contain 'Workflow:' label when name is empty")
+	}
+}
+
+func TestProgressInfoWorkflowNameField(t *testing.T) {
+	// Verify WorkflowName field is properly set via SetProgress
+	m := NewModel()
+
+	// Set up valid dimensions
+	msg := tea.WindowSizeMsg{Width: 120, Height: 40}
+	updatedModel, _ := m.Update(msg)
+	model := updatedModel.(Model)
+
+	// Set progress with various workflow names
+	tests := []struct {
+		name string
+	}{
+		{"spec-driven"},
+		{"autonomous"},
+		{"tdd"},
+		{"reviewed"},
+		{"fast"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model.SetProgress(ProgressInfo{
+				WorkflowName: tt.name,
+			})
+
+			if model.progress.WorkflowName != tt.name {
+				t.Errorf("expected WorkflowName %q, got %q", tt.name, model.progress.WorkflowName)
+			}
+		})
+	}
+}

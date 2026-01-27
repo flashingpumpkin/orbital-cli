@@ -927,3 +927,47 @@ Added tests in `internal/tui/model_test.go`:
 ### Verification
 
 All tests pass: `make check` successful
+
+## Iteration 14 - Display Active Workflow Name in TUI
+
+### Task Selected
+
+**Display active workflow name in TUI**
+
+### Why Highest Leverage
+
+This was the next pending task in the spec. It provides important context about which workflow preset is driving the iteration loop. Users can verify their config is correct without checking CLI flags or config files.
+
+### Implementation
+
+**1. ProgressInfo.WorkflowName already existed** (`internal/tui/model.go`):
+- The field was already present from a previous iteration, just not being populated
+
+**2. Added WorkflowName to all SendProgress calls** (`cmd/orbital/root.go`):
+- Initial ProgressInfo when creating TUI
+- Iteration start callback
+- Iteration end callback
+- Workflow step start callback
+- Workflow step end callback
+
+**3. Moved workflow resolution earlier** (`cmd/orbital/root.go`):
+- Workflow was being resolved after TUI creation (line 369)
+- Moved resolution to before TUI creation (after executor) so `wf.Name` is available
+- Removed duplicate resolution code
+
+**4. Updated renderSessionPanel** (`internal/tui/model.go`):
+- Added workflow name display on Line 1 alongside spec files
+- Format: `Spec: <path> │ Workflow: <name>`
+- Only displays when WorkflowName is not empty
+- Uses existing Label and Value styles for consistency
+
+### Testing
+
+Added tests in `internal/tui/model_test.go`:
+- `TestWorkflowNameInSessionPanel`: Verifies workflow name is displayed when set
+- `TestWorkflowNameHiddenWhenEmpty`: Verifies workflow label is not shown when name is empty
+- `TestProgressInfoWorkflowNameField`: Verifies SetProgress correctly updates WorkflowName
+
+### Verification
+
+All tests pass: `make check` successful

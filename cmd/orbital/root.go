@@ -289,6 +289,12 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	// Create executor
 	exec := executor.New(cfg)
 
+	// Resolve workflow from flag or config (early, for TUI progress info)
+	wf, err := resolveWorkflow(workflowFlag, fileConfig)
+	if err != nil {
+		return fmt.Errorf("failed to resolve workflow: %w", err)
+	}
+
 	// Determine if we should use TUI mode
 	useTUI := shouldUseTUI()
 
@@ -318,6 +324,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			MaxIteration:  cfg.MaxIterations,
 			Budget:        cfg.MaxBudget,
 			ContextWindow: config.GetContextWindow(cfg.Model),
+			WorkflowName:  wf.Name,
 		}
 		tuiProgram = tui.New(session, progress, cfg.Theme)
 		exec.SetStreamWriter(tuiProgram.Bridge())
@@ -359,12 +366,6 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	}
 	controller.SetStateManager(sm)
 
-	// Resolve workflow from flag or config
-	wf, err := resolveWorkflow(workflowFlag, fileConfig)
-	if err != nil {
-		return fmt.Errorf("failed to resolve workflow: %w", err)
-	}
-
 	// Build the prompt
 	prompt := sp.BuildPrompt()
 
@@ -400,6 +401,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 				ContextWindow:    config.GetContextWindow(cfg.Model),
 				IterationTimeout: cfg.IterationTimeout,
 				IterationStart:   iterationStartTime,
+				WorkflowName:     wf.Name,
 			})
 		}
 	})
@@ -432,6 +434,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 				TokensOut:        totalTokensOut,
 				Cost:             totalCost,
 				Budget:           cfg.MaxBudget,
+				WorkflowName:     wf.Name,
 				ContextWindow:    config.GetContextWindow(cfg.Model),
 				IterationTimeout: cfg.IterationTimeout,
 				IterationStart:   iterationStartTime,
@@ -876,6 +879,7 @@ func runWorkflowLoop(
 				IterationTimeout: cfg.IterationTimeout,
 				IterationStart:   stepStartTime,
 				IsGateStep:       info.IsGate,
+				WorkflowName:     wf.Name,
 			})
 		}
 	})
@@ -927,6 +931,7 @@ func runWorkflowLoop(
 				IterationTimeout: cfg.IterationTimeout,
 				IterationStart:   stepStartTime,
 				IsGateStep:       info.IsGate,
+				WorkflowName:     wf.Name,
 			})
 		}
 

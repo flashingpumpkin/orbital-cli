@@ -60,6 +60,7 @@ type ProgressInfo struct {
 	IterationTimeout time.Duration // Configured timeout for iterations
 	IterationStart   time.Time     // When current iteration/step started
 	IsGateStep       bool          // True if current step is a gate (timer hidden for gates)
+	WorkflowName     string        // Name of the active workflow (e.g., "autonomous", "tdd")
 }
 
 // StatsMsg is a message containing updated token and cost statistics.
@@ -1265,12 +1266,18 @@ func (m Model) formatIterationTimer() string {
 // renderSessionPanel renders the session info panel.
 func (m Model) renderSessionPanel() string {
 	s := m.session
+	p := m.progress
 	contentWidth := m.layout.ContentWidth()
 	border := m.styles.Border.Render(BoxVertical)
 
-	// Line 1: Spec file(s)
+	// Line 1: Spec file(s) and workflow name
 	specStr := m.formatPaths("Spec", s.SpecFiles)
 	line1Content := " " + specStr
+	// Add workflow name if set
+	if p.WorkflowName != "" {
+		workflowStr := m.styles.Label.Render("Workflow: ") + m.styles.Value.Render(p.WorkflowName)
+		line1Content += " " + InnerVertical + " " + workflowStr
+	}
 	line1Width := ansi.StringWidth(line1Content)
 	line1Padding := contentWidth - line1Width
 	if line1Padding < 0 {

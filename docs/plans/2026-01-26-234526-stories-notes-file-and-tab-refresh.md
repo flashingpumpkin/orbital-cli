@@ -695,7 +695,7 @@ For future enhancement:
 
 ---
 
-### [ ] **Ticket: Display active workflow name in TUI**
+### [x] **Ticket: Display active workflow name in TUI**
 
 **As a** user
 **I want** to see which workflow is currently running in the TUI
@@ -735,17 +735,17 @@ For future enhancement:
    - Option B: Only show non-default workflows (hide "spec-driven")
 
 **Acceptance Criteria**:
-- [ ] Given a workflow is configured, when the TUI starts, then the workflow name is displayed
-- [ ] Given the `--workflow autonomous` flag, when the TUI renders, then "autonomous" is visible
-- [ ] Given a workflow in config file, when the TUI renders, then the workflow name from config is shown
-- [ ] Given no workflow is specified (default spec-driven), when the TUI renders, then either "spec-driven" is shown or the field is omitted
+- [x] Given a workflow is configured, when the TUI starts, then the workflow name is displayed
+- [x] Given the `--workflow autonomous` flag, when the TUI renders, then "autonomous" is visible
+- [x] Given a workflow in config file, when the TUI renders, then the workflow name from config is shown
+- [x] Given no workflow is specified (default spec-driven), when the TUI renders, then either "spec-driven" is shown or the field is omitted
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] ProgressInfo extended with WorkflowName field
-- [ ] Workflow name passed from root.go to TUI
-- [ ] Workflow name displayed in session info or header
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] ProgressInfo extended with WorkflowName field
+- [x] Workflow name passed from root.go to TUI
+- [x] Workflow name displayed in session info or header
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - Uses existing session info panel or header panel
@@ -762,42 +762,42 @@ For future enhancement:
 
 ## Epic: Workflow Improvements
 
-### [ ] **Ticket: Refactor template variables and tighten autonomous workflow prompts**
+### [ ] **Ticket: Refactor template variables for workflow prompts**
 
 **As a** user
-**I want** clearer template variables and more disciplined prompts
-**So that** the autonomous workflow works on exactly one task per iteration and the fix step only addresses review feedback
+**I want** distinct template variables for spec file, context files, and notes file
+**So that** prompts can clearly distinguish between the task source and reference material
 
-**Context**: The current autonomous workflow has two issues:
+**Context**: The current `{{files}}` placeholder bundles all file arguments together without distinguishing their purpose. Claude cannot tell which file contains the tasks to implement vs which files are additional context or reference material. This ambiguity leads to confusion in prompt interpretation.
 
-1. **Template variables are ambiguous**: `{{files}}` bundles spec files and context files together without distinguishing their purpose. Claude cannot tell which file contains the tasks vs which files are reference material.
-
-2. **The 'implement' step sometimes works on multiple tasks**: The prompt says "pick the highest-leverage task" but does not explicitly forbid working on multiple items. Claude sometimes completes several tasks in one iteration, which violates the "one task per iteration" principle.
-
-3. **The 'fix' step picks up new tasks**: When the review gate fails, the fix step should ONLY address the review feedback. Instead, Claude sometimes reads the spec file and picks up new work, conflating "fixing review issues" with "continuing implementation".
-
-**Description**: Refactor the template variable system to provide distinct placeholders for spec file, context files, and notes file. Then tighten the autonomous workflow prompts to enforce single-task discipline and prevent scope creep in the fix step.
+**Description**: Add new template variables that separate the primary spec file from additional context files. Keep `{{files}}` for backwards compatibility.
 
 **Implementation Requirements**:
 
-1. **Add new template variables** in `internal/workflow/executor.go` and `internal/spec/loader.go`:
+1. **Add new template variables** in `internal/workflow/executor.go`:
    ```go
    // New placeholders:
    {{spec_file}}      // Primary spec/stories file (first file argument)
    {{context_files}}  // Additional reference files (remaining file arguments)
-   {{notes_file}}     // Notes file path (already exists in system prompt)
+   {{notes_file}}     // Notes file path
 
    // Keep for backwards compatibility:
    {{files}}          // All files (existing behaviour)
    {{plural}}         // "s" if multiple files
    ```
 
-2. **Update Runner.SetFilePaths** to track spec vs context:
+2. **Update Runner struct** to track spec vs context:
    ```go
-   func (r *Runner) SetFilePaths(specFile string, contextFiles []string) {
-       r.specFile = specFile
-       r.contextFiles = contextFiles
+   type Runner struct {
+       // ...
+       specFile     string
+       contextFiles []string
+       notesFile    string
    }
+
+   func (r *Runner) SetSpecFile(path string) { r.specFile = path }
+   func (r *Runner) SetContextFiles(paths []string) { r.contextFiles = paths }
+   func (r *Runner) SetNotesFile(path string) { r.notesFile = path }
    ```
 
 3. **Update buildPrompt** to handle new placeholders:
@@ -806,94 +806,180 @@ For future enhancement:
    if len(r.contextFiles) > 0 {
        result = strings.ReplaceAll(result, "{{context_files}}", formatFileList(r.contextFiles))
    } else {
-       result = strings.ReplaceAll(result, "{{context_files}}", "(none)")
+       result = strings.ReplaceAll(result, "{{context_files}}", "(none provided)")
    }
+   result = strings.ReplaceAll(result, "{{notes_file}}", r.notesFile)
    ```
 
-4. **Tighten the 'implement' step prompt**:
-   ```
-   Study the spec file to understand the remaining work:
-   {{spec_file}}
-
-   Context files (reference only, do not modify):
-   {{context_files}}
-
-   Notes file for cross-iteration context:
-   {{notes_file}}
-
-   TASK SELECTION:
-   Pick exactly ONE task from the spec file. Choose the highest-leverage task:
-   the one that unblocks the most work or provides the most value.
-
-   CONSTRAINTS:
-   - Complete ONE task only. Do not start additional tasks.
-   - Do not work on multiple items even if they seem related.
-   - If you finish early, exit. Do not fill time with extra work.
-
-   EXECUTION:
-   1. Implement the single chosen task fully
-   2. Verify the outcome is correct (tests, lint, typecheck)
-   3. Document in notes: which task, why chosen, key decisions
-   4. Check off the completed item in the spec file
-   5. Commit all changes with a descriptive message
-   6. Exit (do not output completion promise)
-   ```
-
-5. **Tighten the 'fix' step prompt**:
-   ```
-   Read the notes file for review feedback from the previous iteration:
-   {{notes_file}}
-
-   YOUR ONLY JOB: Fix the issues identified by the reviewers.
-
-   CONSTRAINTS:
-   - Do NOT read the spec file for new tasks
-   - Do NOT pick up additional work
-   - Do NOT implement new features
-   - ONLY address the specific issues listed in the review feedback
-
-   EXECUTION:
-   1. Read the review feedback in the notes file
-   2. For each issue raised, implement a fix
-   3. Verify fixes are correct (tests, lint, typecheck)
-   4. Update notes with what was fixed and why
-   5. Commit with message describing the fixes
-   6. Exit
-   ```
-
-6. **Update other presets** that use `{{files}}` to use the new variables where appropriate.
+4. **Update cmd/orbital/root.go** to pass files with correct semantics:
+   - First file argument → spec file
+   - Remaining file arguments → context files
+   - Notes file from config/flag
 
 **Acceptance Criteria**:
 - [ ] Given `{{spec_file}}` in a prompt, when the prompt is built, then only the first file path is substituted
-- [ ] Given `{{context_files}}` in a prompt, when the prompt is built, then remaining file paths are substituted (or "(none)" if empty)
+- [ ] Given `{{context_files}}` in a prompt with multiple files, when the prompt is built, then files 2..N are listed
+- [ ] Given `{{context_files}}` in a prompt with one file, when the prompt is built, then "(none provided)" is shown
 - [ ] Given `{{notes_file}}` in a prompt, when the prompt is built, then the notes file path is substituted
-- [ ] Given the autonomous 'implement' step runs, when Claude executes, then only one task is completed per iteration
-- [ ] Given the autonomous 'fix' step runs after review failure, when Claude executes, then only review issues are addressed (no new tasks)
-- [ ] Given existing presets using `{{files}}`, when they run, then behaviour is unchanged (backwards compatible)
+- [ ] Given `{{files}}` in a prompt, when the prompt is built, then all files are listed (backwards compatible)
 
 **Definition of Done** (Single Commit):
 - [ ] Feature complete in one atomic commit
-- [ ] New template variables `{{spec_file}}` and `{{context_files}}` implemented
-- [ ] Runner tracks spec file vs context files separately
-- [ ] Autonomous 'implement' prompt tightened for single-task discipline
-- [ ] Autonomous 'fix' prompt tightened to only fix review issues
+- [ ] New template variables implemented in executor.go
+- [ ] Runner tracks spec file, context files, and notes file separately
 - [ ] Existing `{{files}}` placeholder still works
 - [ ] Unit tests for new template substitution
 - [ ] All tests passing (`make check`)
 
 **Dependencies**:
-- Modifies `internal/workflow/executor.go` (buildPrompt)
-- Modifies `internal/workflow/presets.go` (autonomous prompts)
-- May need to update `cmd/orbital/root.go` to pass files differently
+- Modifies `internal/workflow/executor.go`
+- Modifies `cmd/orbital/root.go`
 
 **Risks**:
 - Breaking existing custom prompts using `{{files}}` (mitigated: keep `{{files}}` working)
-- Claude may still try to work on multiple tasks (mitigated: stronger language in prompt)
-- Fix step may fail if review feedback is unclear (mitigated: review prompt should be specific)
 
-**Notes**: The "one task per iteration" principle is fundamental to the autonomous loop methodology. Working on multiple tasks increases context rot risk and makes debugging harder. The fix step scope creep is particularly problematic because it conflates two different modes of operation: "fix what's broken" vs "continue building".
+**Notes**: This is a foundational change that enables the prompt tightening stories. The separation of spec vs context files allows prompts to give clear instructions about which file to read for tasks vs which files are reference material.
 
-**Effort Estimate**: M (3-4 hours)
+**Effort Estimate**: S (2-3 hours)
+
+---
+
+### [ ] **Ticket: Tighten autonomous 'implement' step for single-task discipline**
+
+**As a** user
+**I want** the autonomous 'implement' step to work on exactly one task per iteration
+**So that** changes are atomic and context rot is minimised
+
+**Context**: The current 'implement' step prompt says "pick the highest-leverage task" but does not explicitly forbid working on multiple items. Claude sometimes completes several tasks in one iteration, violating the "one task per iteration" principle from the system prompt. This leads to larger, harder-to-review changes and increased risk of context rot.
+
+**Description**: Rewrite the autonomous 'implement' step prompt to explicitly enforce single-task discipline with clear constraints.
+
+**Implementation Requirements**:
+
+Update the 'implement' step in `internal/workflow/presets.go`:
+
+```go
+{
+    Name: "implement",
+    Prompt: `Study the spec file to understand the remaining work:
+{{spec_file}}
+
+Context files (reference only, do not modify):
+{{context_files}}
+
+Notes file for cross-iteration context:
+{{notes_file}}
+
+TASK SELECTION:
+Pick exactly ONE task from the spec file. Choose the highest-leverage task:
+the one that unblocks the most work or provides the most value.
+
+CONSTRAINTS:
+- Complete ONE task only. Do not start additional tasks.
+- Do not work on multiple items even if they seem related.
+- If you finish early, exit. Do not fill time with extra work.
+- Small, focused changes are better than large, sweeping ones.
+
+EXECUTION:
+1. Identify the single highest-leverage unchecked task
+2. Implement that task fully
+3. Verify the outcome (tests, lint, typecheck)
+4. Document in notes: which task, why chosen, key decisions
+5. Check off the completed item in the spec file
+6. Commit all changes with a descriptive message
+7. Exit (do not output completion promise)`,
+},
+```
+
+**Acceptance Criteria**:
+- [ ] Given the autonomous 'implement' step runs, when Claude selects work, then exactly one task is chosen
+- [ ] Given a task is completed quickly, when Claude finishes, then it exits without starting additional work
+- [ ] Given related tasks exist, when Claude implements one, then it does not "helpfully" do the others
+- [ ] Given the prompt references `{{spec_file}}`, when built, then the correct path is substituted
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] Autonomous 'implement' prompt updated in presets.go
+- [ ] Prompt uses new `{{spec_file}}`, `{{context_files}}`, `{{notes_file}}` variables
+- [ ] Clear CONSTRAINTS section enforcing single-task discipline
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Depends on: Refactor template variables (for `{{spec_file}}`, `{{context_files}}`, `{{notes_file}}`)
+
+**Risks**:
+- Claude may still try to work on multiple tasks (mitigated: explicit constraints + uppercase emphasis)
+- Tasks may be too small individually (mitigated: "highest-leverage" selection criteria)
+
+**Notes**: The "one task per iteration" principle is fundamental to the autonomous loop methodology. Working on multiple tasks increases context rot risk, makes debugging harder, and produces larger diffs that are harder to review. The explicit CONSTRAINTS section uses directive language to reinforce the system prompt guidance.
+
+**Effort Estimate**: XS (1 hour)
+
+---
+
+### [ ] **Ticket: Tighten autonomous 'fix' step to only address review feedback**
+
+**As a** user
+**I want** the autonomous 'fix' step to only fix issues from the review
+**So that** it does not pick up new tasks and conflate "fixing" with "implementing"
+
+**Context**: When the review gate fails, the 'fix' step should ONLY address the review feedback. Currently, Claude sometimes reads the spec file and picks up new work, conflating "fixing review issues" with "continuing implementation". This scope creep defeats the purpose of the review gate and produces changes that weren't reviewed.
+
+**Description**: Rewrite the autonomous 'fix' step prompt to explicitly forbid reading the spec file for new tasks and constrain it to only fixing the issues identified in the review.
+
+**Implementation Requirements**:
+
+Update the 'fix' step in `internal/workflow/presets.go`:
+
+```go
+{
+    Name:     "fix",
+    Deferred: true,
+    Prompt: `Read the notes file for review feedback from the previous iteration:
+{{notes_file}}
+
+YOUR ONLY JOB: Fix the issues identified by the reviewers.
+
+CONSTRAINTS:
+- Do NOT read the spec file for new tasks
+- Do NOT pick up additional work beyond what reviewers flagged
+- Do NOT implement new features or enhancements
+- Do NOT refactor code beyond what is needed to fix the issues
+- ONLY address the specific issues listed in the review feedback
+
+EXECUTION:
+1. Read the review feedback section in the notes file
+2. For each issue raised by reviewers, implement a targeted fix
+3. Verify fixes are correct (tests, lint, typecheck)
+4. Update notes with what was fixed and why
+5. Commit with message describing the fixes (reference the review issues)
+6. Exit`,
+},
+```
+
+**Acceptance Criteria**:
+- [ ] Given the 'fix' step runs after review failure, when Claude executes, then only review issues are addressed
+- [ ] Given the spec file has unchecked tasks, when 'fix' runs, then those tasks are NOT started
+- [ ] Given reviewers flagged 3 issues, when 'fix' completes, then exactly those 3 issues are addressed
+- [ ] Given a fix requires minor refactoring, when Claude implements it, then refactoring is limited to what's needed
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] Autonomous 'fix' prompt updated in presets.go
+- [ ] Prompt explicitly forbids reading spec file for new tasks
+- [ ] Clear CONSTRAINTS section preventing scope creep
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Depends on: Refactor template variables (for `{{notes_file}}`)
+
+**Risks**:
+- Review feedback may be unclear (mitigated: review prompt should write specific, actionable feedback)
+- Fixes may require touching code that wasn't flagged (acceptable: minimal scope expansion for correctness)
+
+**Notes**: The fix step scope creep is particularly problematic because it conflates two different modes of operation: "fix what's broken" vs "continue building". By explicitly forbidding spec file reading for new tasks, we ensure the fix step stays focused on addressing reviewer concerns. This maintains the integrity of the review gate.
+
+**Effort Estimate**: XS (1 hour)
 
 ---
 
@@ -910,7 +996,9 @@ For future enhancement:
 8. Add iteration countdown timer to TUI (S)
 9. Add light and dark mode with auto-detection (M)
 10. Display active workflow name in TUI (XS)
-11. Refactor template variables and tighten autonomous prompts (M)
+11. Refactor template variables for workflow prompts (S)
+12. Tighten autonomous 'implement' step for single-task discipline (XS)
+13. Tighten autonomous 'fix' step to only address review feedback (XS)
 
 **Should Have (Future):**
 - Configurable refresh interval via flag
