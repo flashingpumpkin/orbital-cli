@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1287,9 +1288,8 @@ func formatCurrency(amount float64) string {
 	if amount < 0 {
 		return "-" + formatCurrency(-amount)
 	}
-	// Format as $X.XX with proper rounding
-	// Add 0.005 to handle floating point precision issues
-	totalCents := int(amount*100 + 0.5)
+	// Format as $X.XX with proper rounding using math.Round for precision
+	totalCents := int(math.Round(amount * 100))
 	whole := totalCents / 100
 	cents := totalCents % 100
 	return "$" + util.FormatNumber(whole) + "." + padLeft(util.IntToString(cents), 2, '0')

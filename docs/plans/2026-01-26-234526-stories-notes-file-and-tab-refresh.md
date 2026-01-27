@@ -458,6 +458,8 @@ The TUI progress panel currently shows iteration count, budget, and context wind
 
 **Description**: Add a countdown timer to the TUI that displays time remaining in the current iteration. The timer should update every second, showing elapsed time and/or remaining time. When time is running low (under 1 minute), the display should change to warning colour. The timer resets when a new iteration starts.
 
+**Important**: The iteration timeout should only apply to implementor workflow steps, not to gate steps. Gates (like `review`) are quick validation checks and should not be subject to the iteration timeout. This prevents a slow review from incorrectly triggering a timeout when the actual implementation work completed successfully.
+
 **Implementation Requirements**:
 
 1. **Extend ProgressInfo struct** in `internal/tui/model.go`:
@@ -491,10 +493,10 @@ The TUI progress panel currently shows iteration count, budget, and context wind
    remaining := m.progress.IterationTimeout - elapsed
    ```
 
-5. **Display format options** (inline with iteration bar):
-   - Format A: `Iteration 2/50 [████░░░░░░] 3m 42s remaining`
-   - Format B: `Iteration 2/50 [████░░░░░░] 1m 18s / 5m 00s`
-   - Format C: Separate line with dedicated timer bar
+5. **Display location** (Format A - inline with iteration bar):
+   - Position: End of iteration progress line (Line 1 of progress panel)
+   - Format: `Iteration 2/50 [████░░░░░░] 3m 42s remaining`
+   - Timer appears after the progress bar, naturally extending the iteration info
 
 6. **Warning state** when remaining time < 1 minute:
    - Change timer text to warning colour (orange)
@@ -506,27 +508,30 @@ The TUI progress panel currently shows iteration count, budget, and context wind
    - Timer resets cleanly on iteration boundary
 
 **Acceptance Criteria**:
-- [ ] Given an iteration is running, when 1 second passes, then the timer display updates to show new remaining time
-- [ ] Given an iteration starts, when the TUI renders, then the timer shows the full timeout duration as remaining
+- [ ] Given an implementor step is running, when 1 second passes, then the timer updates to show new remaining time
+- [ ] Given an implementor step starts, when the TUI renders, then the timer shows the full timeout duration as remaining
 - [ ] Given remaining time drops below 1 minute, when the TUI renders, then the timer displays in warning colour
 - [ ] Given an iteration completes, when a new iteration starts, then the timer resets to full timeout duration
-- [ ] Given no iteration is running (between iterations), when the TUI renders, then the timer shows a neutral state
+- [ ] Given no iteration is running (between iterations), when the TUI renders, then the timer shows a neutral state or is hidden
 - [ ] Given the timeout is 5 minutes and 3 minutes have elapsed, when the TUI renders, then the timer shows approximately 2 minutes remaining
+- [ ] Given a gate step (e.g., review) is running, when the TUI renders, then the timer is hidden or shows "—" (no timeout applies)
 
 **Definition of Done** (Single Commit):
 - [ ] Feature complete in one atomic commit
 - [ ] ProgressInfo extended with timeout and start time fields
 - [ ] Timer tick implemented in TUI model
-- [ ] Countdown displayed in progress panel
+- [ ] Countdown displayed inline with iteration bar (Format A)
+- [ ] Timer only active during implementor steps (not gates)
 - [ ] Warning colour at < 1 minute remaining
 - [ ] Timer resets on new iteration
 - [ ] Unit test for remaining time calculation
 - [ ] All tests passing (`make check`)
 
 **Dependencies**:
-- Uses existing progress panel layout in view.go
+- Uses existing progress panel layout in view.go (Line 1 - iteration bar)
 - Uses existing tick pattern (similar to file refresh tick)
 - Integrates with iteration callbacks in root.go
+- Requires step type information (implementor vs gate) passed to TUI
 
 **Risks**:
 - High-frequency ticks (every second) could impact TUI performance (mitigated: single tick, minimal work)
@@ -823,17 +828,25 @@ func (m Model) renderIterationTimer() string {
 }
 ```
 
-**Display Integration (Line 1 of progress panel):**
+**Display Integration (Format A - inline with iteration bar):**
 ```go
+// Progress panel Line 1:
 // Current: Iteration 2/50 [████░░░░░░]
 // New:     Iteration 2/50 [████░░░░░░] 3m 42s remaining
 
-iterLine := fmt.Sprintf("Iteration %d/%d %s %s",
-    m.progress.Iteration,
-    m.progress.MaxIteration,
-    iterBar,
-    m.renderIterationTimer())
+func (m Model) renderIterationLine() string {
+    iterBar := RenderProgressBar(iterRatio, BarWidth, normalStyle, warningStyle)
+    timer := m.renderIterationTimer()
+
+    return fmt.Sprintf("Iteration %d/%d %s %s",
+        m.progress.Iteration,
+        m.progress.MaxIteration,
+        iterBar,
+        timer)
+}
 ```
+
+Note: Timer only displays during implementor steps, not during gate steps. For gates, the timer portion is omitted or shows "—".
 
 **Iteration Start Callback (root.go):**
 ```go

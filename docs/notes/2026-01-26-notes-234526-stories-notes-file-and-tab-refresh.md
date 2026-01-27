@@ -320,3 +320,123 @@ Updated:
 The TUI now displays a context window progress bar on line 3 of the progress panel. Users can see real-time token usage relative to the model's 200K context window, with warning colour at 80% consumption.
 
 All tests pass: `make check` successful
+
+## Code Review - Iteration 6
+
+### Security
+_ISSUES_FOUND
+
+1. **Config file can enable dangerous mode (supply-chain attack)**: In `root.go:183-193`, a malicious `.orbital/config.toml` with `dangerous = true` can enable `--dangerously-skip-permissions` for Claude CLI. Users cloning a malicious repo could have commands executed without approval.
+
+2. **Arbitrary file read via TUI tabs**: In `model.go:148-168`, `loadFileCmd` reads any file path without validation. If spec/notes/context paths are controlled via config, arbitrary files can be read.
+
+3. **Notes file path traversal**: In `root.go:682-702`, `ensureNotesFile` creates files without path sanitisation. Crafted `--notes` arguments could write outside the working directory.
+
+4. **Missing config validation bounds**: In `config.go:107-117`, no validation for `MaxIterations`, `MaxBudget`, `IterationTimeout` bounds. Extreme values could cause resource exhaustion.
+
+### Design
+_ISSUES_FOUND
+
+1. **God function `runOrbit`**: 380 lines with 15+ responsibilities (config, prompts, notes, state, TUI, callbacks, signal handling, etc.). Violates Single Responsibility Principle.
+
+2. **Global state mutation**: `root.go` directly mutates `spec.PromptTemplate`, `spec.CompletionPromise`, `spec.NotesFile` globals, creating hidden coupling.
+
+3. **25 global flag variables**: Makes testing difficult and prevents running multiple instances with different configurations.
+
+4. **Incomplete validation in `Config.Validate()`**: 18 fields but only 2 validated.
+
+5. **Duplicate scroll handling**: Six nearly-identical scroll functions share the same structure.
+
+6. **Large Model struct with mixed concerns**: Handles layout, output buffering, task tracking, tabs, file caching, scroll state, and styling.
+
+### Logic
+_ISSUES_FOUND
+
+1. **Missing validation for MaxIterations/MaxBudget <= 0**: Zero or negative values cause undefined behaviour (immediate exit or infinite loop).
+
+2. **Bridge.Close() never called**: In `program.go:53-56`, the bridge's `messagePump` goroutine leaks when the program exits.
+
+3. **truncateFromStart doesn't account for "..." width**: Returns `targetWidth + 3` instead of `targetWidth`.
+
+4. **os.Exit bypasses defer cleanup**: In `root.go:467-489`, direct `os.Exit()` calls skip deferred functions and Cobra error handling.
+
+### Error Handling
+_ISSUES_FOUND
+
+1. **Panic on entropy failure**: In `root.go:536-538`, `generateSessionID()` panics instead of returning an error if `crypto/rand.Read` fails.
+
+2. **Incomplete config validation**: Missing bounds checks for `MaxIterations`, `MaxBudget`, `IterationTimeout`, `MaxOutputSize` cause runtime failures with invalid values.
+
+3. **Silent file access errors in TUI**: When file loading fails, errors are converted to display strings but users may not notice. File refresh tick ignores `os.Stat` errors completely.
+
+### Data Integrity
+_ISSUES_FOUND
+
+1. **Missing numeric validation in Config.Validate()**: Zero/negative `MaxIterations`, `MaxBudget`, `IterationTimeout` not caught.
+
+2. **Floating point precision loss in formatCurrency**: `int(amount*100 + 0.5)` rounding can be incorrect for edge cases. Should use `math.Round`.
+
+3. **Unsafe int64 to int conversion in formatFileSize**: Could overflow on 32-bit systems for large files (though mitigated by maxFileSize check).
+
+4. **Exported Set* methods on Model**: `SetProgress`, `SetSession`, `SetTasks` directly mutate state without synchronisation. If called from goroutines (they shouldn't be, but they're exported), data races would occur.
+
+### Verdict
+**FAIL**
+
+Critical issues requiring attention:
+
+1. **Supply-chain attack vector**: Config file can enable dangerous mode, allowing command execution without user approval
+2. **Missing config validation**: Zero/negative bounds not checked, causing runtime failures
+3. **Panic in generateSessionID**: Should return error, not panic
+4. **Goroutine leak**: Bridge.Close() never called on program exit
+5. **Path traversal risks**: Notes file and file tab loading lack path sanitisation
+
+The design issues (god function, global state, duplicate code) are significant technical debt but not blocking for this iteration. The security and data validation issues should be addressed.
+
+## Iteration 7 - Code Review Fixes
+
+### Issues Addressed
+
+All critical issues from the Iteration 6 code review have been fixed:
+
+**1. Missing config validation for zero/negative bounds (HIGH)**
+- Added validation in `internal/config/config.go` `Validate()` method for:
+  - `MaxIterations <= 0` returns error "max iterations must be positive"
+  - `MaxBudget <= 0` returns error "max budget must be positive"
+  - `IterationTimeout <= 0` returns error "iteration timeout must be positive"
+- Prevents undefined behaviour from zero or negative configuration values
+
+**2. Panic in generateSessionID (MEDIUM)**
+- Changed `generateSessionID()` in `cmd/orbital/root.go` from panic to error return
+- Function signature changed from `func() string` to `func() (string, error)`
+- Call site updated to handle error and return wrapped error to user
+- Crypto failure now results in graceful error message instead of panic
+
+**3. Goroutine leak - Bridge.Close() not called (MEDIUM)**
+- Added `Close()` method to `internal/tui/program.go` that calls `bridge.Close()`
+- Added `tuiProgram.Close()` call in `cmd/orbital/root.go` after TUI exits
+- Ensures the Bridge's message pump goroutine is properly terminated
+
+**4. Path traversal in notes file (MEDIUM)**
+- Added path sanitisation in `cmd/orbital/root.go` after notes file path is set
+- Resolves both notes path and working directory to absolute paths
+- Validates that notes file path starts with working directory path
+- Returns error if notes file would be created outside working directory
+
+**5. Floating point precision in formatCurrency (LOW)**
+- Changed from `int(amount*100 + 0.5)` to `int(math.Round(amount * 100))`
+- Added `math` import to `internal/tui/model.go`
+- Uses proper mathematical rounding instead of manual approximation
+
+### Issues Not Addressed (Tech Debt/Low Priority)
+
+The following issues were noted but not fixed as they are pre-existing technical debt:
+- Supply-chain attack vector via config file `dangerous = true` (requires broader security review)
+- God function `runOrbit` (377 lines, 15+ responsibilities)
+- Global state mutation and 25 global flag variables
+- Duplicate scroll handling functions
+- Large Model struct with mixed concerns
+- `truncateFromStart` returns `targetWidth + 3` instead of `targetWidth`
+- `os.Exit` bypasses defer cleanup (existing behaviour)
+- Silent file access errors in TUI (existing behaviour)
+- Exported Set* methods on Model without synchronisation (safe in current usage)

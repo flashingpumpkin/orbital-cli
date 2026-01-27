@@ -108,7 +108,11 @@ func runContinue(cmd *cobra.Command, args []string) error {
 
 	// If no existing state, create a new one
 	if st == nil {
-		sessID = generateSessionID()
+		var err error
+		sessID, err = generateSessionID()
+		if err != nil {
+			return fmt.Errorf("failed to generate session ID: %w", err)
+		}
 		st = state.NewState(sessID, wd, files, "", nil)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Starting new session %s with %d file(s)...\n", sessID, len(files))
 	} else {

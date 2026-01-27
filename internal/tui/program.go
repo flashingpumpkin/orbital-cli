@@ -94,3 +94,11 @@ func (p *Program) Kill() {
 func (p *Program) Wait() {
 	p.program.Wait()
 }
+
+// Close cleans up resources including the Bridge's message pump goroutine.
+// Should be called after the program exits.
+func (p *Program) Close() {
+	if p.bridge != nil {
+		p.bridge.Close()
+	}
+}

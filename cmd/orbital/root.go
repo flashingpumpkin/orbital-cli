@@ -225,6 +225,21 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		spec.NotesFile = generateNotesFilePath(specPath)
 	}
 
+	// Sanitise notes file path to prevent directory traversal
+	absNotesPath, err := filepath.Abs(spec.NotesFile)
+	if err != nil {
+		return fmt.Errorf("invalid notes file path: %w", err)
+	}
+	absWorkingDir, err := filepath.Abs(workingDir)
+	if err != nil {
+		return fmt.Errorf("invalid working directory: %w", err)
+	}
+	// Ensure notes file is within the working directory
+	if !strings.HasPrefix(absNotesPath, absWorkingDir+string(filepath.Separator)) && absNotesPath != absWorkingDir {
+		return fmt.Errorf("notes file path must be within working directory: %s is outside %s", spec.NotesFile, workingDir)
+	}
+	spec.NotesFile = absNotesPath
+
 	// Ensure notes directory exists
 	notesDir := filepath.Dir(spec.NotesFile)
 	if err := os.MkdirAll(notesDir, 0755); err != nil {
@@ -308,7 +323,10 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	controller.SetSpecFiles(absFilePaths)
 
 	// Generate a state ID for orbit's internal tracking (separate from Claude session ID)
-	stateID := generateSessionID()
+	stateID, err := generateSessionID()
+	if err != nil {
+		return fmt.Errorf("failed to generate session ID: %w", err)
+	}
 
 	// Initialize session state
 	st, err := initState(stateID, workingDir, absFilePaths, spec.NotesFile, contextFiles)
@@ -445,6 +463,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 			tuiProgram.Quit()
 			<-tuiDone
 		}
+		// Clean up the Bridge's message pump goroutine
+		tuiProgram.Close()
 	} else {
 		// Check if workflow has gates (multi-step workflow)
 		if wf.HasGates() {
@@ -531,12 +551,13 @@ func printSummary(formatter *output.Formatter, loopState *loop.LoopState) {
 }
 
 // generateSessionID generates a unique session ID.
-func generateSessionID() string {
+// Returns an error if random number generation fails.
+func generateSessionID() (string, error) {
 	bytes := make([]byte, 8)
 	if _, err := rand.Read(bytes); err != nil {
-		panic(fmt.Sprintf("failed to generate session ID: crypto/rand.Read failed: %v", err))
+		return "", fmt.Errorf("failed to generate session ID: crypto/rand.Read failed: %w", err)
 	}
-	return hex.EncodeToString(bytes)
+	return hex.EncodeToString(bytes), nil
 }
 
 // initState creates and saves a new session state.

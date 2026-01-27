@@ -11,15 +11,24 @@ import (
 )
 
 func TestGenerateSessionID_ReturnsNonEmptyString(t *testing.T) {
-	id := generateSessionID()
+	id, err := generateSessionID()
+	if err != nil {
+		t.Fatalf("generateSessionID() error = %v", err)
+	}
 	if id == "" {
 		t.Error("generateSessionID() returned empty string")
 	}
 }
 
 func TestGenerateSessionID_ReturnsUniqueIDs(t *testing.T) {
-	id1 := generateSessionID()
-	id2 := generateSessionID()
+	id1, err := generateSessionID()
+	if err != nil {
+		t.Fatalf("generateSessionID() error = %v", err)
+	}
+	id2, err := generateSessionID()
+	if err != nil {
+		t.Fatalf("generateSessionID() error = %v", err)
+	}
 	if id1 == id2 {
 		t.Errorf("generateSessionID() returned duplicate IDs: %s", id1)
 	}

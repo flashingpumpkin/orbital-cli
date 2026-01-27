@@ -113,5 +113,14 @@ func (c *Config) Validate() error {
 	if c.CompletionPromise == "" {
 		return errors.New("completion promise cannot be empty")
 	}
+	if c.MaxIterations <= 0 {
+		return errors.New("max iterations must be positive")
+	}
+	if c.MaxBudget <= 0 {
+		return errors.New("max budget must be positive")
+	}
+	if c.IterationTimeout <= 0 {
+		return errors.New("iteration timeout must be positive")
+	}
 	return nil
 }
