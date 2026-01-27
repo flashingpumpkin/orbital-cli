@@ -1166,3 +1166,90 @@ Updated `TestAutonomousPreset` in `internal/workflow/presets_test.go`:
 ### Verification
 
 All tests pass: `make check` successful
+
+## Code Review - Iteration 17
+
+### Security
+No issues. The changes are to prompt template text only. No user input processing, no file path handling, no shell command execution, no authentication. The `{{notes_file}}` placeholder is substituted using the existing validated template mechanism in `buildPrompt()`.
+
+### Design
+No issues. The prompt changes follow the established pattern from Iteration 16. The constraints and execution structure mirror the implement step's format, maintaining consistency across the autonomous workflow. No new abstractions or coupling introduced.
+
+### Logic
+No issues. The prompt changes are self-contained text modifications. The `{{notes_file}}` placeholder was already supported by the template engine (added in Iteration 15). The test additions properly verify the new prompt content without logic errors.
+
+### Error Handling
+No issues. Prompt text changes do not introduce new error paths. The template substitution for `{{notes_file}}` already has a fallback to "(no notes file)" in `executor.go`.
+
+### Data Integrity
+No issues. The changes add text constraints and structure to the prompt. No data validation changes, no new fields, no numeric handling.
+
+### Verdict
+**PASS**
+
+The changes are a straightforward prompt improvement that:
+1. Adds the `{{notes_file}}` template variable (already supported by executor)
+2. Adds CONSTRAINTS section to prevent scope creep
+3. Adds structured EXECUTION steps
+4. Updates tests to verify new content
+
+The fix step is now properly scoped to only address review feedback, completing the workflow prompt improvements started in Iterations 15 and 16. No security, design, logic, error handling, or data integrity issues found.
+
+## Iteration 18 - Fix Context Window Token Count Accumulation Bug
+
+### Task Selected
+
+**Fix context window token count accumulation bug**
+
+### Why Highest Leverage
+
+This was the highest leverage task because:
+1. It's a critical bug that makes the context window display meaningless (showing 1784% instead of actual usage)
+2. It affects user visibility into a fundamental constraint (context window limits)
+3. The other remaining task (`orbital continue` TUI restart) is less critical since continue still works
+
+### Root Cause Analysis
+
+The bug occurred because:
+1. **Parser accumulates tokens** (`internal/output/parser.go`): `resultTokensIn` and `resultTokensOut` accumulate across result events (iterations)
+2. **Same Parser instance reused** (`internal/tui/bridge.go`): Bridge creates one Parser at startup and reuses it for all iterations
+3. **TUI displays accumulated values**: Context calculation uses cumulative tokens, showing 1784% after 35 iterations
+
+### Implementation
+
+Chose **Option B: Track per-invocation vs cumulative separately**:
+
+**1. Parser changes** (`internal/output/parser.go`):
+- Added `currentIterTokensIn` and `currentIterTokensOut` fields for per-iteration tracking
+- Updated `OutputStats` struct with `CurrentIterTokensIn` and `CurrentIterTokensOut` fields
+- Updated `parseAssistantMessage()` to track current iteration tokens
+- Updated `parseResultStats()` to track current iteration tokens (final authoritative counts)
+- Added `ResetIterationTokens()` method to reset per-iteration counters
+- Updated `GetStats()` to return both cumulative and current iteration values
+
+**2. Bridge changes** (`internal/tui/bridge.go`):
+- Updated `StatsMsg` to include per-iteration tokens
+- Added `ResetIterationTokens()` method to expose parser reset
+
+**3. TUI changes** (`internal/tui/model.go`):
+- Extended `StatsMsg` with `CurrentIterTokensIn` and `CurrentIterTokensOut`
+- Extended `ProgressInfo` with per-iteration token fields
+- Updated `Update()` to store current iteration tokens
+- Updated `renderProgressPanel()` to use per-iteration tokens for context window display
+
+**4. Program changes** (`internal/tui/program.go`):
+- Added `ResetIterationTokens()` method to expose bridge reset
+
+**5. Root command changes** (`cmd/orbital/root.go`):
+- Call `tuiProgram.ResetIterationTokens()` at iteration start
+- Call `tuiProgram.ResetIterationTokens()` at workflow step start
+
+### Testing
+
+Updated tests in:
+- `internal/tui/golden_test.go`: Added `CurrentIterTokensIn` and `CurrentIterTokensOut` to all test ProgressInfo structs
+- `internal/tui/model_test.go`: Updated `TestRenderProgressPanelContextBar` and `TestContextBarWarningColour` to set per-iteration tokens
+
+### Verification
+
+All tests pass: `make check` successful

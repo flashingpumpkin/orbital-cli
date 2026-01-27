@@ -61,6 +61,10 @@ type ProgressInfo struct {
 	IterationStart   time.Time     // When current iteration/step started
 	IsGateStep       bool          // True if current step is a gate (timer hidden for gates)
 	WorkflowName     string        // Name of the active workflow (e.g., "autonomous", "tdd")
+	// CurrentIterTokensIn and CurrentIterTokensOut track tokens for the current iteration only.
+	// These are used for context window display (per-invocation usage).
+	CurrentIterTokensIn  int
+	CurrentIterTokensOut int
 }
 
 // StatsMsg is a message containing updated token and cost statistics.
@@ -68,6 +72,10 @@ type StatsMsg struct {
 	TokensIn  int
 	TokensOut int
 	Cost      float64
+	// CurrentIterTokensIn and CurrentIterTokensOut track tokens for the current iteration only.
+	// These are used for context window display (per-invocation usage).
+	CurrentIterTokensIn  int
+	CurrentIterTokensOut int
 }
 
 // Model is the main bubbletea model for the orbit TUI.
@@ -236,6 +244,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.progress.TokensIn = msg.TokensIn
 		m.progress.TokensOut = msg.TokensOut
 		m.progress.Cost = msg.Cost
+		m.progress.CurrentIterTokensIn = msg.CurrentIterTokensIn
+		m.progress.CurrentIterTokensOut = msg.CurrentIterTokensOut
 		return m, nil
 
 	case OutputLineMsg:
@@ -1139,12 +1149,14 @@ func (m Model) renderProgressPanel() string {
 	}
 
 	// Line 3: Context window progress bar
+	// Use per-iteration tokens for context window display (not cumulative)
+	currentIterTokens := p.CurrentIterTokensIn + p.CurrentIterTokensOut
 	var contextRatio float64
 	if p.ContextWindow > 0 {
-		contextRatio = float64(p.TokensIn+p.TokensOut) / float64(p.ContextWindow)
+		contextRatio = float64(currentIterTokens) / float64(p.ContextWindow)
 	}
 	contextBar := RenderProgressBar(contextRatio, BarWidth, m.styles.Value, m.styles.Warning)
-	contextStr := m.formatContext(p.TokensIn+p.TokensOut, p.ContextWindow, contextRatio)
+	contextStr := m.formatContext(currentIterTokens, p.ContextWindow, contextRatio)
 	line3Content := " " + contextBar + " " + contextStr
 	line3Width := ansi.StringWidth(line3Content)
 	line3Padding := contentWidth - line3Width

@@ -369,6 +369,79 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		formatter = output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
 	}
 
+	// Track iteration timing for non-TUI mode
+	var iterationStartTime time.Time
+
+	// Track accumulated cost/tokens for TUI display continuity
+	var accumulatedCost float64
+	var accumulatedTokensIn, accumulatedTokensOut int
+
+	// Set iteration start callback
+	controller.SetIterationStartCallback(func(iteration, maxIterations int) {
+		iterationStartTime = time.Now()
+		if formatter != nil {
+			formatter.PrintIterationStart(iteration, maxIterations)
+		}
+		// Reset per-iteration token counters for context window display
+		if tuiProgram != nil {
+			tuiProgram.ResetIterationTokens()
+		}
+		// Send progress update to TUI immediately when iteration starts
+		// Include accumulated cost/tokens to prevent display reset
+		if tuiProgram != nil {
+			tuiProgram.SendProgress(tui.ProgressInfo{
+				Iteration:        iteration,
+				MaxIteration:     maxIterations,
+				TokensIn:         accumulatedTokensIn,
+				TokensOut:        accumulatedTokensOut,
+				Cost:             accumulatedCost,
+				Budget:           cfg.MaxBudget,
+				ContextWindow:    config.GetContextWindow(cfg.Model),
+				IterationTimeout: cfg.IterationTimeout,
+				IterationStart:   iterationStartTime,
+				WorkflowName:     wf.Name,
+			})
+		}
+	})
+
+	// Set iteration callback to update state after each iteration
+	controller.SetIterationCallback(func(iteration int, totalCost float64, totalTokensIn, totalTokensOut int) error {
+		// Update accumulated values for next iteration's start callback
+		accumulatedCost = totalCost
+		accumulatedTokensIn = totalTokensIn
+		accumulatedTokensOut = totalTokensOut
+
+		// Update state
+		if err := updateState(st, iteration, totalCost); err != nil {
+			return err
+		}
+
+		// Print iteration stats in non-TUI mode
+		if formatter != nil {
+			// Calculate per-iteration cost (approximate - totalCost is cumulative)
+			duration := time.Since(iterationStartTime)
+			formatter.PrintIterationEnd(duration, totalTokensIn, totalTokensOut, totalCost, "Continuing")
+		}
+
+		// Send progress update to TUI if active
+		if tuiProgram != nil {
+			tuiProgram.SendProgress(tui.ProgressInfo{
+				Iteration:        iteration,
+				MaxIteration:     cfg.MaxIterations,
+				TokensIn:         totalTokensIn,
+				TokensOut:        totalTokensOut,
+				Cost:             totalCost,
+				Budget:           cfg.MaxBudget,
+				WorkflowName:     wf.Name,
+				ContextWindow:    config.GetContextWindow(cfg.Model),
+				IterationTimeout: cfg.IterationTimeout,
+				IterationStart:   iterationStartTime,
+			})
+		}
+
+		return nil
+	})
+
 	// Print banner for non-TUI mode
 	if formatter != nil {
 		printBanner(formatter, cfg, sp, contextFiles, wf)
@@ -795,6 +868,10 @@ func runWorkflowLoop(
 		} else {
 			// TUI mode: send step prompt and progress update
 			tuiProgram.SendInitialPrompt(runner.GetStepPrompt(info.Name))
+			// Reset per-iteration token counters for context window display
+			tuiProgram.ResetIterationTokens()
+			// TUI mode: send progress update immediately when step starts
+			// Include accumulated cost/tokens to prevent display reset
 			tuiProgram.SendProgress(tui.ProgressInfo{
 				Iteration:        loopState.Iteration,
 				MaxIteration:     cfg.MaxIterations,

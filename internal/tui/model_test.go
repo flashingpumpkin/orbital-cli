@@ -1932,14 +1932,17 @@ func TestRenderProgressPanelContextBar(t *testing.T) {
 	model := updatedModel.(Model)
 
 	// Set progress with context window
+	// Use CurrentIterTokensIn/Out for context window display
 	model.SetProgress(ProgressInfo{
-		Iteration:     5,
-		MaxIteration:  50,
-		TokensIn:      50000,
-		TokensOut:     25000,
-		Cost:          5.00,
-		Budget:        100.00,
-		ContextWindow: 200000,
+		Iteration:            5,
+		MaxIteration:         50,
+		TokensIn:             50000,
+		TokensOut:            25000,
+		Cost:                 5.00,
+		Budget:               100.00,
+		ContextWindow:        200000,
+		CurrentIterTokensIn:  50000,
+		CurrentIterTokensOut: 25000,
 	})
 
 	view := model.View()
@@ -1949,7 +1952,7 @@ func TestRenderProgressPanelContextBar(t *testing.T) {
 		t.Error("expected 'Context' label in view")
 	}
 
-	// Should show the usage ratio
+	// Should show the usage ratio (per-iteration tokens)
 	if !strings.Contains(view, "75,000") {
 		t.Error("expected total token count '75,000' in context bar")
 	}
@@ -2013,13 +2016,15 @@ func TestContextBarWarningColour(t *testing.T) {
 
 	t.Run("below 80% threshold", func(t *testing.T) {
 		model.SetProgress(ProgressInfo{
-			Iteration:     5,
-			MaxIteration:  50,
-			TokensIn:      50000,
-			TokensOut:     25000, // Total: 75,000 = 37.5%
-			Cost:          5.00,
-			Budget:        100.00,
-			ContextWindow: 200000,
+			Iteration:            5,
+			MaxIteration:         50,
+			TokensIn:             50000,
+			TokensOut:            25000, // Total: 75,000 = 37.5%
+			Cost:                 5.00,
+			Budget:               100.00,
+			ContextWindow:        200000,
+			CurrentIterTokensIn:  50000,
+			CurrentIterTokensOut: 25000,
 		})
 
 		view := model.View()
@@ -2031,13 +2036,15 @@ func TestContextBarWarningColour(t *testing.T) {
 
 	t.Run("above 80% threshold", func(t *testing.T) {
 		model.SetProgress(ProgressInfo{
-			Iteration:     5,
-			MaxIteration:  50,
-			TokensIn:      100000,
-			TokensOut:     70000, // Total: 170,000 = 85%
-			Cost:          5.00,
-			Budget:        100.00,
-			ContextWindow: 200000,
+			Iteration:            5,
+			MaxIteration:         50,
+			TokensIn:             100000,
+			TokensOut:            70000, // Total: 170,000 = 85%
+			Cost:                 5.00,
+			Budget:               100.00,
+			ContextWindow:        200000,
+			CurrentIterTokensIn:  100000,
+			CurrentIterTokensOut: 70000,
 		})
 
 		view := model.View()

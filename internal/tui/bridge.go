@@ -142,9 +142,11 @@ func (b *Bridge) processLine(line string) {
 		// Only send if we have meaningful stats (non-zero values)
 		if stats.TokensIn > 0 || stats.TokensOut > 0 || stats.CostUSD > 0 {
 			b.sendMsg(StatsMsg{
-				TokensIn:  stats.TokensIn,
-				TokensOut: stats.TokensOut,
-				Cost:      stats.CostUSD,
+				TokensIn:             stats.TokensIn,
+				TokensOut:            stats.TokensOut,
+				Cost:                 stats.CostUSD,
+				CurrentIterTokensIn:  stats.CurrentIterTokensIn,
+				CurrentIterTokensOut: stats.CurrentIterTokensOut,
 			})
 		}
 	}
@@ -447,4 +449,13 @@ func (b *Bridge) GetParser() *output.Parser {
 // GetTracker returns the task tracker.
 func (b *Bridge) GetTracker() *tasks.Tracker {
 	return b.tracker
+}
+
+// ResetIterationTokens resets the per-iteration token counters.
+// This should be called at the start of each new iteration to reset
+// the context window display.
+func (b *Bridge) ResetIterationTokens() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.parser.ResetIterationTokens()
 }

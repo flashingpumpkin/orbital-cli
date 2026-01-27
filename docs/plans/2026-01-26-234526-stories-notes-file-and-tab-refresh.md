@@ -983,7 +983,7 @@ EXECUTION:
 
 ---
 
-### [ ] **Ticket: Fix context window token count accumulation bug**
+### [x] **Ticket: Fix context window token count accumulation bug**
 
 **As a** user
 **I want** the context window display to show per-iteration token usage

@@ -124,15 +124,17 @@ func TestGoldenEmpty(t *testing.T) {
 func TestGoldenWithProgress(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    5,
-		MaxIteration: 50,
-		StepName:     "implement",
-		StepPosition: 1,
-		StepTotal:    3,
-		TokensIn:     12345,
-		TokensOut:    6789,
-		Cost:         1.50,
-		Budget:       10.00,
+		Iteration:            5,
+		MaxIteration:         50,
+		StepName:             "implement",
+		StepPosition:         1,
+		StepTotal:            3,
+		TokensIn:             12345,
+		TokensOut:            6789,
+		Cost:                 1.50,
+		Budget:               10.00,
+		CurrentIterTokensIn:  12345,
+		CurrentIterTokensOut: 6789,
 	}
 
 	output := renderToString(t, opts)
@@ -149,12 +151,14 @@ func TestGoldenWithProgress(t *testing.T) {
 func TestGoldenSingleTask(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    1,
-		MaxIteration: 50,
-		TokensIn:     1000,
-		TokensOut:    500,
-		Cost:         0.25,
-		Budget:       10.00,
+		Iteration:            1,
+		MaxIteration:         50,
+		TokensIn:             1000,
+		TokensOut:            500,
+		Cost:                 0.25,
+		Budget:               10.00,
+		CurrentIterTokensIn:  1000,
+		CurrentIterTokensOut: 500,
 	}
 	opts.Tasks = []Task{
 		{ID: "1", Content: "Set up authentication", Status: "in_progress"},
@@ -174,12 +178,14 @@ func TestGoldenSingleTask(t *testing.T) {
 func TestGoldenMultipleTasks(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    3,
-		MaxIteration: 50,
-		TokensIn:     5000,
-		TokensOut:    2500,
-		Cost:         0.75,
-		Budget:       10.00,
+		Iteration:            3,
+		MaxIteration:         50,
+		TokensIn:             5000,
+		TokensOut:            2500,
+		Cost:                 0.75,
+		Budget:               10.00,
+		CurrentIterTokensIn:  5000,
+		CurrentIterTokensOut: 2500,
 	}
 	opts.Tasks = []Task{
 		{ID: "1", Content: "Set up authentication", Status: "completed"},
@@ -201,12 +207,14 @@ func TestGoldenMultipleTasks(t *testing.T) {
 func TestGoldenScrollingContent(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    10,
-		MaxIteration: 50,
-		TokensIn:     50000,
-		TokensOut:    25000,
-		Cost:         5.00,
-		Budget:       10.00,
+		Iteration:            10,
+		MaxIteration:         50,
+		TokensIn:             50000,
+		TokensOut:            25000,
+		Cost:                 5.00,
+		Budget:               10.00,
+		CurrentIterTokensIn:  50000,
+		CurrentIterTokensOut: 25000,
 	}
 
 	// Add enough output lines to trigger scrolling
@@ -231,12 +239,14 @@ func TestGoldenNarrowTerminal(t *testing.T) {
 		Width:  80, // Minimum supported width
 		Height: 24,
 		Progress: &ProgressInfo{
-			Iteration:    1,
-			MaxIteration: 50,
-			TokensIn:     1000,
-			TokensOut:    500,
-			Cost:         0.10,
-			Budget:       10.00,
+			Iteration:            1,
+			MaxIteration:         50,
+			TokensIn:             1000,
+			TokensOut:            500,
+			Cost:                 0.10,
+			Budget:               10.00,
+			CurrentIterTokensIn:  1000,
+			CurrentIterTokensOut: 500,
 		},
 	}
 
@@ -255,12 +265,14 @@ func TestGoldenNarrowTerminal(t *testing.T) {
 func TestGoldenLongPaths(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    1,
-		MaxIteration: 50,
-		TokensIn:     1000,
-		TokensOut:    500,
-		Cost:         0.25,
-		Budget:       10.00,
+		Iteration:            1,
+		MaxIteration:         50,
+		TokensIn:             1000,
+		TokensOut:            500,
+		Cost:                 0.25,
+		Budget:               10.00,
+		CurrentIterTokensIn:  1000,
+		CurrentIterTokensOut: 500,
 	}
 	opts.Session = &SessionInfo{
 		SpecFiles:   []string{"/very/deeply/nested/directory/structure/that/goes/on/and/on/specs/implementation-plan-for-feature-xyz.md"},
@@ -283,12 +295,14 @@ func TestGoldenLongPaths(t *testing.T) {
 func TestGoldenUnicodeContent(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    2,
-		MaxIteration: 50,
-		TokensIn:     2000,
-		TokensOut:    1000,
-		Cost:         0.50,
-		Budget:       10.00,
+		Iteration:            2,
+		MaxIteration:         50,
+		TokensIn:             2000,
+		TokensOut:            1000,
+		Cost:                 0.50,
+		Budget:               10.00,
+		CurrentIterTokensIn:  2000,
+		CurrentIterTokensOut: 1000,
 	}
 	opts.Tasks = []Task{
 		{ID: "1", Content: "实现用户认证系统", Status: "completed"},      // Chinese
@@ -318,12 +332,14 @@ func TestGoldenUnicodeContent(t *testing.T) {
 func TestGoldenANSISequences(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    3,
-		MaxIteration: 50,
-		TokensIn:     3000,
-		TokensOut:    1500,
-		Cost:         0.75,
-		Budget:       10.00,
+		Iteration:            3,
+		MaxIteration:         50,
+		TokensIn:             3000,
+		TokensOut:            1500,
+		Cost:                 0.75,
+		Budget:               10.00,
+		CurrentIterTokensIn:  3000,
+		CurrentIterTokensOut: 1500,
 	}
 	// Simulate output that might contain ANSI codes (e.g., from Claude's responses)
 	opts.OutputLines = []string{
@@ -366,15 +382,17 @@ func TestGoldenTerminalTooNarrow(t *testing.T) {
 func TestGoldenFooterHighTokens(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    45,
-		MaxIteration: 50,
-		StepName:     "review",
-		StepPosition: 3,
-		StepTotal:    3,
-		TokensIn:     1234567,
-		TokensOut:    987654,
-		Cost:         87.50,
-		Budget:       100.00,
+		Iteration:            45,
+		MaxIteration:         50,
+		StepName:             "review",
+		StepPosition:         3,
+		StepTotal:            3,
+		TokensIn:             1234567,
+		TokensOut:            987654,
+		Cost:                 87.50,
+		Budget:               100.00,
+		CurrentIterTokensIn:  1234567,
+		CurrentIterTokensOut: 987654,
 	}
 	opts.Tasks = []Task{
 		{ID: "1", Content: "Implement feature", Status: "completed"},
@@ -399,12 +417,14 @@ func TestGoldenFooterMaxTasks(t *testing.T) {
 		Width:  80,
 		Height: 32, // Taller to fit 6 tasks
 		Progress: &ProgressInfo{
-			Iteration:    10,
-			MaxIteration: 50,
-			TokensIn:     10000,
-			TokensOut:    5000,
-			Cost:         2.50,
-			Budget:       10.00,
+			Iteration:            10,
+			MaxIteration:         50,
+			TokensIn:             10000,
+			TokensOut:            5000,
+			Cost:                 2.50,
+			Budget:               10.00,
+			CurrentIterTokensIn:  10000,
+			CurrentIterTokensOut: 5000,
 		},
 		Tasks: []Task{
 			{ID: "1", Content: "First task completed", Status: "completed"},
@@ -433,12 +453,14 @@ func TestGoldenFooterOverflowTasks(t *testing.T) {
 		Width:  80,
 		Height: 32, // Taller to fit overflow tasks
 		Progress: &ProgressInfo{
-			Iteration:    5,
-			MaxIteration: 50,
-			TokensIn:     5000,
-			TokensOut:    2500,
-			Cost:         1.25,
-			Budget:       10.00,
+			Iteration:            5,
+			MaxIteration:         50,
+			TokensIn:             5000,
+			TokensOut:            2500,
+			Cost:                 1.25,
+			Budget:               10.00,
+			CurrentIterTokensIn:  5000,
+			CurrentIterTokensOut: 2500,
 		},
 		Tasks: []Task{
 			{ID: "1", Content: "Task one completed", Status: "completed"},
@@ -467,12 +489,14 @@ func TestGoldenFooterOverflowTasks(t *testing.T) {
 func TestGoldenFooterZeroBudget(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    5,
-		MaxIteration: 50,
-		TokensIn:     5000,
-		TokensOut:    2500,
-		Cost:         1.25,
-		Budget:       0.00, // Zero budget
+		Iteration:            5,
+		MaxIteration:         50,
+		TokensIn:             5000,
+		TokensOut:            2500,
+		Cost:                 1.25,
+		Budget:               0.00, // Zero budget
+		CurrentIterTokensIn:  5000,
+		CurrentIterTokensOut: 2500,
 	}
 	opts.Tasks = []Task{
 		{ID: "1", Content: "Working task", Status: "in_progress"},
@@ -492,15 +516,17 @@ func TestGoldenFooterZeroBudget(t *testing.T) {
 func TestGoldenFooterFullProgress(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    49,
-		MaxIteration: 50,
-		StepName:     "implement",
-		StepPosition: 1,
-		StepTotal:    1,
-		TokensIn:     500000,
-		TokensOut:    250000,
-		Cost:         95.00,
-		Budget:       100.00, // 95% budget consumed
+		Iteration:            49,
+		MaxIteration:         50,
+		StepName:             "implement",
+		StepPosition:         1,
+		StepTotal:            1,
+		TokensIn:             500000,
+		TokensOut:            250000,
+		Cost:                 95.00,
+		Budget:               100.00, // 95% budget consumed
+		CurrentIterTokensIn:  500000,
+		CurrentIterTokensOut: 250000,
 	}
 	opts.Tasks = []Task{
 		{ID: "1", Content: "Final task almost done", Status: "in_progress"},
@@ -520,12 +546,14 @@ func TestGoldenFooterFullProgress(t *testing.T) {
 func TestGoldenFooterNoTasksWithSession(t *testing.T) {
 	opts := DefaultGoldenOptions()
 	opts.Progress = &ProgressInfo{
-		Iteration:    1,
-		MaxIteration: 50,
-		TokensIn:     1000,
-		TokensOut:    500,
-		Cost:         0.25,
-		Budget:       10.00,
+		Iteration:            1,
+		MaxIteration:         50,
+		TokensIn:             1000,
+		TokensOut:            500,
+		Cost:                 0.25,
+		Budget:               10.00,
+		CurrentIterTokensIn:  1000,
+		CurrentIterTokensOut: 500,
 	}
 	opts.Session = &SessionInfo{
 		SpecFiles:   []string{"docs/plans/feature-spec.md"},

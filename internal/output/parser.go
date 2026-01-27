@@ -27,6 +27,10 @@ type OutputStats struct {
 	TokensOut int
 	CostUSD   float64
 	Duration  time.Duration
+	// CurrentIterTokensIn and CurrentIterTokensOut track tokens for the current iteration only.
+	// These are used for context window display (per-invocation usage).
+	CurrentIterTokensIn  int
+	CurrentIterTokensOut int
 }
 
 // knownEventTypes lists all event types recognised by this parser version.
@@ -53,6 +57,11 @@ type Parser struct {
 	// resultTokensIn/Out accumulate tokens across result events (iterations).
 	resultTokensIn  int
 	resultTokensOut int
+	// currentIterTokensIn/Out track tokens for the current iteration only.
+	// These are reset when ResetIterationTokens() is called at iteration start.
+	// Used for context window display (per-invocation usage).
+	currentIterTokensIn  int
+	currentIterTokensOut int
 	// Event tracking for validation
 	knownEventCount   int            // Count of recognised event types parsed
 	unknownEventCount int            // Count of unrecognised event types parsed
@@ -234,6 +243,9 @@ func (p *Parser) parseAssistantMessage(raw map[string]json.RawMessage, event *St
 		// Update stats to reflect current state (assistant values + accumulated result values)
 		p.stats.TokensIn = p.resultTokensIn + p.assistantTokensIn
 		p.stats.TokensOut = p.resultTokensOut + p.assistantTokensOut
+		// Update current iteration tokens (for context window display)
+		p.currentIterTokensIn = p.assistantTokensIn
+		p.currentIterTokensOut = p.assistantTokensOut
 	}
 }
 
@@ -327,6 +339,10 @@ func (p *Parser) parseResultStats(raw map[string]json.RawMessage) {
 			// Update stats to reflect the accumulated result totals
 			p.stats.TokensIn = p.resultTokensIn
 			p.stats.TokensOut = p.resultTokensOut
+			// Update current iteration tokens (for context window display)
+			// These are the final authoritative counts for this iteration
+			p.currentIterTokensIn = tokensIn
+			p.currentIterTokensOut = tokensOut
 		}
 	}
 }
@@ -414,11 +430,23 @@ func (p *Parser) parseResultSubtype(raw map[string]json.RawMessage) string {
 // GetStats returns the accumulated statistics from parsed output.
 func (p *Parser) GetStats() *OutputStats {
 	return &OutputStats{
-		TokensIn:  p.stats.TokensIn,
-		TokensOut: p.stats.TokensOut,
-		CostUSD:   p.stats.CostUSD,
-		Duration:  p.stats.Duration,
+		TokensIn:             p.stats.TokensIn,
+		TokensOut:            p.stats.TokensOut,
+		CostUSD:              p.stats.CostUSD,
+		Duration:             p.stats.Duration,
+		CurrentIterTokensIn:  p.currentIterTokensIn,
+		CurrentIterTokensOut: p.currentIterTokensOut,
 	}
+}
+
+// ResetIterationTokens resets the per-iteration token counters.
+// This should be called at the start of each new iteration to reset
+// the context window display. Cumulative stats (cost, total tokens) are preserved.
+func (p *Parser) ResetIterationTokens() {
+	p.currentIterTokensIn = 0
+	p.currentIterTokensOut = 0
+	p.assistantTokensIn = 0
+	p.assistantTokensOut = 0
 }
 
 // ParseStats contains statistics about the parsing process itself.

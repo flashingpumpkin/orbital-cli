@@ -122,3 +122,11 @@ func (p *Program) SendInitialPrompt(prompt string) {
 	p.program.Send(OutputLineMsg(""))
 }
 
+// ResetIterationTokens resets the per-iteration token counters.
+// This should be called at the start of each new iteration to reset
+// the context window display.
+func (p *Program) ResetIterationTokens() {
+	if p.bridge != nil {
+		p.bridge.ResetIterationTokens()
+	}
+}
