@@ -917,7 +917,7 @@ EXECUTION:
 
 ---
 
-### [ ] **Ticket: Tighten autonomous 'fix' step to only address review feedback**
+### [x] **Ticket: Tighten autonomous 'fix' step to only address review feedback**
 
 **As a** user
 **I want** the autonomous 'fix' step to only fix issues from the review
@@ -958,17 +958,17 @@ EXECUTION:
 ```
 
 **Acceptance Criteria**:
-- [ ] Given the 'fix' step runs after review failure, when Claude executes, then only review issues are addressed
-- [ ] Given the spec file has unchecked tasks, when 'fix' runs, then those tasks are NOT started
-- [ ] Given reviewers flagged 3 issues, when 'fix' completes, then exactly those 3 issues are addressed
-- [ ] Given a fix requires minor refactoring, when Claude implements it, then refactoring is limited to what's needed
+- [x] Given the 'fix' step runs after review failure, when Claude executes, then only review issues are addressed
+- [x] Given the spec file has unchecked tasks, when 'fix' runs, then those tasks are NOT started
+- [x] Given reviewers flagged 3 issues, when 'fix' completes, then exactly those 3 issues are addressed
+- [x] Given a fix requires minor refactoring, when Claude implements it, then refactoring is limited to what's needed
 
 **Definition of Done** (Single Commit):
-- [ ] Feature complete in one atomic commit
-- [ ] Autonomous 'fix' prompt updated in presets.go
-- [ ] Prompt explicitly forbids reading spec file for new tasks
-- [ ] Clear CONSTRAINTS section preventing scope creep
-- [ ] All tests passing (`make check`)
+- [x] Feature complete in one atomic commit
+- [x] Autonomous 'fix' prompt updated in presets.go
+- [x] Prompt explicitly forbids reading spec file for new tasks
+- [x] Clear CONSTRAINTS section preventing scope creep
+- [x] All tests passing (`make check`)
 
 **Dependencies**:
 - Depends on: Refactor template variables (for `{{notes_file}}`)
@@ -1062,6 +1062,66 @@ The TUI should show per-invocation tokens for context window percentage.
 
 ---
 
+### [ ] **Ticket: Make `orbital continue` restart the TUI**
+
+**As a** user
+**I want** `orbital continue` to launch the TUI like the main command does
+**So that** I can monitor resumed sessions with the same interface as new sessions
+
+**Context**: When a session is interrupted (CTRL-C) or fails, the exit summary shows a resume command like `orbital continue <session-id>`. However, `orbital continue` currently runs without the TUI, outputting raw stream data to the terminal. This is inconsistent with the main `orbital` command which launches the TUI by default.
+
+Users expect the same experience when resuming a session as when starting one. The TUI provides progress tracking, file tabs, and real-time metrics that are lost when continuing without it.
+
+**Description**: Update `orbital continue` to launch the TUI by default, consistent with the main command. The TUI should restore session context (iteration count, accumulated cost, etc.) and continue from where the session left off.
+
+**Implementation Requirements**:
+
+1. **Update `cmd/orbital/continue.go`**:
+   - Add TUI initialisation matching root.go
+   - Load session state to restore progress metrics
+   - Pass restored state to TUI model
+
+2. **Restore session metrics in TUI**:
+   - Load iteration count from state
+   - Load accumulated cost/tokens from state
+   - Display "Resuming session..." or similar indicator
+
+3. **Handle `--no-tui` flag** for users who prefer raw output:
+   - Add flag to disable TUI on continue
+   - Match behaviour of main command's `--no-tui`
+
+4. **Preserve existing `--resume` flag on main command**:
+   - `orbital --resume <id> spec.md` should continue to work
+   - `orbital continue <id>` is a convenience shorthand
+
+**Acceptance Criteria**:
+- [ ] Given a session was interrupted, when running `orbital continue <id>`, then the TUI launches
+- [ ] Given the TUI launches on continue, when viewing progress, then iteration count reflects resumed position
+- [ ] Given the TUI launches on continue, when viewing cost, then accumulated cost from previous iterations is shown
+- [ ] Given `--no-tui` flag is passed, when running continue, then raw output is shown instead
+- [ ] Given the session completes after continue, when exit summary prints, then it includes total metrics across all runs
+
+**Definition of Done** (Single Commit):
+- [ ] Feature complete in one atomic commit
+- [ ] `orbital continue` launches TUI by default
+- [ ] Session state restored (iteration, cost, tokens)
+- [ ] `--no-tui` flag supported
+- [ ] All tests passing (`make check`)
+
+**Dependencies**:
+- Uses existing TUI infrastructure from root.go
+- Uses existing state persistence from `internal/state`
+
+**Risks**:
+- State file may be corrupted or missing (mitigated: graceful error handling)
+- Metrics may not restore correctly (mitigated: validate state on load)
+
+**Notes**: This improves the user experience for interrupted sessions. The TUI is the primary interface and should be consistent across `orbital` and `orbital continue`. Consider also adding a visual indicator that this is a resumed session (e.g., "Resumed from iteration 5").
+
+**Effort Estimate**: S (2-3 hours)
+
+---
+
 ## Backlog Prioritisation
 
 **Must Have (Sprint 1):**
@@ -1079,6 +1139,7 @@ The TUI should show per-invocation tokens for context window percentage.
 12. Tighten autonomous 'implement' step for single-task discipline (XS)
 13. Tighten autonomous 'fix' step to only address review feedback (XS)
 14. Fix context window token count accumulation bug (S - bug fix) **HIGH PRIORITY**
+15. Make `orbital continue` restart the TUI (S)
 
 **Should Have (Future):**
 - Configurable refresh interval via flag

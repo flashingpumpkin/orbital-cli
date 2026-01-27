@@ -1120,3 +1120,49 @@ Updated `TestAutonomousPreset` in `internal/workflow/presets_test.go`:
 ### Verification
 
 All tests pass: `make check` successful
+
+## Iteration 17 - Tighten Autonomous 'fix' Step
+
+### Task Selected
+
+**Tighten autonomous 'fix' step to only address review feedback**
+
+### Why Highest Leverage
+
+This is the logical continuation of the workflow prompt improvements:
+1. Iteration 15 added the template variables (`{{spec_file}}`, `{{context_files}}`, `{{notes_file}}`)
+2. Iteration 16 tightened the 'implement' step with single-task discipline
+3. This iteration completes the pair by tightening the 'fix' step
+
+The 'fix' step was causing scope creep when Claude read the spec file for new tasks instead of focusing on review feedback. This undermines the review gate's purpose.
+
+### Implementation
+
+Updated the autonomous 'fix' step prompt in `internal/workflow/presets.go`:
+
+1. **Added `{{notes_file}}` placeholder**: Changed from generic reference to explicit template variable
+
+2. **Added clear directive**: "YOUR ONLY JOB: Fix the issues identified by the reviewers."
+
+3. **Added CONSTRAINTS section with prohibitions**:
+   - "Do NOT read the spec file for new tasks"
+   - "Do NOT pick up additional work beyond what reviewers flagged"
+   - "Do NOT implement new features or enhancements"
+   - "Do NOT refactor code beyond what is needed to fix the issues"
+   - "ONLY address the specific issues listed in the review feedback"
+
+4. **Structured EXECUTION section**:
+   - Numbered steps focused on reading feedback, fixing, and committing
+   - Commits should reference the review issues
+
+### Testing
+
+Updated `TestAutonomousPreset` in `internal/workflow/presets_test.go`:
+- Added check for `{{notes_file}}` placeholder
+- Added check for CONSTRAINTS section
+- Added check for spec file prohibition ("Do NOT read the spec file")
+- Added check for "ONLY address" enforcement
+
+### Verification
+
+All tests pass: `make check` successful

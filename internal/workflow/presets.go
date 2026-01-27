@@ -252,13 +252,25 @@ EXECUTION:
 			{
 				Name:     "fix",
 				Deferred: true,
-				Prompt: `Read the notes file for review feedback from the previous iteration.
+				Prompt: `Read the notes file for review feedback from the previous iteration:
+{{notes_file}}
 
-Address each issue raised by the reviewers. Verify the corrections are correct.
+YOUR ONLY JOB: Fix the issues identified by the reviewers.
 
-Update the notes file with what was fixed and why.
+CONSTRAINTS:
+- Do NOT read the spec file for new tasks
+- Do NOT pick up additional work beyond what reviewers flagged
+- Do NOT implement new features or enhancements
+- Do NOT refactor code beyond what is needed to fix the issues
+- ONLY address the specific issues listed in the review feedback
 
-Commit all changes with a message describing the fixes.`,
+EXECUTION:
+1. Read the review feedback section in the notes file
+2. For each issue raised by reviewers, implement a targeted fix
+3. Verify fixes are correct (tests, lint, typecheck)
+4. Update notes with what was fixed and why
+5. Commit with message describing the fixes (reference the review issues)
+6. Exit`,
 			},
 			{
 				Name:   "review",

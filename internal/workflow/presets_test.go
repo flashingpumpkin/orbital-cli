@@ -258,6 +258,18 @@ func TestAutonomousPreset(t *testing.T) {
 	if !strings.Contains(fix.Prompt, "review feedback") {
 		t.Error("fix prompt should mention review feedback")
 	}
+	if !strings.Contains(fix.Prompt, "{{notes_file}}") {
+		t.Error("fix prompt should contain {{notes_file}} placeholder")
+	}
+	if !strings.Contains(fix.Prompt, "CONSTRAINTS:") {
+		t.Error("fix prompt should contain CONSTRAINTS section")
+	}
+	if !strings.Contains(fix.Prompt, "Do NOT read the spec file") {
+		t.Error("fix prompt should forbid reading spec file for new tasks")
+	}
+	if !strings.Contains(fix.Prompt, "ONLY address") {
+		t.Error("fix prompt should enforce addressing only review issues")
+	}
 
 	// Check review step
 	review := w.Steps[2]
