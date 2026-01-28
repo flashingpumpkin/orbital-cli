@@ -294,6 +294,17 @@ func (r *Runner) GetFirstStepPrompt() string {
 	return r.buildPrompt(r.workflow.Steps[0].Prompt)
 }
 
+// GetStepPrompt returns a step's prompt by name with template substitutions applied.
+// Returns empty string if the step is not found.
+func (r *Runner) GetStepPrompt(name string) string {
+	for _, step := range r.workflow.Steps {
+		if step.Name == name {
+			return r.buildPrompt(step.Prompt)
+		}
+	}
+	return ""
+}
+
 // buildPrompt substitutes template placeholders in the prompt.
 func (r *Runner) buildPrompt(template string) string {
 	result := template

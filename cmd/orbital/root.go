@@ -388,9 +388,9 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		if formatter != nil {
 			formatter.PrintIterationStart(iteration, maxIterations)
 		}
-		// Send progress update to TUI immediately when iteration starts
-		// Include accumulated cost/tokens to prevent display reset
+		// Send prompt and progress update to TUI immediately when iteration starts
 		if tuiProgram != nil {
+			tuiProgram.SendInitialPrompt(prompt)
 			tuiProgram.SendProgress(tui.ProgressInfo{
 				Iteration:        iteration,
 				MaxIteration:     maxIterations,
@@ -476,12 +476,10 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 
 		// Check if workflow has custom steps
 		if len(wf.Steps) > 0 {
-			// For workflows, the initial prompt is sent from within runWorkflowLoop
-			// after the runner is set up with proper template substitutions
+			// For workflows, the prompt is sent in the step start callback
 			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, tuiProgram)
 		} else {
-			// For non-workflow mode, send the initial prompt now
-			tuiProgram.SendInitialPrompt(prompt)
+			// For non-workflow mode, the prompt is sent in the iteration start callback
 			loopState, err = controller.Run(ctx, prompt)
 		}
 
@@ -864,11 +862,6 @@ func runWorkflowLoop(
 	}
 	runner.SetNotesFile(notesFile)
 
-	// Send initial prompt to TUI (with template substitutions applied)
-	if tuiProgram != nil {
-		tuiProgram.SendInitialPrompt(runner.GetFirstStepPrompt())
-	}
-
 	// Create formatter for non-TUI output
 	formatter := output.NewFormatter(cfg.Verbose, false, os.Stdout)
 
@@ -885,8 +878,8 @@ func runWorkflowLoop(
 			// Non-TUI mode: print to formatter
 			formatter.PrintStepStart(info.Name, info.Position, info.Total)
 		} else {
-			// TUI mode: send progress update immediately when step starts
-			// Include accumulated cost/tokens to prevent display reset
+			// TUI mode: send step prompt and progress update
+			tuiProgram.SendInitialPrompt(runner.GetStepPrompt(info.Name))
 			tuiProgram.SendProgress(tui.ProgressInfo{
 				Iteration:        loopState.Iteration,
 				MaxIteration:     cfg.MaxIterations,
