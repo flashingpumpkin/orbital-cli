@@ -107,3 +107,18 @@ func (p *Program) Close() {
 		p.bridge.Close()
 	}
 }
+
+// SendInitialPrompt formats and sends the initial prompt to the TUI viewport.
+// This should be called after the TUI is ready (after the startup delay).
+func (p *Program) SendInitialPrompt(prompt string) {
+	// Send header with blank line after
+	p.program.Send(OutputLineMsg("📋 Initial Prompt"))
+	p.program.Send(OutputLineMsg(""))
+
+	// Send the prompt content (padding applied globally in syncViewportContent)
+	p.program.Send(OutputLineMsg(prompt))
+
+	// Blank line after prompt
+	p.program.Send(OutputLineMsg(""))
+}
+

@@ -278,6 +278,22 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 	return result, nil
 }
 
+// GetFirstStepPrompt returns the first step's prompt with template substitutions applied.
+// This is useful for displaying the initial prompt in the TUI.
+func (r *Runner) GetFirstStepPrompt() string {
+	if len(r.workflow.Steps) == 0 {
+		return ""
+	}
+	// Find first non-deferred step
+	for _, step := range r.workflow.Steps {
+		if !step.Deferred {
+			return r.buildPrompt(step.Prompt)
+		}
+	}
+	// All steps are deferred, return first step's prompt anyway
+	return r.buildPrompt(r.workflow.Steps[0].Prompt)
+}
+
 // buildPrompt substitutes template placeholders in the prompt.
 func (r *Runner) buildPrompt(template string) string {
 	result := template

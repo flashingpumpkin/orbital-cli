@@ -474,10 +474,14 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// The delay is minimal (50ms) and occurs only once at startup.
 		time.Sleep(50 * time.Millisecond)
 
-		// Check if workflow has gates (multi-step workflow)
-		if wf.HasGates() {
+		// Check if workflow has custom steps
+		if len(wf.Steps) > 0 {
+			// For workflows, the initial prompt is sent from within runWorkflowLoop
+			// after the runner is set up with proper template substitutions
 			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, tuiProgram)
 		} else {
+			// For non-workflow mode, send the initial prompt now
+			tuiProgram.SendInitialPrompt(prompt)
 			loopState, err = controller.Run(ctx, prompt)
 		}
 
@@ -492,8 +496,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// Clean up the Bridge's message pump goroutine
 		tuiProgram.Close()
 	} else {
-		// Check if workflow has gates (multi-step workflow)
-		if wf.HasGates() {
+		// Check if workflow has custom steps
+		if len(wf.Steps) > 0 {
 			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, nil)
 		} else {
 			loopState, err = controller.Run(ctx, prompt)
@@ -859,6 +863,11 @@ func runWorkflowLoop(
 		}
 	}
 	runner.SetNotesFile(notesFile)
+
+	// Send initial prompt to TUI (with template substitutions applied)
+	if tuiProgram != nil {
+		tuiProgram.SendInitialPrompt(runner.GetFirstStepPrompt())
+	}
 
 	// Create formatter for non-TUI output
 	formatter := output.NewFormatter(cfg.Verbose, false, os.Stdout)

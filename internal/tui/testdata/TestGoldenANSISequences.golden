@@ -3,11 +3,11 @@
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║ 1:Output                                                                     ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
-║[32mSuccess:[0m Operation completed                                                  ║
-║[31mError:[0m Something went wrong                                                   ║
-║[1mBold text[0m and normal text                                                     ║
-║[33;1mWarning:[0m Check your input                                                     ║
-║Plain text without any formatting                                             ║
+║  [32mSuccess:[0m Operation completed                                                ║
+║  [31mError:[0m Something went wrong                                                 ║
+║  [1mBold text[0m and normal text                                                   ║
+║  [33;1mWarning:[0m Check your input                                                   ║
+║  Plain text without any formatting                                           ║
 ║                                                                              ║
 ║                                                                              ║
 ║                                                                              ║

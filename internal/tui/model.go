@@ -1478,6 +1478,9 @@ func (m *Model) syncFileViewport(path string) {
 	m.fileViewports[path] = vp
 }
 
+// outputPaddingLeft is the left padding for output content in the viewport.
+const outputPaddingLeft = 2
+
 // syncViewportContent rebuilds viewport content from the ring buffer.
 // If tailing is enabled, it scrolls to the bottom after content update.
 func (m *Model) syncViewportContent() {
@@ -1493,9 +1496,14 @@ func (m *Model) syncViewportContent() {
 		return true
 	})
 
-	// Use lipgloss to wrap content to viewport width
-	wrapStyle := lipgloss.NewStyle().Width(m.viewport.Width)
-	wrapped := wrapStyle.Render(strings.Join(lines, "\n"))
+	// Use lipgloss to wrap and pad content
+	// Account for padding in the wrap width
+	wrapWidth := m.viewport.Width - outputPaddingLeft
+	if wrapWidth < 1 {
+		wrapWidth = 1
+	}
+	contentStyle := lipgloss.NewStyle().Width(wrapWidth).PaddingLeft(outputPaddingLeft)
+	wrapped := contentStyle.Render(strings.Join(lines, "\n"))
 	m.viewport.SetContent(wrapped)
 
 	// If tailing, scroll to bottom

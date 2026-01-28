@@ -198,6 +198,9 @@ name = "`)
 `)
 		sb.WriteString(step.Prompt)
 		sb.WriteString("\n\"\"\"\n")
+		if step.Deferred {
+			sb.WriteString("deferred = true\n")
+		}
 		if step.Gate {
 			sb.WriteString("gate = true\n")
 		}
