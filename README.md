@@ -23,14 +23,14 @@ Each iteration builds on the previous work since files remain modified on disk. 
 ## Installation
 
 ```bash
-go install github.com/flashingpumpkin/orbital/cmd/orbital@latest
+go install github.com/flashingpumpkin/orbital-cli/cmd/orbital@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/flashingpumpkin/orbital.git
-cd orbital
+git clone https://github.com/flashingpumpkin/orbital-cli.git
+cd orbital-cli
 go build -o orbital ./cmd/orbital
 ```
 
@@ -60,6 +60,9 @@ orbital ./spec.md --workflow reviewed
 
 # TDD workflow with red-green-refactor cycle
 orbital ./spec.md --workflow tdd
+
+# Autonomous workflow with self-directed task selection
+orbital ./spec.md --workflow autonomous
 
 # Worktree isolation mode (work in isolated git worktree)
 orbital ./spec.md --worktree
@@ -112,21 +115,22 @@ State is stored in `.orbital/state/` and automatically cleaned up on successful 
 | `--debug` | | false | Stream raw JSON output |
 | `--dry-run` | | false | Show what would be executed |
 | `--session-id` | `-s` | | Use specific session ID |
-| `--timeout` | `-t` | 30m | Timeout per iteration |
+| `--timeout` | `-t` | 5m | Default timeout per workflow step |
 | `--max-turns` | | 0 | Max agentic turns per iteration (0 = unlimited) |
 | `--system-prompt` | | | Custom system prompt |
 | `--agents` | | | JSON object defining custom agents |
 
 ## Workflow Presets
 
-Orbital supports multi-step workflows with gates (pass/fail checks) that control iteration flow.
+Orbital uses workflow steps for all execution. Each step has a prompt and an optional timeout (default: 5 minutes). If a step times out, it retries once with a continuation prompt before moving to the next iteration.
 
 | Preset | Description |
 |--------|-------------|
-| `fast` | Maximise work per iteration with review gate |
 | `spec-driven` | Single implement step with completion check (default) |
+| `fast` | Maximise work per iteration with review gate |
 | `reviewed` | Implement with review gate before completion |
 | `tdd` | Red-green-refactor cycle with review gate |
+| `autonomous` | Self-directed task selection with fix step and review gate |
 
 ### TDD Workflow
 
@@ -172,26 +176,33 @@ The TUI is enabled by default in interactive terminals. Disable it with `--minim
 Orbital can be configured via a TOML file at `.orbital/config.toml`:
 
 ```toml
-# Custom prompt template
-prompt = """
-Read the spec file{{plural}}:
-{{files}}
-
-When ALL stories have [x] checked, output: {{promise}}
-"""
-
-# Custom workflow (optional)
+# Custom workflow
 [workflow]
 name = "custom"
+
 [[workflow.steps]]
 name = "implement"
-prompt = "Implement the requirements in {{files}}."
+timeout = "10m"  # Override default 5 minute timeout
+prompt = """
+Study the spec file: {{spec_file}}
+
+Context files: {{context_files}}
+
+Notes file: {{notes_file}}
+
+Implement the next pending task.
+"""
+
+[[workflow.steps]]
+name = "fix"
+deferred = true  # Only runs when reached via on_fail
+prompt = "Fix issues identified in the review."
 
 [[workflow.steps]]
 name = "review"
 prompt = "Review the changes. Output <gate>PASS</gate> or <gate>FAIL</gate>"
 gate = true
-on_fail = "implement"
+on_fail = "fix"
 
 # Custom agents (optional)
 [agents.reviewer]
@@ -199,11 +210,25 @@ description = "Code review specialist"
 prompt = "You are a code reviewer."
 ```
 
+### Step Configuration
+
+| Field | Description |
+|-------|-------------|
+| `name` | Unique step identifier (required) |
+| `prompt` | Prompt template with placeholders (required) |
+| `timeout` | Step timeout duration (default: 5m) |
+| `gate` | If true, step must output `<gate>PASS</gate>` or `<gate>FAIL</gate>` |
+| `on_fail` | Step to jump to when gate fails |
+| `deferred` | If true, step only runs when reached via `on_fail` |
+
 ### Template Placeholders
 
 | Placeholder | Description |
 |-------------|-------------|
-| `{{files}}` | List of spec file paths |
+| `{{files}}` | List of all file paths (spec + context) |
+| `{{spec_file}}` | Primary spec file path |
+| `{{context_files}}` | List of context file paths |
+| `{{notes_file}}` | Path to notes file |
 | `{{plural}}` | "s" if multiple files, empty otherwise |
 | `{{promise}}` | Completion promise string |
 
@@ -281,11 +306,15 @@ orbital/
 
 ## How It Works
 
-1. **Load spec**: Read the task specification from file(s)
+1. **Load spec**: Read the task specification and context files
 2. **Initialise**: Set up iteration counter, budget tracking, session state, and TUI
-3. **Execute workflow**: Run workflow steps, each invoking Claude with step-specific prompts
+3. **Execute workflow steps**: Each step runs with its own timeout (default 5 minutes)
+   - On timeout: retry once with continuation prompt ("continue from where you left off")
+   - On second timeout: move to next iteration
 4. **Parse output**: Extract text, tokens, and costs from Claude's stream-json output
-5. **Check gates**: For gate steps, check for PASS/FAIL markers
+5. **Check gates**: For gate steps, check for `<gate>PASS</gate>` or `<gate>FAIL</gate>`
+   - On PASS: continue to next step
+   - On FAIL: jump to `on_fail` step (or retry)
 6. **Verify completion**: Run verification to check all spec items are complete
 7. **Handle queue**: Process any dynamically added spec files
 8. **Repeat or exit**: Continue until verification passes or limits reached

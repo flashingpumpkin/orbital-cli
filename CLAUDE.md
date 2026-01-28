@@ -41,7 +41,8 @@ orbital/
 │   ├── workflow/                # Multi-step workflow engine
 │   │   ├── workflow.go          # Workflow and Step structs
 │   │   ├── presets.go           # Built-in workflow presets
-│   │   └── runner.go            # Workflow execution
+│   │   ├── executor.go          # Runner and step execution with timeouts
+│   │   └── gate.go              # Gate checking logic
 │   ├── worktree/                # Git worktree isolation
 │   │   ├── setup.go             # Worktree creation phase
 │   │   ├── merge.go             # Merge back to main phase
@@ -58,7 +59,7 @@ orbital/
 │   ├── plans/                   # Tech specs and user stories
 │   ├── notes/                   # Session notes
 │   └── decisions/               # Architecture decision records
-├── go.mod                       # Module: github.com/flashingpumpkin/orbital
+├── go.mod                       # Module: github.com/flashingpumpkin/orbital-cli
 └── go.sum
 ```
 
@@ -66,21 +67,24 @@ orbital/
 
 ### The Loop
 
-The core loop in `internal/loop/controller.go`:
-1. Execute Claude CLI with the spec content as prompt
+All execution uses workflow steps. Each iteration runs through the workflow's steps in sequence:
+1. Execute each workflow step with its prompt (with per-step timeout, default 5 minutes)
 2. Parse stream-json output for tokens, cost, text
-3. Check if completion promise exists in output
-4. If found, run verification to confirm all items complete
-5. If budget exceeded or max iterations reached, exit with error
-6. Otherwise, repeat
+3. For gate steps, check for `<gate>PASS</gate>` or `<gate>FAIL</gate>`
+4. On timeout: retry once with continuation prompt, then fail
+5. After all steps complete, run verification to confirm all spec items are done
+6. If budget exceeded or max iterations reached, exit with error
+7. Otherwise, repeat the workflow
 
 ### Workflow Engine
 
 Multi-step workflows in `internal/workflow/`:
-- **Steps**: Named execution steps with prompts
+- **Steps**: Named execution steps with prompts and per-step timeouts
+- **Timeout**: Each step has a timeout (default 5 minutes); on timeout, retries once with continuation prompt
 - **Gates**: Steps that output `<gate>PASS</gate>` or `<gate>FAIL</gate>`
 - **OnFail**: Gate failure redirects to a specified step
-- **Presets**: fast, spec-driven (default), reviewed, tdd
+- **Deferred**: Steps marked deferred only run when reached via OnFail
+- **Presets**: fast, spec-driven (default), reviewed, tdd, autonomous
 
 ### Worktree Isolation
 
@@ -162,13 +166,13 @@ Test files are co-located with implementation: `foo.go` has `foo_test.go`.
 ## Configuration Defaults
 
 ```go
-MaxIterations:     50
-CompletionPromise: "<promise>COMPLETE</promise>"
-Model:             "opus"
-CheckerModel:      "haiku"
-MaxBudget:         100.00
-WorkingDir:        "."
-IterationTimeout:  5 * time.Minute
+MaxIterations:      50
+CompletionPromise:  "<promise>COMPLETE</promise>"
+Model:              "opus"
+CheckerModel:       "haiku"
+MaxBudget:          100.00
+WorkingDir:         "."
+DefaultStepTimeout: 5 * time.Minute  // Per workflow step
 ```
 
 ## Configuration File
@@ -176,18 +180,30 @@ IterationTimeout:  5 * time.Minute
 Orbital supports an optional TOML config file at `.orbital/config.toml`:
 
 ```toml
-# Custom prompt template
-prompt = """
-Implement the stories in {{files}}
-When done, output <promise>COMPLETE</promise>
-"""
-
 # Custom workflow
 [workflow]
 name = "custom"
+
 [[workflow.steps]]
 name = "implement"
-prompt = "..."
+timeout = "10m"  # Override default 5 minute timeout
+prompt = """
+Study the spec file: {{spec_file}}
+Context files: {{context_files}}
+Notes file: {{notes_file}}
+Implement the next pending task.
+"""
+
+[[workflow.steps]]
+name = "fix"
+deferred = true  # Only runs when reached via on_fail
+prompt = "Fix issues identified in the review."
+
+[[workflow.steps]]
+name = "review"
+prompt = "Review the changes. Output <gate>PASS</gate> or <gate>FAIL</gate>"
+gate = true
+on_fail = "fix"
 
 # Custom agents
 [agents.reviewer]
@@ -195,8 +211,11 @@ description = "Code reviewer"
 prompt = "You review code."
 ```
 
-Placeholders:
-- `{{files}}` - List of spec file paths
+Template placeholders:
+- `{{files}}` - List of all file paths (spec + context)
+- `{{spec_file}}` - Primary spec file path
+- `{{context_files}}` - List of context file paths
+- `{{notes_file}}` - Path to notes file
 - `{{plural}}` - "s" if multiple files
 - `{{promise}}` - Completion promise string
 
