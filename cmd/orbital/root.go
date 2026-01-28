@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/flashingpumpkin/orbital/internal/completion"
 	"github.com/flashingpumpkin/orbital/internal/config"
 	"github.com/flashingpumpkin/orbital/internal/executor"
 	"github.com/flashingpumpkin/orbital/internal/loop"
@@ -283,9 +282,6 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to validate files: %w", err)
 	}
 
-	// Create completion detector
-	detector := completion.New(cfg.CompletionPromise)
-
 	// Create executor
 	exec := executor.New(cfg)
 
@@ -341,12 +337,6 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		exec.SetStreamWriter(streamProcessor)
 	}
 
-	// Create loop controller
-	controller := loop.New(cfg, exec, detector)
-
-	// Set spec file paths for verification
-	controller.SetSpecFiles(absFilePaths)
-
 	// Generate a state ID for orbit's internal tracking (separate from Claude session ID)
 	stateID, err := generateSessionID()
 	if err != nil {
@@ -364,9 +354,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create state manager: %w", err)
 	}
-	controller.SetStateManager(sm)
 
-	// Build the prompt
+	// Build the prompt (used for verbose/dry-run output)
 	prompt := sp.BuildPrompt()
 
 	// Create formatter for non-TUI output
@@ -374,75 +363,6 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 	if !useTUI {
 		formatter = output.NewFormatter(cfg.Verbose, quiet, os.Stdout)
 	}
-
-	// Track iteration timing for non-TUI mode
-	var iterationStartTime time.Time
-
-	// Track accumulated cost/tokens for TUI display continuity
-	var accumulatedCost float64
-	var accumulatedTokensIn, accumulatedTokensOut int
-
-	// Set iteration start callback
-	controller.SetIterationStartCallback(func(iteration, maxIterations int) {
-		iterationStartTime = time.Now()
-		if formatter != nil {
-			formatter.PrintIterationStart(iteration, maxIterations)
-		}
-		// Send prompt and progress update to TUI immediately when iteration starts
-		if tuiProgram != nil {
-			tuiProgram.SendInitialPrompt(prompt)
-			tuiProgram.SendProgress(tui.ProgressInfo{
-				Iteration:        iteration,
-				MaxIteration:     maxIterations,
-				TokensIn:         accumulatedTokensIn,
-				TokensOut:        accumulatedTokensOut,
-				Cost:             accumulatedCost,
-				Budget:           cfg.MaxBudget,
-				ContextWindow:    config.GetContextWindow(cfg.Model),
-				IterationTimeout: cfg.IterationTimeout,
-				IterationStart:   iterationStartTime,
-				WorkflowName:     wf.Name,
-			})
-		}
-	})
-
-	// Set iteration callback to update state after each iteration
-	controller.SetIterationCallback(func(iteration int, totalCost float64, totalTokensIn, totalTokensOut int) error {
-		// Update accumulated values for next iteration's start callback
-		accumulatedCost = totalCost
-		accumulatedTokensIn = totalTokensIn
-		accumulatedTokensOut = totalTokensOut
-
-		// Update state
-		if err := updateState(st, iteration, totalCost); err != nil {
-			return err
-		}
-
-		// Print iteration stats in non-TUI mode
-		if formatter != nil {
-			// Calculate per-iteration cost (approximate - totalCost is cumulative)
-			duration := time.Since(iterationStartTime)
-			formatter.PrintIterationEnd(duration, totalTokensIn, totalTokensOut, totalCost, "Continuing")
-		}
-
-		// Send progress update to TUI if active
-		if tuiProgram != nil {
-			tuiProgram.SendProgress(tui.ProgressInfo{
-				Iteration:        iteration,
-				MaxIteration:     cfg.MaxIterations,
-				TokensIn:         totalTokensIn,
-				TokensOut:        totalTokensOut,
-				Cost:             totalCost,
-				Budget:           cfg.MaxBudget,
-				WorkflowName:     wf.Name,
-				ContextWindow:    config.GetContextWindow(cfg.Model),
-				IterationTimeout: cfg.IterationTimeout,
-				IterationStart:   iterationStartTime,
-			})
-		}
-
-		return nil
-	})
 
 	// Print banner for non-TUI mode
 	if formatter != nil {
@@ -474,14 +394,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// The delay is minimal (50ms) and occurs only once at startup.
 		time.Sleep(50 * time.Millisecond)
 
-		// Check if workflow has custom steps
-		if len(wf.Steps) > 0 {
-			// For workflows, the prompt is sent in the step start callback
-			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, tuiProgram)
-		} else {
-			// For non-workflow mode, the prompt is sent in the iteration start callback
-			loopState, err = controller.Run(ctx, prompt)
-		}
+		// Run the workflow loop (step timeouts are handled by the workflow runner)
+		loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, tuiProgram)
 
 		// Quit the TUI - use Kill() for immediate exit on interrupt
 		if errors.Is(err, context.Canceled) {
@@ -494,12 +408,8 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		// Clean up the Bridge's message pump goroutine
 		tuiProgram.Close()
 	} else {
-		// Check if workflow has custom steps
-		if len(wf.Steps) > 0 {
-			loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, nil)
-		} else {
-			loopState, err = controller.Run(ctx, prompt)
-		}
+		// Run the workflow loop (step timeouts are handled by the workflow runner)
+		loopState, err = runWorkflowLoop(ctx, cfg, exec, wf, absFilePaths, spec.NotesFile, sm, st, nil)
 	}
 
 	// Print summary
@@ -980,7 +890,7 @@ func runWorkflowLoop(
 			fmt.Printf("══════════════════════════════════════════════════════════════\n\n")
 		}
 
-		// Run the workflow (all steps)
+		// Run the workflow (step timeouts are handled by the workflow runner)
 		runResult, err := runner.Run(ctx)
 
 		// Update iteration callback
@@ -990,6 +900,16 @@ func runWorkflowLoop(
 		}
 
 		if err != nil {
+			// Check for step timeout (after retry) - continue to next iteration
+			if errors.Is(err, workflow.ErrStepTimedOut) {
+				msg := fmt.Sprintf("Iteration %d: step timed out after retry. Continuing to next iteration...", iteration)
+				if tuiProgram != nil {
+					tuiProgram.SendOutput("⏱ " + msg)
+				} else {
+					fmt.Printf("\n%s\n", msg)
+				}
+				continue
+			}
 			// Check for max gate retries exceeded
 			if errors.Is(err, workflow.ErrMaxGateRetriesExceeded) {
 				if tuiProgram == nil {

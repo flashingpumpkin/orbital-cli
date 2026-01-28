@@ -233,8 +233,20 @@ func (c *Controller) Run(ctx context.Context, prompt string) (*LoopState, error)
 			c.iterationStartCallback(i, c.config.MaxIterations)
 		}
 
+		// Create iteration context with timeout if configured
+		iterCtx := ctx
+		var iterCancel context.CancelFunc
+		if c.config.IterationTimeout > 0 {
+			iterCtx, iterCancel = context.WithTimeout(ctx, c.config.IterationTimeout)
+		}
+
 		// Execute the prompt
-		result, err := c.executor.Execute(ctx, currentPrompt)
+		result, err := c.executor.Execute(iterCtx, currentPrompt)
+
+		// Cancel iteration context to release resources
+		if iterCancel != nil {
+			iterCancel()
+		}
 
 		// Update cumulative state from result even if there was an error
 		// (e.g., context cancellation still produces partial stats)
@@ -247,6 +259,11 @@ func (c *Controller) Run(ctx context.Context, prompt string) (*LoopState, error)
 		}
 
 		if err != nil {
+			// If iteration timed out, continue to next iteration
+			if errors.Is(err, context.DeadlineExceeded) {
+				fmt.Printf("\nIteration %d timed out. Continuing to next iteration...\n", i)
+				continue
+			}
 			state.Error = err
 			return state, err
 		}

@@ -5,10 +5,24 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ErrMaxGateRetriesExceeded is returned when a gate fails too many times.
 var ErrMaxGateRetriesExceeded = errors.New("max gate retries exceeded")
+
+// ErrStepTimedOut is returned when a step times out after retry.
+var ErrStepTimedOut = errors.New("step timed out")
+
+// TimeoutContinuationPrompt is appended to the original prompt when retrying after timeout.
+const TimeoutContinuationPrompt = `
+
+---
+IMPORTANT: Your previous attempt timed out after %s. This is your final attempt.
+Continue from where you left off. Do not start over. Complete the remaining work.
+---
+
+`
 
 // ExecutionResult contains the result of executing a single step.
 type ExecutionResult struct {
@@ -54,6 +68,12 @@ type StepInfo struct {
 
 	// IsGate indicates whether this step is a gate step.
 	IsGate bool
+
+	// Timeout is the timeout duration for this step.
+	Timeout time.Duration
+
+	// IsTimeoutRetry indicates this is a retry after timeout.
+	IsTimeoutRetry bool
 }
 
 // RunnerCallback is called after each step completes.
@@ -158,6 +178,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 
 	stepIndex := 0
 	gateRetries := make(map[string]int)
+	timeoutRetries := make(map[string]bool)
 	arrivedViaOnFail := false
 
 	for stepIndex < len(r.workflow.Steps) {
@@ -172,15 +193,20 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 		// Reset the flag after checking
 		arrivedViaOnFail = false
 
+		// Check if this is a timeout retry
+		isTimeoutRetry := timeoutRetries[step.Name]
+
 		// Call start callback if set
 		if r.startCallback != nil {
 			info := StepInfo{
-				Name:        step.Name,
-				Position:    stepIndex + 1, // 1-indexed
-				Total:       len(r.workflow.Steps),
-				GateRetries: gateRetries[step.Name],
-				MaxRetries:  r.workflow.EffectiveMaxGateRetries(),
-				IsGate:      step.Gate,
+				Name:           step.Name,
+				Position:       stepIndex + 1, // 1-indexed
+				Total:          len(r.workflow.Steps),
+				GateRetries:    gateRetries[step.Name],
+				MaxRetries:     r.workflow.EffectiveMaxGateRetries(),
+				IsGate:         step.Gate,
+				Timeout:        step.EffectiveTimeout(),
+				IsTimeoutRetry: isTimeoutRetry,
 			}
 			r.startCallback(info)
 		}
@@ -188,8 +214,42 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 		// Build the prompt with template substitution
 		prompt := r.buildPrompt(step.Prompt)
 
+		// If this is a timeout retry, append the continuation prompt
+		if isTimeoutRetry {
+			prompt += fmt.Sprintf(TimeoutContinuationPrompt, step.EffectiveTimeout())
+		}
+
+		// Create timeout context for this step
+		stepCtx, stepCancel := context.WithTimeout(ctx, step.EffectiveTimeout())
+
 		// Execute the step
-		execResult, err := r.executor.ExecuteStep(ctx, step.Name, prompt)
+		execResult, err := r.executor.ExecuteStep(stepCtx, step.Name, prompt)
+
+		// Cancel the step context to release resources
+		stepCancel()
+
+		// Handle timeout - retry once
+		if err != nil && errors.Is(err, context.DeadlineExceeded) {
+			// Update totals from partial result if available
+			if execResult != nil {
+				result.TotalCost += execResult.CostUSD
+				result.TotalTokensIn += execResult.TokensIn
+				result.TotalTokensOut += execResult.TokensOut
+			}
+
+			// Check if we already retried this step for timeout
+			if timeoutRetries[step.Name] {
+				return result, fmt.Errorf("%w: step %q timed out twice", ErrStepTimedOut, step.Name)
+			}
+
+			// Mark for retry and continue (don't increment stepIndex)
+			timeoutRetries[step.Name] = true
+			continue
+		}
+
+		// Clear timeout retry flag on successful execution
+		delete(timeoutRetries, step.Name)
+
 		if err != nil {
 			return result, fmt.Errorf("step %q failed: %w", step.Name, err)
 		}
@@ -220,12 +280,14 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 		// Call callback if set
 		if r.callback != nil {
 			info := StepInfo{
-				Name:        step.Name,
-				Position:    stepIndex + 1, // 1-indexed
-				Total:       len(r.workflow.Steps),
-				GateRetries: gateRetries[step.Name],
-				MaxRetries:  r.workflow.EffectiveMaxGateRetries(),
-				IsGate:      step.Gate,
+				Name:           step.Name,
+				Position:       stepIndex + 1, // 1-indexed
+				Total:          len(r.workflow.Steps),
+				GateRetries:    gateRetries[step.Name],
+				MaxRetries:     r.workflow.EffectiveMaxGateRetries(),
+				IsGate:         step.Gate,
+				Timeout:        step.EffectiveTimeout(),
+				IsTimeoutRetry: isTimeoutRetry,
 			}
 			if err := r.callback(info, execResult, gateResult); err != nil {
 				return result, err

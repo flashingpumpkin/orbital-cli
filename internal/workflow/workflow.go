@@ -4,7 +4,11 @@ package workflow
 import (
 	"errors"
 	"fmt"
+	"time"
 )
+
+// DefaultStepTimeout is the default timeout for a workflow step (5 minutes).
+const DefaultStepTimeout = 5 * time.Minute
 
 // Step represents a single step in a workflow.
 type Step struct {
@@ -13,6 +17,10 @@ type Step struct {
 
 	// Prompt is the prompt sent to Claude for this step (required).
 	Prompt string `toml:"prompt" json:"prompt"`
+
+	// Timeout is the maximum duration for this step (default: 5 minutes).
+	// If the step times out, it will be retried once with a continuation prompt.
+	Timeout time.Duration `toml:"timeout" json:"timeout,omitempty"`
 
 	// Gate marks this step as a quality gate that must pass before continuing.
 	Gate bool `toml:"gate" json:"gate,omitempty"`
@@ -23,6 +31,14 @@ type Step struct {
 	// Deferred marks this step to be skipped during normal execution.
 	// Deferred steps only run when reached via a gate's OnFail jump.
 	Deferred bool `toml:"deferred" json:"deferred,omitempty"`
+}
+
+// EffectiveTimeout returns the step's timeout or the default if not set.
+func (s *Step) EffectiveTimeout() time.Duration {
+	if s.Timeout > 0 {
+		return s.Timeout
+	}
+	return DefaultStepTimeout
 }
 
 // Workflow represents a multi-step workflow configuration.
