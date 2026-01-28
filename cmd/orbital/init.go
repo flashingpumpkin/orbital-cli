@@ -199,7 +199,7 @@ name = "`)
 		sb.WriteString(step.Prompt)
 		sb.WriteString("\n\"\"\"\n")
 		if step.Timeout > 0 {
-			sb.WriteString(fmt.Sprintf("timeout = \"%s\"\n", step.Timeout))
+			sb.WriteString(fmt.Sprintf("timeout = \"%s\"\n", step.EffectiveTimeout()))
 		}
 		if step.Deferred {
 			sb.WriteString("deferred = true\n")

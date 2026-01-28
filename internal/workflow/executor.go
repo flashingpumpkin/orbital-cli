@@ -216,7 +216,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 
 		// If this is a timeout retry, append the continuation prompt
 		if isTimeoutRetry {
-			prompt += fmt.Sprintf(TimeoutContinuationPrompt, step.EffectiveTimeout())
+			prompt += fmt.Sprintf(TimeoutContinuationPrompt, formatDuration(step.EffectiveTimeout()))
 		}
 
 		// Create timeout context for this step

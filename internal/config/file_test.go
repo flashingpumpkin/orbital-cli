@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/flashingpumpkin/orbital/internal/workflow"
 )
@@ -392,5 +393,137 @@ func TestWorkflowConfig_ToWorkflow(t *testing.T) {
 				t.Errorf("ToWorkflow() returned %d steps, want %d", len(w.Steps), tt.wantSteps)
 			}
 		})
+	}
+}
+
+func TestLoadFileConfig_WithStepTimeout(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".orbital")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	configContent := `[workflow]
+name = "timeout-test"
+
+[[workflow.steps]]
+name = "implement"
+prompt = "Do the thing"
+timeout = "10m"
+
+[[workflow.steps]]
+name = "review"
+prompt = "Review"
+timeout = "2m"
+gate = true
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFileConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadFileConfig() error = %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("LoadFileConfig() = nil, want config")
+	}
+	if cfg.Workflow == nil {
+		t.Fatal("Workflow = nil, want workflow config")
+	}
+	if len(cfg.Workflow.Steps) != 2 {
+		t.Fatalf("len(Workflow.Steps) = %d, want 2", len(cfg.Workflow.Steps))
+	}
+
+	// Check first step timeout
+	step1 := cfg.Workflow.Steps[0]
+	if step1.EffectiveTimeout() != 10*time.Minute {
+		t.Errorf("Steps[0].EffectiveTimeout() = %v, want %v", step1.EffectiveTimeout(), 10*time.Minute)
+	}
+
+	// Check second step timeout
+	step2 := cfg.Workflow.Steps[1]
+	if step2.EffectiveTimeout() != 2*time.Minute {
+		t.Errorf("Steps[1].EffectiveTimeout() = %v, want %v", step2.EffectiveTimeout(), 2*time.Minute)
+	}
+}
+
+func TestLoadFileConfig_WithStepTimeoutVariousFormats(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".orbital")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	configContent := `[workflow]
+name = "timeout-formats"
+
+[[workflow.steps]]
+name = "step1"
+prompt = "30 seconds"
+timeout = "30s"
+
+[[workflow.steps]]
+name = "step2"
+prompt = "1 hour"
+timeout = "1h"
+
+[[workflow.steps]]
+name = "step3"
+prompt = "1h30m"
+timeout = "1h30m"
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFileConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadFileConfig() error = %v", err)
+	}
+
+	tests := []struct {
+		stepIndex int
+		want      time.Duration
+	}{
+		{0, 30 * time.Second},
+		{1, 1 * time.Hour},
+		{2, 90 * time.Minute},
+	}
+
+	for _, tt := range tests {
+		step := cfg.Workflow.Steps[tt.stepIndex]
+		if step.EffectiveTimeout() != tt.want {
+			t.Errorf("Steps[%d].EffectiveTimeout() = %v, want %v", tt.stepIndex, step.EffectiveTimeout(), tt.want)
+		}
+	}
+}
+
+func TestLoadFileConfig_WithoutStepTimeout(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".orbital")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	configContent := `[workflow]
+name = "no-timeout"
+
+[[workflow.steps]]
+name = "implement"
+prompt = "Do the thing"
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFileConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadFileConfig() error = %v", err)
+	}
+
+	step := cfg.Workflow.Steps[0]
+	if step.EffectiveTimeout() != workflow.DefaultStepTimeout {
+		t.Errorf("Steps[0].EffectiveTimeout() = %v, want default %v", step.EffectiveTimeout(), workflow.DefaultStepTimeout)
 	}
 }

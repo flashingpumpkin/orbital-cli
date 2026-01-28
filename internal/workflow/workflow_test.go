@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"testing"
+	"time"
 )
 
 func TestWorkflow_Validate(t *testing.T) {
@@ -189,5 +190,102 @@ func TestWorkflow_EffectiveMaxGateRetries(t *testing.T) {
 				t.Errorf("EffectiveMaxGateRetries() = %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDuration_UnmarshalText(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"seconds", "30s", 30 * time.Second, false},
+		{"minutes", "5m", 5 * time.Minute, false},
+		{"hours", "2h", 2 * time.Hour, false},
+		{"combined", "1h30m", 90 * time.Minute, false},
+		{"milliseconds", "500ms", 500 * time.Millisecond, false},
+		{"complex", "1h2m3s", time.Hour + 2*time.Minute + 3*time.Second, false},
+		{"invalid", "invalid", 0, true},
+		{"empty", "", 0, true},
+		{"number only", "10", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var d Duration
+			err := d.UnmarshalText([]byte(tt.input))
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("UnmarshalText(%q) expected error, got nil", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("UnmarshalText(%q) unexpected error: %v", tt.input, err)
+				return
+			}
+			if time.Duration(d) != tt.want {
+				t.Errorf("UnmarshalText(%q) = %v, want %v", tt.input, time.Duration(d), tt.want)
+			}
+		})
+	}
+}
+
+func TestDuration_Duration(t *testing.T) {
+	d := Duration(5 * time.Minute)
+	if got := d.Duration(); got != 5*time.Minute {
+		t.Errorf("Duration() = %v, want %v", got, 5*time.Minute)
+	}
+}
+
+func TestStep_EffectiveTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		step Step
+		want time.Duration
+	}{
+		{
+			name: "default timeout",
+			step: Step{Name: "test", Prompt: "test"},
+			want: DefaultStepTimeout,
+		},
+		{
+			name: "custom timeout",
+			step: Step{Name: "test", Prompt: "test", Timeout: Duration(10 * time.Minute)},
+			want: 10 * time.Minute,
+		},
+		{
+			name: "zero uses default",
+			step: Step{Name: "test", Prompt: "test", Timeout: 0},
+			want: DefaultStepTimeout,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.step.EffectiveTimeout()
+			if got != tt.want {
+				t.Errorf("EffectiveTimeout() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWorkflow_SetAllStepTimeouts(t *testing.T) {
+	w := Workflow{
+		Steps: []Step{
+			{Name: "step1", Prompt: "prompt1"},
+			{Name: "step2", Prompt: "prompt2", Timeout: Duration(10 * time.Minute)},
+			{Name: "step3", Prompt: "prompt3"},
+		},
+	}
+
+	w.SetAllStepTimeouts(15 * time.Minute)
+
+	for i, step := range w.Steps {
+		if step.EffectiveTimeout() != 15*time.Minute {
+			t.Errorf("Step %d timeout = %v, want %v", i, step.EffectiveTimeout(), 15*time.Minute)
+		}
 	}
 }

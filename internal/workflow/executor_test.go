@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 // mockStepExecutor is a test mock for StepExecutor.
@@ -758,6 +759,87 @@ func TestRunner_Run_AllTemplateVariables(t *testing.T) {
 	}
 
 	expected := "Spec: /path/to/spec.md\nContext: - /path/to/context.md\nNotes: /path/to/notes.md\nAll: - /path/to/spec.md\n- /path/to/context.md"
+	if capturedPrompt != expected {
+		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		want     string
+	}{
+		{"1 second", 1 * time.Second, "1 second"},
+		{"30 seconds", 30 * time.Second, "30 seconds"},
+		{"1 minute", 1 * time.Minute, "1 minute"},
+		{"5 minutes", 5 * time.Minute, "5 minutes"},
+		{"1 hour", 1 * time.Hour, "1 hour"},
+		{"2 hours", 2 * time.Hour, "2 hours"},
+		{"90 seconds shows as minutes", 90 * time.Second, "1 minute"},
+		{"120 seconds shows as minutes", 120 * time.Second, "2 minutes"},
+		{"60 minutes shows as hour", 60 * time.Minute, "1 hour"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatDuration(tt.duration)
+			if got != tt.want {
+				t.Errorf("formatDuration(%v) = %q, want %q", tt.duration, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunner_Run_TimeoutSubstitution(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "You have {{timeout}} to complete this.", Timeout: Duration(10 * time.Minute)},
+		},
+	}
+
+	var capturedPrompt string
+	exec := newMockExecutor()
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		capturedPrompt = prompt
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+	}
+
+	runner := NewRunner(w, exec)
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	expected := "You have 10 minutes to complete this."
+	if capturedPrompt != expected {
+		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
+	}
+}
+
+func TestRunner_Run_TimeoutSubstitutionDefault(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Timeout is {{timeout}}."},
+		},
+	}
+
+	var capturedPrompt string
+	exec := newMockExecutor()
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		capturedPrompt = prompt
+		return &ExecutionResult{StepName: stepName, Output: "Done", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+	}
+
+	runner := NewRunner(w, exec)
+
+	_, err := runner.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	expected := "Timeout is 5 minutes."
 	if capturedPrompt != expected {
 		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
 	}

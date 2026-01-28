@@ -10,6 +10,25 @@ import (
 // DefaultStepTimeout is the default timeout for a workflow step (5 minutes).
 const DefaultStepTimeout = 5 * time.Minute
 
+// Duration is a wrapper around time.Duration that supports TOML unmarshaling from strings.
+type Duration time.Duration
+
+// UnmarshalText implements encoding.TextUnmarshaler for Duration.
+// This allows TOML to parse strings like "10m" or "1h" into Duration values.
+func (d *Duration) UnmarshalText(text []byte) error {
+	parsed, err := time.ParseDuration(string(text))
+	if err != nil {
+		return err
+	}
+	*d = Duration(parsed)
+	return nil
+}
+
+// Duration returns the underlying time.Duration value.
+func (d Duration) Duration() time.Duration {
+	return time.Duration(d)
+}
+
 // Step represents a single step in a workflow.
 type Step struct {
 	// Name is the unique identifier for this step (required).
@@ -20,7 +39,7 @@ type Step struct {
 
 	// Timeout is the maximum duration for this step (default: 5 minutes).
 	// If the step times out, it will be retried once with a continuation prompt.
-	Timeout time.Duration `toml:"timeout" json:"timeout,omitempty"`
+	Timeout Duration `toml:"timeout" json:"timeout,omitempty"`
 
 	// Gate marks this step as a quality gate that must pass before continuing.
 	Gate bool `toml:"gate" json:"gate,omitempty"`
@@ -36,7 +55,7 @@ type Step struct {
 // EffectiveTimeout returns the step's timeout or the default if not set.
 func (s *Step) EffectiveTimeout() time.Duration {
 	if s.Timeout > 0 {
-		return s.Timeout
+		return time.Duration(s.Timeout)
 	}
 	return DefaultStepTimeout
 }
@@ -140,6 +159,6 @@ func (w *Workflow) HasGates() bool {
 // This is used when the --timeout CLI flag is provided to override step timeouts.
 func (w *Workflow) SetAllStepTimeouts(timeout time.Duration) {
 	for i := range w.Steps {
-		w.Steps[i].Timeout = timeout
+		w.Steps[i].Timeout = Duration(timeout)
 	}
 }
