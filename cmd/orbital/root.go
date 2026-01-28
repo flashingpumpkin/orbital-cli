@@ -291,6 +291,11 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve workflow: %w", err)
 	}
 
+	// If --timeout flag was explicitly provided, override all step timeouts
+	if cmd.Flags().Changed("timeout") {
+		wf.SetAllStepTimeouts(timeout)
+	}
+
 	// Determine if we should use TUI mode
 	useTUI := shouldUseTUI()
 

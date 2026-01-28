@@ -115,7 +115,7 @@ State is stored in `.orbital/state/` and automatically cleaned up on successful 
 | `--debug` | | false | Stream raw JSON output |
 | `--dry-run` | | false | Show what would be executed |
 | `--session-id` | `-s` | | Use specific session ID |
-| `--timeout` | `-t` | 5m | Default timeout per workflow step |
+| `--timeout` | `-t` | 5m | Timeout for all workflow steps (overrides step-level timeouts) |
 | `--max-turns` | | 0 | Max agentic turns per iteration (0 = unlimited) |
 | `--system-prompt` | | | Custom system prompt |
 | `--agents` | | | JSON object defining custom agents |
@@ -229,6 +229,7 @@ prompt = "You are a code reviewer."
 | `{{spec_file}}` | Primary spec file path |
 | `{{context_files}}` | List of context file paths |
 | `{{notes_file}}` | Path to notes file |
+| `{{timeout}}` | Step timeout as human-readable text (e.g., "5 minutes") |
 | `{{plural}}` | "s" if multiple files, empty otherwise |
 | `{{promise}}` | Completion promise string |
 

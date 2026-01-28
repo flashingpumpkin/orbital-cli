@@ -216,6 +216,7 @@ Template placeholders:
 - `{{spec_file}}` - Primary spec file path
 - `{{context_files}}` - List of context file paths
 - `{{notes_file}}` - Path to notes file
+- `{{timeout}}` - Step timeout as human-readable text (e.g., "5 minutes")
 - `{{plural}}` - "s" if multiple files
 - `{{promise}}` - Completion promise string
 

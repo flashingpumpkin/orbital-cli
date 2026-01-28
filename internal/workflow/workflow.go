@@ -135,3 +135,11 @@ func (w *Workflow) HasGates() bool {
 	}
 	return false
 }
+
+// SetAllStepTimeouts sets the timeout for all steps in the workflow.
+// This is used when the --timeout CLI flag is provided to override step timeouts.
+func (w *Workflow) SetAllStepTimeouts(timeout time.Duration) {
+	for i := range w.Steps {
+		w.Steps[i].Timeout = timeout
+	}
+}

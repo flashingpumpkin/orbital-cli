@@ -212,7 +212,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 		}
 
 		// Build the prompt with template substitution
-		prompt := r.buildPrompt(step.Prompt)
+		prompt := r.buildPrompt(step.Prompt, step.EffectiveTimeout())
 
 		// If this is a timeout retry, append the continuation prompt
 		if isTimeoutRetry {
@@ -347,28 +347,32 @@ func (r *Runner) GetFirstStepPrompt() string {
 		return ""
 	}
 	// Find first non-deferred step
-	for _, step := range r.workflow.Steps {
+	for i := range r.workflow.Steps {
+		step := &r.workflow.Steps[i]
 		if !step.Deferred {
-			return r.buildPrompt(step.Prompt)
+			return r.buildPrompt(step.Prompt, step.EffectiveTimeout())
 		}
 	}
 	// All steps are deferred, return first step's prompt anyway
-	return r.buildPrompt(r.workflow.Steps[0].Prompt)
+	step := &r.workflow.Steps[0]
+	return r.buildPrompt(step.Prompt, step.EffectiveTimeout())
 }
 
 // GetStepPrompt returns a step's prompt by name with template substitutions applied.
 // Returns empty string if the step is not found.
 func (r *Runner) GetStepPrompt(name string) string {
-	for _, step := range r.workflow.Steps {
+	for i := range r.workflow.Steps {
+		step := &r.workflow.Steps[i]
 		if step.Name == name {
-			return r.buildPrompt(step.Prompt)
+			return r.buildPrompt(step.Prompt, step.EffectiveTimeout())
 		}
 	}
 	return ""
 }
 
 // buildPrompt substitutes template placeholders in the prompt.
-func (r *Runner) buildPrompt(template string) string {
+// The timeout parameter is the step's effective timeout for the {{timeout}} placeholder.
+func (r *Runner) buildPrompt(template string, timeout time.Duration) string {
 	result := template
 
 	// Handle {{files}} placeholder (backwards compatible - all files)
@@ -407,6 +411,9 @@ func (r *Runner) buildPrompt(template string) string {
 		result = strings.ReplaceAll(result, "{{notes_file}}", "(no notes file)")
 	}
 
+	// Handle {{timeout}} placeholder (human-readable step timeout)
+	result = strings.ReplaceAll(result, "{{timeout}}", formatDuration(timeout))
+
 	// Handle {{plural}} placeholder
 	plural := ""
 	if len(r.filePaths) > 1 {
@@ -415,4 +422,27 @@ func (r *Runner) buildPrompt(template string) string {
 	result = strings.ReplaceAll(result, "{{plural}}", plural)
 
 	return result
+}
+
+// formatDuration formats a duration as human-readable text (e.g., "5 minutes", "1 hour").
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		secs := int(d.Seconds())
+		if secs == 1 {
+			return "1 second"
+		}
+		return fmt.Sprintf("%d seconds", secs)
+	}
+	if d < time.Hour {
+		mins := int(d.Minutes())
+		if mins == 1 {
+			return "1 minute"
+		}
+		return fmt.Sprintf("%d minutes", mins)
+	}
+	hours := int(d.Hours())
+	if hours == 1 {
+		return "1 hour"
+	}
+	return fmt.Sprintf("%d hours", hours)
 }
