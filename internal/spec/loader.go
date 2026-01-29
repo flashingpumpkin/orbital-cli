@@ -252,15 +252,3 @@ func BuildVerificationPrompt(files []string) string {
 	}
 	return strings.ReplaceAll(VerificationPrompt, "{{files}}", strings.TrimSuffix(fileList.String(), "\n"))
 }
-
-// Load is deprecated - use Validate instead.
-// Kept for backward compatibility.
-func Load(path string) (*Spec, error) {
-	return Validate([]string{path})
-}
-
-// LoadMultiple is deprecated - use Validate instead.
-// Kept for backward compatibility.
-func LoadMultiple(paths []string) (*Spec, error) {
-	return Validate(paths)
-}

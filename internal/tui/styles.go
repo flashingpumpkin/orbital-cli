@@ -260,10 +260,7 @@ func RenderBottomBorder(width int, style lipgloss.Style) string {
 	return style.Render(BoxBottomLeft + repeatString(BoxHorizontal, width-2) + BoxBottomRight)
 }
 
-// RenderSingleBorder renders a horizontal single-line border of the given width.
-func RenderSingleBorder(width int, style lipgloss.Style) string {
-	return style.Render(repeatString(InnerHorizontal, width))
-}
+
 
 // repeatString repeats a string n times.
 func repeatString(s string, n int) string {
