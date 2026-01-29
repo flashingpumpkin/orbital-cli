@@ -234,6 +234,21 @@ prompt = "You are a code reviewer."
 | `{{plural}}` | "s" if multiple files, empty otherwise |
 | `{{promise}}` | Completion promise string |
 
+### Built-in Agents
+
+Orbital includes several built-in review agents that are automatically available to Claude via the Task tool. These are particularly useful in workflows with review gates:
+
+| Agent | Purpose |
+|-------|---------|
+| `general-purpose` | Research, code exploration, and multi-step tasks |
+| `security-reviewer` | Identifies security vulnerabilities and attack vectors |
+| `design-reviewer` | Checks architecture, SOLID principles, and coupling |
+| `logic-reviewer` | Finds bugs, edge cases, and race conditions |
+| `error-reviewer` | Reviews error handling and recovery patterns |
+| `data-reviewer` | Validates data handling, consistency, and null safety |
+
+These agents are used in the rigorous review gates of the `fast`, `reviewed`, `tdd`, and `autonomous` presets. You can override or add to these agents via the config file or `--agents` flag.
+
 ## Exit Codes
 
 | Code | Meaning |

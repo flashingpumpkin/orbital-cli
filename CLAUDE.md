@@ -238,6 +238,16 @@ Template placeholders:
 - `{{plural}}` - "s" if multiple files
 - `{{promise}}` - Completion promise string
 
+Built-in agents (always available via Task tool):
+- `general-purpose` - Research, code exploration, multi-step tasks
+- `security-reviewer` - Security vulnerabilities and attack vectors
+- `design-reviewer` - Architecture, SOLID principles, coupling
+- `logic-reviewer` - Bugs, edge cases, race conditions
+- `error-reviewer` - Error handling and recovery patterns
+- `data-reviewer` - Data handling, consistency, null safety
+
+These are used in review gates for rigorous code review across multiple dimensions.
+
 ## Workflow Presets
 
 | Preset | Steps | Description |
