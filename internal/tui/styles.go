@@ -260,8 +260,6 @@ func RenderBottomBorder(width int, style lipgloss.Style) string {
 	return style.Render(BoxBottomLeft + repeatString(BoxHorizontal, width-2) + BoxBottomRight)
 }
 
-
-
 // repeatString repeats a string n times.
 func repeatString(s string, n int) string {
 	if n <= 0 {
