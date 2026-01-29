@@ -198,6 +198,9 @@ DefaultStepTimeout: 5 * time.Minute  // Per workflow step
 Orbital supports an optional TOML config file at `.orbital/config.toml`:
 
 ```toml
+# Enable dangerous mode (optional, default: false)
+dangerous = false
+
 # Custom workflow
 [workflow]
 name = "custom"
@@ -223,10 +226,12 @@ prompt = "Review the changes. Output <gate>PASS</gate> or <gate>FAIL</gate>"
 gate = true
 on_fail = "fix"
 
-# Custom agents
+# Custom agents (merged with built-in agents)
 [agents.reviewer]
 description = "Code reviewer"
 prompt = "You review code."
+tools = ["bash", "view", "edit"]  # Optional
+model = "sonnet"  # Optional
 ```
 
 Template placeholders:

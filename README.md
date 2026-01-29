@@ -8,7 +8,7 @@ This project was developed entirely through AI-driven development using Claude C
 
 This serves as both a practical tool and an experiment in autonomous software development.
 
-**Warning:** Orbital runs Claude Code with `--dangerously-skip-permissions`, which bypasses all interactive approval prompts. Claude will execute shell commands, modify files, and make network requests without asking for confirmation. Only run this tool in environments where you accept these risks.
+**Warning:** Orbital can run Claude Code with `--dangerously-skip-permissions` (via the `--dangerous` flag), which bypasses all interactive approval prompts. When enabled, Claude will execute shell commands, modify files, and make network requests without asking for confirmation. Only use this flag in environments where you accept these risks. By default, dangerous mode is **disabled** for safety.
 
 ## What is the Ralph Wiggum Method?
 
@@ -177,6 +177,10 @@ The TUI is enabled by default in interactive terminals. Disable it with `--minim
 Orbital can be configured via a TOML file at `.orbital/config.toml`:
 
 ```toml
+# Enable dangerous mode (bypasses permission prompts)
+# WARNING: Only use in trusted environments
+dangerous = false  # Default: false for safety
+
 # Custom workflow
 [workflow]
 name = "custom"
@@ -205,10 +209,12 @@ prompt = "Review the changes. Output <gate>PASS</gate> or <gate>FAIL</gate>"
 gate = true
 on_fail = "fix"
 
-# Custom agents (optional)
+# Custom agents (optional - merged with built-in agents)
 [agents.reviewer]
 description = "Code review specialist"
 prompt = "You are a code reviewer."
+tools = ["bash", "view", "edit"]  # Optional: limit tools available to this agent
+model = "sonnet"  # Optional: override model for this agent
 ```
 
 ### Step Configuration
