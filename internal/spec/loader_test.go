@@ -202,33 +202,6 @@ func TestSpec_StructFields(t *testing.T) {
 	}
 }
 
-// Test backward compatibility functions
-func TestLoad_BackwardCompatibility(t *testing.T) {
-	path := filepath.Join("testdata", "valid.md")
-
-	spec, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v, want nil", err)
-	}
-
-	if len(spec.FilePaths) != 1 {
-		t.Errorf("len(spec.FilePaths) = %d, want 1", len(spec.FilePaths))
-	}
-}
-
-func TestLoadMultiple_BackwardCompatibility(t *testing.T) {
-	path := filepath.Join("testdata", "valid.md")
-
-	spec, err := LoadMultiple([]string{path})
-	if err != nil {
-		t.Fatalf("LoadMultiple() error = %v, want nil", err)
-	}
-
-	if len(spec.FilePaths) != 1 {
-		t.Errorf("len(spec.FilePaths) = %d, want 1", len(spec.FilePaths))
-	}
-}
-
 func TestBuildVerificationPrompt_SingleFile(t *testing.T) {
 	prompt := BuildVerificationPrompt([]string{"/path/to/spec.md"})
 

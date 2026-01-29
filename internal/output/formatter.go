@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
 	orberrors "github.com/flashingpumpkin/orbital/internal/errors"
 )
@@ -20,7 +19,6 @@ type Formatter struct {
 	quiet   bool
 	noColor bool
 	writer  io.Writer
-	spinner *spinner.Spinner
 }
 
 // BannerConfig contains all configuration for the rich banner display.
@@ -70,26 +68,6 @@ func NewFormatter(verbose, quiet bool, w io.Writer) *Formatter {
 		noColor: noColor,
 		writer:  w,
 	}
-}
-
-// PrintBanner prints the orbit banner with configuration summary.
-func (f *Formatter) PrintBanner(specPath, model string, maxIterations int, promise string) {
-	if f.quiet {
-		return
-	}
-
-	cyan := color.New(color.FgCyan, color.Bold)
-	white := color.New(color.FgWhite)
-
-	_, _ = cyan.Fprintln(f.writer, "orbit-cli v0.1.0 - Autonomous Claude Code Loop")
-	_, _ = fmt.Fprintln(f.writer, "")
-	_, _ = white.Fprintf(f.writer, "  Spec:       %s\n", specPath)
-	_, _ = white.Fprintf(f.writer, "  Model:      %s\n", model)
-	_, _ = white.Fprintf(f.writer, "  Iterations: %d\n", maxIterations)
-	_, _ = white.Fprintf(f.writer, "  Promise:    %s\n", promise)
-	_, _ = fmt.Fprintln(f.writer, "")
-	_, _ = fmt.Fprintln(f.writer, "---------------------------------------------------")
-	_, _ = fmt.Fprintln(f.writer, "")
 }
 
 // PrintRichBanner prints the orbit banner with full configuration details.
@@ -213,102 +191,6 @@ func (f *Formatter) PrintLoopSummary(summary LoopSummary) {
 	}
 
 	_, _ = fmt.Fprintln(f.writer, "")
-}
-
-// PrintIterationStart prints the start of an iteration.
-func (f *Formatter) PrintIterationStart(current, total int) {
-	if f.quiet {
-		return
-	}
-
-	blue := color.New(color.FgBlue, color.Bold)
-	_, _ = blue.Fprintf(f.writer, "[%d/%d] Starting iteration...\n", current, total)
-}
-
-// PrintIterationEnd prints the end of an iteration with statistics.
-func (f *Formatter) PrintIterationEnd(duration time.Duration, tokensIn, tokensOut int, cost float64, status string) {
-	if f.quiet {
-		return
-	}
-
-	white := color.New(color.FgWhite)
-	_, _ = white.Fprintf(f.writer, "  Duration: %s | Tokens: %d in, %d out | Cost: $%.4f\n",
-		formatDuration(duration), tokensIn, tokensOut, cost)
-
-	// Print status with appropriate colour
-	var statusColor *color.Color
-	switch status {
-	case "COMPLETE":
-		statusColor = color.New(color.FgGreen, color.Bold)
-	case "Continuing":
-		statusColor = color.New(color.FgYellow)
-	default:
-		statusColor = color.New(color.FgRed)
-	}
-
-	_, _ = statusColor.Fprintf(f.writer, "  Status: %s\n", status)
-	_, _ = fmt.Fprintln(f.writer, "")
-}
-
-// PrintSummary prints the final summary of the orbit execution.
-func (f *Formatter) PrintSummary(iterations int, duration time.Duration, cost float64, tokensIn, tokensOut int, completed bool) {
-	_, _ = fmt.Fprintln(f.writer, "---------------------------------------------------")
-	_, _ = fmt.Fprintln(f.writer, "")
-
-	cyan := color.New(color.FgCyan, color.Bold)
-	_, _ = cyan.Fprintln(f.writer, "Summary")
-	_, _ = fmt.Fprintln(f.writer, "")
-
-	white := color.New(color.FgWhite)
-	_, _ = white.Fprintf(f.writer, "  Iterations:   %d\n", iterations)
-	_, _ = white.Fprintf(f.writer, "  Duration:     %s\n", formatDuration(duration))
-	_, _ = white.Fprintf(f.writer, "  Total Cost:   $%.4f\n", cost)
-	_, _ = white.Fprintf(f.writer, "  Tokens In:    %d\n", tokensIn)
-	_, _ = white.Fprintf(f.writer, "  Tokens Out:   %d\n", tokensOut)
-	_, _ = fmt.Fprintln(f.writer, "")
-
-	if completed {
-		green := color.New(color.FgGreen, color.Bold)
-		_, _ = green.Fprintln(f.writer, "  Status: Completed Successfully")
-	} else {
-		red := color.New(color.FgRed, color.Bold)
-		_, _ = red.Fprintln(f.writer, "  Status: Not Completed")
-	}
-
-	_, _ = fmt.Fprintln(f.writer, "")
-}
-
-// StartSpinner starts a progress spinner with the given message.
-func (f *Formatter) StartSpinner(message string) {
-	if f.quiet {
-		return
-	}
-
-	// Stop any existing spinner
-	if f.spinner != nil {
-		f.spinner.Stop()
-	}
-
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Writer = f.writer
-	s.Suffix = " " + message
-
-	if f.noColor {
-		_ = s.Color("reset")
-	} else {
-		_ = s.Color("cyan")
-	}
-
-	f.spinner = s
-	f.spinner.Start()
-}
-
-// StopSpinner stops the progress spinner.
-func (f *Formatter) StopSpinner() {
-	if f.spinner != nil {
-		f.spinner.Stop()
-		f.spinner = nil
-	}
 }
 
 // formatDuration formats a duration in a human-readable way.
