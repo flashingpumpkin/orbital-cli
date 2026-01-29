@@ -4,7 +4,7 @@ This file provides context for Claude Code when working on this project.
 
 ## Project Overview
 
-Orbital CLI is a Go tool that implements the "Ralph Wiggum method" for autonomous Claude Code iteration. It runs Claude Code in a loop, monitoring output for completion markers, with support for multi-step workflows, git worktree isolation, and a terminal UI.
+Orbital CLI is a Go tool that implements the "Ralph Wiggum method" for autonomous Claude Code iteration. It runs Claude Code in a loop, monitoring output for completion markers, with support for multi-step workflows and a terminal UI.
 
 ## Repository Structure
 
@@ -20,45 +20,52 @@ orbital/
 ├── internal/
 │   ├── config/                  # Configuration parsing and validation
 │   │   ├── config.go            # Main Config struct
-│   │   └── file.go              # TOML file config loading
+│   │   ├── file.go              # TOML file config loading
+│   │   └── agents.go            # Custom agent configuration
 │   ├── spec/                    # Spec file loading and prompt building
 │   │   ├── spec.go              # Spec struct and validation
-│   │   └── prompt.go            # Prompt template rendering
+│   │   └── loader.go            # Spec file loading
 │   ├── state/                   # Session state persistence
-│   │   ├── state.go             # State struct and operations
-│   │   └── queue.go             # Dynamic file queue management
+│   │   └── state.go             # State struct and operations
+│   ├── session/                 # Session management and discovery
+│   │   ├── session.go           # Session struct and display
+│   │   └── collector.go         # Session discovery and validation
 │   ├── completion/              # Promise string detection
 │   │   └── detector.go          # Completion marker matching
 │   ├── output/                  # Stream parsing and formatting
 │   │   ├── parser.go            # Claude stream-json parsing
-│   │   ├── formatter.go         # Coloured terminal output
-│   │   └── stream_processor.go  # Real-time stream processing
+│   │   ├── formatter.go         # Colored terminal output
+│   │   └── stream.go            # Real-time stream processing
 │   ├── executor/                # Claude CLI process management
 │   │   └── executor.go          # Process spawning and output capture
 │   ├── loop/                    # Main iteration controller
-│   │   ├── controller.go        # Loop orchestration
-│   │   └── verification.go      # Spec verification logic
+│   │   └── controller.go        # Loop orchestration
 │   ├── workflow/                # Multi-step workflow engine
 │   │   ├── workflow.go          # Workflow and Step structs
 │   │   ├── presets.go           # Built-in workflow presets
 │   │   ├── executor.go          # Runner and step execution with timeouts
 │   │   └── gate.go              # Gate checking logic
-│   ├── worktree/                # Git worktree isolation
-│   │   ├── setup.go             # Worktree creation phase
-│   │   ├── merge.go             # Merge back to main phase
-│   │   ├── cleanup.go           # Worktree removal
-│   │   └── state.go             # Worktree state persistence
 │   ├── tasks/                   # Task tracking
 │   │   └── tracker.go           # TodoWrite task management
+│   ├── util/                    # Utility functions
 │   └── tui/                     # Bubbletea terminal UI
 │       ├── model.go             # TUI model and update logic
 │       ├── view.go              # TUI rendering
 │       ├── bridge.go            # Stream-to-TUI adapter
-│       └── layout.go            # Panel layout management
+│       ├── layout.go            # Panel layout management
+│       ├── themes.go            # Color theme support
+│       ├── styles.go            # Lipgloss styles
+│       ├── tasks.go             # Task display
+│       ├── ringbuffer.go        # Output buffer management
+│       ├── messages.go          # Bubbletea messages
+│       ├── program.go           # Program initialization
+│       └── selector/            # Session selector UI
+│           ├── model.go         # Selector model
+│           └── styles.go        # Selector styles
 ├── docs/
 │   ├── plans/                   # Tech specs and user stories
 │   ├── notes/                   # Session notes
-│   └── decisions/               # Architecture decision records
+│   └── specs/                   # Specification documents
 ├── go.mod                       # Module: github.com/flashingpumpkin/orbital-cli
 └── go.sum
 ```
@@ -86,27 +93,37 @@ Multi-step workflows in `internal/workflow/`:
 - **Deferred**: Steps marked deferred only run when reached via OnFail
 - **Presets**: fast, spec-driven (default), reviewed, tdd, autonomous
 
-### Worktree Isolation
-
-Git worktree mode in `internal/worktree/`:
-1. **Setup**: Claude names the feature, creates worktree and branch
-2. **Execute**: All iterations run in the isolated worktree
-3. **Merge**: On completion, merge branch back to original
-4. **Cleanup**: Remove worktree and branch
-
 ### Terminal UI
 
 Bubbletea-based TUI in `internal/tui/`:
-- Fixed panels: session info, progress, worktree status
-- Scrolling output panel with Claude's responses
-- Real-time token/cost tracking
-- Workflow step progress display
+- **Session information panel**: Displays spec files, notes file, state file
+- **Progress panel**: Iteration count, workflow step progress, budget tracking
+- **Multi-tab interface**: Switch between output and file content views
+- **Session selector**: Interactive UI for resuming interrupted sessions
+- **Theme support**: Auto-detect or manual theme selection (dark/light)
+- **Real-time token/cost tracking**: Updates as Claude processes
+- **Workflow step progress display**: Shows current step in multi-step workflows
 
 ### Completion Promise
 
 Default: `<promise>COMPLETE</promise>`
 
 The spec file instructs Claude to output this string when done. The detector does case-sensitive exact matching.
+
+### Session Management
+
+Session state in `internal/state/` and `internal/session/`:
+- **State persistence**: All session state stored in `.orbital/state/`
+- **Session discovery**: Find and validate resumable sessions
+- **Interactive selector**: TUI for choosing which session to resume
+- **State cleanup**: Automatic cleanup on successful completion
+- **Session ID tracking**: Each Claude session gets a unique ID for resumption
+
+Session state includes:
+- Iteration count and budget spent
+- Workflow state (current step, gate retries)
+- File paths (spec, context, notes)
+- Claude session ID for resumption
 
 ### Verification
 
@@ -138,17 +155,18 @@ make install
 
 - `github.com/spf13/cobra` - CLI framework
 - `github.com/BurntSushi/toml` - TOML configuration parsing
-- `github.com/fatih/color` - Coloured terminal output
+- `github.com/fatih/color` - Colored terminal output
 - `github.com/briandowns/spinner` - Progress spinner
 - `github.com/charmbracelet/bubbletea` - Terminal UI framework
 - `github.com/charmbracelet/lipgloss` - Terminal styling
+- `github.com/charmbracelet/bubbles` - TUI components (viewport)
+- `golang.org/x/term` - Terminal detection and control
 
 ## Testing Patterns
 
 All packages use table-driven tests. Mock interfaces are defined for dependency injection:
-- `loop.ExecutorInterface` - Mock executor for loop tests
+- `loop.Executor` - Mock executor for loop tests
 - `workflow.StepExecutor` - Mock executor for workflow tests
-- `worktree.Executor` - Mock executor for worktree tests
 
 Test files are co-located with implementation: `foo.go` has `foo_test.go`.
 
@@ -180,6 +198,9 @@ DefaultStepTimeout: 5 * time.Minute  // Per workflow step
 Orbital supports an optional TOML config file at `.orbital/config.toml`:
 
 ```toml
+# Enable dangerous mode (optional, default: false)
+dangerous = false
+
 # Custom workflow
 [workflow]
 name = "custom"
@@ -205,10 +226,12 @@ prompt = "Review the changes. Output <gate>PASS</gate> or <gate>FAIL</gate>"
 gate = true
 on_fail = "fix"
 
-# Custom agents
+# Custom agents (merged with built-in agents)
 [agents.reviewer]
 description = "Code reviewer"
 prompt = "You review code."
+tools = ["bash", "view", "edit"]  # Optional
+model = "sonnet"  # Optional
 ```
 
 Template placeholders:
@@ -219,6 +242,16 @@ Template placeholders:
 - `{{timeout}}` - Step timeout as human-readable text (e.g., "5 minutes")
 - `{{plural}}` - "s" if multiple files
 - `{{promise}}` - Completion promise string
+
+Built-in agents (always available via Task tool):
+- `general-purpose` - Research, code exploration, multi-step tasks
+- `security-reviewer` - Security vulnerabilities and attack vectors
+- `design-reviewer` - Architecture, SOLID principles, coupling
+- `logic-reviewer` - Bugs, edge cases, race conditions
+- `error-reviewer` - Error handling and recovery patterns
+- `data-reviewer` - Data handling, consistency, null safety
+
+These are used in review gates for rigorous code review across multiple dimensions.
 
 ## Workflow Presets
 

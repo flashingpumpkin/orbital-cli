@@ -8,7 +8,7 @@ This project was developed entirely through AI-driven development using Claude C
 
 This serves as both a practical tool and an experiment in autonomous software development.
 
-**Warning:** Orbital runs Claude Code with `--dangerously-skip-permissions`, which bypasses all interactive approval prompts. Claude will execute shell commands, modify files, and make network requests without asking for confirmation. Only run this tool in environments where you accept these risks.
+**Warning:** Orbital can run Claude Code with `--dangerously-skip-permissions` (via the `--dangerous` flag), which bypasses all interactive approval prompts. When enabled, Claude will execute shell commands, modify files, and make network requests without asking for confirmation. Only use this flag in environments where you accept these risks. By default, dangerous mode is **disabled** for safety.
 
 ## What is the Ralph Wiggum Method?
 
@@ -64,14 +64,14 @@ orbital ./spec.md --workflow tdd
 # Autonomous workflow with self-directed task selection
 orbital ./spec.md --workflow autonomous
 
-# Worktree isolation mode (work in isolated git worktree)
-orbital ./spec.md --worktree
-
 # Minimal output mode (no TUI)
 orbital ./spec.md --minimal
 
 # Fast workflow for maximum throughput
 orbital ./spec.md --workflow fast
+
+# Use a specific color theme
+orbital ./spec.md --theme dark
 ```
 
 ### Subcommands
@@ -105,20 +105,22 @@ State is stored in `.orbital/state/` and automatically cleaned up on successful 
 | `--budget` | `-b` | 100.00 | Maximum USD to spend |
 | `--working-dir` | `-d` | `.` | Working directory |
 | `--config` | `-c` | `.orbital/config.toml` | Path to config file |
-| `--workflow` | | `spec-driven` | Workflow preset (fast, spec-driven, reviewed, tdd) |
-| `--worktree` | | false | Enable worktree isolation mode |
-| `--worktree-name` | | | Override worktree name |
-| `--setup-model` | | `haiku` | Model for worktree setup phase |
-| `--merge-model` | | `haiku` | Model for worktree merge phase |
+| `--workflow` | | `spec-driven` | Workflow preset (fast, spec-driven, reviewed, tdd, autonomous) |
 | `--minimal` | | false | Use minimal output mode (no TUI) |
 | `--quiet` | `-q` | false | Suppress verbose output |
 | `--debug` | | false | Stream raw JSON output |
+| `--show-unhandled` | | false | Show raw JSON for unhandled event types |
+| `--todos-only` | | false | Only show TodoWrite output |
 | `--dry-run` | | false | Show what would be executed |
 | `--session-id` | `-s` | | Use specific session ID |
-| `--timeout` | `-t` | 5m | Timeout for all workflow steps (overrides step-level timeouts) |
+| `--timeout` | `-t` | 5m | Timeout per iteration (default: 5 minutes) |
 | `--max-turns` | | 0 | Max agentic turns per iteration (0 = unlimited) |
 | `--system-prompt` | | | Custom system prompt |
 | `--agents` | | | JSON object defining custom agents |
+| `--non-interactive` | | false | Error if interactive selection would be needed |
+| `--dangerous` | | false | Enable --dangerously-skip-permissions for Claude CLI |
+| `--max-output-size` | | 10485760 | Maximum output size in bytes to retain (0 = unlimited) |
+| `--theme` | | auto | Color theme: auto (detect), dark, light |
 
 ## Workflow Presets
 
@@ -143,31 +145,30 @@ The TDD workflow follows the red-green-refactor cycle:
 
 If the review gate fails, the workflow returns to the refactor step.
 
-## Worktree Isolation Mode
-
-Worktree mode isolates work in a git worktree, keeping the main branch clean until completion:
-
-```bash
-orbital ./spec.md --worktree
-```
-
-The workflow:
-1. **Setup phase**: Claude analyses the spec and creates a named worktree with a feature branch
-2. **Execution**: All work happens in the isolated worktree
-3. **Merge phase**: On completion, changes are merged back to the original branch
-4. **Cleanup**: Worktree and branch are removed after successful merge
-
-If interrupted, the worktree is preserved and can be resumed with `orbital continue`.
-
 ## Terminal UI
 
 Orbital includes a Bubbletea-based terminal UI that displays:
 
-- Session information (spec files, notes file, state file)
-- Progress (iteration count, budget, tokens)
-- Workflow step progress (for multi-step workflows)
-- Worktree status (when in worktree mode)
-- Live output from Claude
+- **Session information**: Spec files, notes file, and state file paths
+- **Progress metrics**: Iteration count, workflow step progress, budget tracking
+- **Token tracking**: Input/output tokens and cost in real-time
+- **Live output**: Streaming output from Claude with syntax highlighting
+- **Multi-tab interface**: Switch between output and file content views
+  - Output tab: Primary streaming output from Claude
+  - File tabs: View spec files and notes files with automatic refresh
+- **Interactive session selector**: Resume interrupted sessions with visual selection UI
+- **Theme support**: Automatically detects terminal background or use `--theme` flag
+  - `auto`: Detects terminal background color
+  - `dark`: Optimized for dark backgrounds
+  - `light`: Optimized for light backgrounds
+
+### TUI Controls
+
+- **Arrow keys / j/k**: Scroll through output
+- **Tab / Shift+Tab**: Switch between tabs
+- **Home / End**: Jump to top/bottom of output
+- **Space**: Toggle auto-scrolling (tailing)
+- **Ctrl+C**: Interrupt execution
 
 The TUI is enabled by default in interactive terminals. Disable it with `--minimal` or `--quiet`.
 
@@ -176,6 +177,10 @@ The TUI is enabled by default in interactive terminals. Disable it with `--minim
 Orbital can be configured via a TOML file at `.orbital/config.toml`:
 
 ```toml
+# Enable dangerous mode (bypasses permission prompts)
+# WARNING: Only use in trusted environments
+dangerous = false  # Default: false for safety
+
 # Custom workflow
 [workflow]
 name = "custom"
@@ -204,10 +209,12 @@ prompt = "Review the changes. Output <gate>PASS</gate> or <gate>FAIL</gate>"
 gate = true
 on_fail = "fix"
 
-# Custom agents (optional)
+# Custom agents (optional - merged with built-in agents)
 [agents.reviewer]
 description = "Code review specialist"
 prompt = "You are a code reviewer."
+tools = ["bash", "view", "edit"]  # Optional: limit tools available to this agent
+model = "sonnet"  # Optional: override model for this agent
 ```
 
 ### Step Configuration
@@ -232,6 +239,21 @@ prompt = "You are a code reviewer."
 | `{{timeout}}` | Step timeout as human-readable text (e.g., "5 minutes") |
 | `{{plural}}` | "s" if multiple files, empty otherwise |
 | `{{promise}}` | Completion promise string |
+
+### Built-in Agents
+
+Orbital includes several built-in review agents that are automatically available to Claude via the Task tool. These are particularly useful in workflows with review gates:
+
+| Agent | Purpose |
+|-------|---------|
+| `general-purpose` | Research, code exploration, and multi-step tasks |
+| `security-reviewer` | Identifies security vulnerabilities and attack vectors |
+| `design-reviewer` | Checks architecture, SOLID principles, and coupling |
+| `logic-reviewer` | Finds bugs, edge cases, and race conditions |
+| `error-reviewer` | Reviews error handling and recovery patterns |
+| `data-reviewer` | Validates data handling, consistency, and null safety |
+
+These agents are used in the rigorous review gates of the `fast`, `reviewed`, `tdd`, and `autonomous` presets. You can override or add to these agents via the config file or `--agents` flag.
 
 ## Exit Codes
 
@@ -288,19 +310,26 @@ orbital/
 ├── internal/
 │   ├── config/            # Configuration parsing and validation
 │   ├── spec/              # Spec file loading and prompt building
-│   ├── state/             # Session state and queue management
+│   ├── state/             # Session state persistence
+│   ├── session/           # Session management and discovery
 │   ├── completion/        # Promise string detection
 │   ├── output/            # Stream parsing and formatting
 │   ├── executor/          # Claude CLI process management
 │   ├── loop/              # Main iteration controller
 │   ├── workflow/          # Multi-step workflow engine
-│   ├── worktree/          # Git worktree isolation
 │   ├── tasks/             # Task tracking (TodoWrite)
 │   └── tui/               # Bubbletea terminal UI
+│       ├── model.go       # TUI model and update logic
+│       ├── view.go        # TUI rendering
+│       ├── bridge.go      # Stream-to-TUI adapter
+│       ├── layout.go      # Panel layout management
+│       ├── themes.go      # Color theme support
+│       ├── tasks.go       # Task display
+│       └── selector/      # Session selector UI
 ├── docs/
 │   ├── plans/             # Tech specs and user stories
 │   ├── notes/             # Session notes
-│   └── decisions/         # Architecture decision records
+│   └── specs/             # Specification documents
 ├── go.mod
 └── go.sum
 ```
@@ -317,8 +346,7 @@ orbital/
    - On PASS: continue to next step
    - On FAIL: jump to `on_fail` step (or retry)
 6. **Verify completion**: Run verification to check all spec items are complete
-7. **Handle queue**: Process any dynamically added spec files
-8. **Repeat or exit**: Continue until verification passes or limits reached
+7. **Repeat or exit**: Continue until verification passes or limits reached
 
 ## Development
 

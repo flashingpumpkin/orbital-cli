@@ -109,7 +109,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&agents, "agents", "", "JSON object defining custom agents for Claude CLI")
 	rootCmd.PersistentFlags().StringVar(&notesFile, "notes", "", "Path to notes file (default: auto-generated in docs/notes/)")
 	rootCmd.PersistentFlags().StringArrayVar(&contextFiles, "context", []string{}, "Additional context file (can be repeated)")
-	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: fast, spec-driven (default), reviewed, tdd")
+	rootCmd.PersistentFlags().StringVar(&workflowFlag, "workflow", "", "Workflow preset: fast, spec-driven (default), reviewed, tdd, autonomous")
 	rootCmd.PersistentFlags().BoolVar(&minimal, "minimal", false, "Use minimal output mode (no TUI)")
 	rootCmd.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false, "Error if interactive selection would be needed")
 	rootCmd.PersistentFlags().BoolVar(&dangerous, "dangerous", false, "Enable --dangerously-skip-permissions for Claude CLI (allows execution without permission prompts)")
