@@ -1253,3 +1253,51 @@ Updated tests in:
 ### Verification
 
 All tests pass: `make check` successful
+
+## Code Review - Iteration 18
+
+### Security
+No issues. The changes are internal state management for token tracking. No user input processing, no file path operations, no shell command execution, no authentication boundaries. All data is internal metrics (token counts, costs). The mutex usage in Bridge.ResetIterationTokens() properly protects concurrent access.
+
+### Design
+_ISSUES_FOUND
+
+1. **Data Duplication / DRY Violation** (MEDIUM): The same two fields (`CurrentIterTokensIn`, `CurrentIterTokensOut`) are duplicated across four structs: `OutputStats`, `Parser`, `ProgressInfo`, and `StatsMsg`. Each struct carries the same fields with identical comments. This creates maintenance burden.
+
+2. **Leaky Abstraction** (MEDIUM): The orchestration layer (`cmd/orbital/root.go`) reaches deep into the TUI subsystem to reset parser state via `tuiProgram.ResetIterationTokens()`. This exposes implementation details about internal parser structure to the calling code. The Bridge or Program should handle iteration boundaries internally.
+
+3. **Feature Envy** (LOW): `Bridge.ResetIterationTokens()` exists only to forward a call to `Parser.ResetIterationTokens()`. The Bridge acquires a lock just to delegate work.
+
+4. **Inconsistent Reset Locations** (MEDIUM): `ResetIterationTokens()` is called in two places (iteration start callback and workflow step start), creating confusion about when tokens are actually reset.
+
+5. **Missing Interface** (LOW): Parser's public API is growing without an explicit interface definition, making it harder to substitute implementations for testing.
+
+### Logic
+No issues. Thread safety is maintained via Bridge mutex. Integer overflow is bounded by Claude's context window size. Nil checks are in place. State transitions (reset at iteration start, update during iteration) are correct. Edge case of ContextWindow=0 is handled (ratio stays 0).
+
+### Error Handling
+No issues. The changes are simple struct field assignments and method calls that cannot fail. All nil checks are in place. Mutex locking properly protects shared state. No new error return values are introduced.
+
+### Data Integrity
+_ISSUES_FOUND
+
+1. **Race Condition in Parser Access** (HIGH): `ResetIterationTokens()` is called from root.go callbacks while stream processing may be happening concurrently in Bridge.Write(). The Bridge mutex protects Bridge operations, but if the Write goroutine and the callback goroutine both access Parser methods concurrently, there's a race condition. The Parser itself has no mutex protection for its internal fields.
+
+2. **Missing CurrentIterTokens in ProgressMsg** (MEDIUM): Multiple `SendProgress()` calls in root.go (iteration callbacks, workflow step callbacks) don't include `CurrentIterTokensIn` and `CurrentIterTokensOut` fields. When these ProgressMsg arrive, Go defaults these to 0, potentially overwriting correct values from StatsMsg.
+
+3. **Two Sources of Truth** (MEDIUM): `StatsMsg` from Bridge includes per-iteration tokens from parser. `ProgressMsg` from root.go callbacks don't have access to these values. When TUI receives both message types, inconsistent data arrives.
+
+4. **No Integer Overflow Validation** (LOW): Token addition `CurrentIterTokensIn + CurrentIterTokensOut` has no overflow check, though probability is very low given real-world token counts.
+
+### Verdict
+**FAIL**
+
+Critical issues requiring attention:
+
+1. **Race condition in Parser** (HIGH): The Parser is accessed from both the stream processing goroutine (via Bridge.Write) and the iteration callback (via ResetIterationTokens). The Bridge mutex protects Bridge-level operations, but doesn't protect against concurrent Parser method calls from different code paths. Either the Parser needs its own mutex, or all Parser access must go through the Bridge.
+
+2. **Missing per-iteration tokens in ProgressMsg** (MEDIUM): When iteration/step callbacks send ProgressMsg, they don't include CurrentIterTokensIn/Out, causing the TUI to potentially display stale values when these messages overwrite StatsMsg-provided data.
+
+3. **Design debt** (noted): The duplication and leaky abstraction are concerning but not blocking for this iteration.
+
+The race condition is the primary concern. It could cause corrupted token values or display inconsistencies when heavy stream processing coincides with iteration boundaries.
