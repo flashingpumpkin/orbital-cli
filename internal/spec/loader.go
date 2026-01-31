@@ -175,19 +175,24 @@ const DefaultPrompt = `Implement the next pending user story from the following 
 
 // VerificationPrompt is the prompt template for verifying completion.
 // Used by the verification step to check if all checkboxes are complete.
-const VerificationPrompt = `Read the following spec file(s) and count the checkboxes:
+const VerificationPrompt = `Read the following spec file(s) and assess completion:
 
 {{files}}
 
-Count all checkbox patterns:
-- Unchecked: [ ] (space between brackets)
-- Checked: [x] or [X] (x or X between brackets)
+ASSESSMENT CRITERIA:
+1. HIERARCHICAL CHECKBOXES: A checked parent item means its children are complete.
+   - If a story/ticket title is checked (e.g. "### [x] Ticket 1: ..."), that entire story is COMPLETE
+   - Ignore unchecked child items (acceptance criteria, definition of done) under a checked parent
+   - Only count unchecked items under UNCHECKED parent stories/tickets
+2. FLAT CHECKBOXES: If no hierarchy, count all [ ] as unchecked and [x]/[X] as checked
+3. NON-CHECKBOX FORMATS: Look for "done", "complete", "finished", strikethrough (~~task~~), or status columns
 
-Respond with EXACTLY one of these formats (nothing else):
-- If zero unchecked boxes: VERIFIED: 0 unchecked, N checked
-- If any unchecked boxes: INCOMPLETE: N unchecked, M checked
+RESPONSE FORMAT (use EXACTLY one of these):
+- If all top-level items are complete: VERIFIED: 0 unchecked, N checked
+- If incomplete top-level items remain: INCOMPLETE: N unchecked, M checked
+- If you cannot determine status: UNKNOWN: unable to assess completion
 
-Replace N and M with the actual counts.`
+Replace N and M with actual counts. For hierarchical specs, count stories/tickets, not individual criteria.`
 
 // BuildPrompt generates the prompt to send to Claude CLI.
 // Uses PromptTemplate if set, otherwise uses default template.

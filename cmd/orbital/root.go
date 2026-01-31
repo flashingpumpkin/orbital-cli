@@ -1051,21 +1051,33 @@ func runWorkflowLoop(
 			}
 
 			if !verifyResult.Verified {
-				var msg string
-				if verifyResult.Unchecked >= 0 {
-					msg = fmt.Sprintf("Verification: %d unchecked item(s) remain. Continuing.", verifyResult.Unchecked)
+				// If promise was detected but verification couldn't determine status,
+				// trust the explicit completion signal
+				if promiseDetected && verifyResult.Unchecked < 0 {
+					msg := "Verification inconclusive, but completion promise detected. Trusting promise."
+					if tuiProgram != nil {
+						tuiProgram.SendOutput("⚠ " + msg)
+					} else {
+						fmt.Println(msg)
+					}
+					// Fall through to completion check (don't continue)
 				} else {
-					msg = "Verification: could not parse response. Continuing."
+					var msg string
+					if verifyResult.Unchecked >= 0 {
+						msg = fmt.Sprintf("Verification: %d unchecked item(s) remain. Continuing.", verifyResult.Unchecked)
+					} else {
+						msg = "Verification: could not parse response. Continuing."
+					}
+					if tuiProgram != nil {
+						tuiProgram.SendOutput("⚠ " + msg)
+					} else {
+						fmt.Println(msg)
+					}
+					continue
 				}
-				if tuiProgram != nil {
-					tuiProgram.SendOutput("⚠ " + msg)
-				} else {
-					fmt.Println(msg)
-				}
-				continue
 			}
 
-			// Verification passed
+			// Verification passed (or promise trusted)
 			msg := fmt.Sprintf("Verification: all items complete (%d checked).", verifyResult.Checked)
 			if tuiProgram != nil {
 				tuiProgram.SendOutput("✓ " + msg)

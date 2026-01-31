@@ -964,6 +964,42 @@ You still have work to do.`
 	}
 }
 
+func TestParseVerificationResponse_Unknown(t *testing.T) {
+	output := "UNKNOWN: unable to assess completion"
+
+	verified, unchecked, checked := ParseVerificationResponse(output)
+
+	if verified {
+		t.Error("expected verified to be false for UNKNOWN response")
+	}
+	if unchecked != -1 {
+		t.Errorf("expected unchecked to be -1, got %d", unchecked)
+	}
+	if checked != -1 {
+		t.Errorf("expected checked to be -1, got %d", checked)
+	}
+}
+
+func TestParseVerificationResponse_UnknownWithExtraText(t *testing.T) {
+	output := `I've examined the spec files but they don't use checkbox syntax.
+
+UNKNOWN: unable to assess completion
+
+The file uses a different format that I cannot reliably parse.`
+
+	verified, unchecked, checked := ParseVerificationResponse(output)
+
+	if verified {
+		t.Error("expected verified to be false for UNKNOWN response")
+	}
+	if unchecked != -1 {
+		t.Errorf("expected unchecked to be -1, got %d", unchecked)
+	}
+	if checked != -1 {
+		t.Errorf("expected checked to be -1, got %d", checked)
+	}
+}
+
 func TestRun_VerificationFailureContinuesLoop(t *testing.T) {
 	cfg := config.NewConfig()
 	cfg.MaxIterations = 3

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/flashingpumpkin/orbital/internal/completion"
@@ -186,8 +187,9 @@ func (c *Controller) verifyCompletion(ctx context.Context) (*VerificationResult,
 	}, nil
 }
 
-// ParseVerificationResponse parses the verification output for VERIFIED or INCOMPLETE.
+// ParseVerificationResponse parses the verification output for VERIFIED, INCOMPLETE, or UNKNOWN.
 // Returns (verified, unchecked, checked).
+// When unchecked and checked are both -1, verification could not determine completion status.
 func ParseVerificationResponse(output string) (bool, int, int) {
 	// Look for VERIFIED: 0 unchecked, N checked
 	verifiedRe := regexp.MustCompile(`VERIFIED:\s*0\s*unchecked,\s*(\d+)\s*checked`)
@@ -204,6 +206,11 @@ func ParseVerificationResponse(output string) (bool, int, int) {
 		_, _ = fmt.Sscanf(matches[1], "%d", &unchecked)
 		_, _ = fmt.Sscanf(matches[2], "%d", &checked)
 		return false, unchecked, checked
+	}
+
+	// Look for UNKNOWN response (verification couldn't determine status)
+	if strings.Contains(output, "UNKNOWN:") {
+		return false, -1, -1
 	}
 
 	// If we can't parse the response, assume not verified
