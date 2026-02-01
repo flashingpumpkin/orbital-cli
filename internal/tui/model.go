@@ -243,7 +243,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StatsMsg:
 		m.progress.TokensIn = msg.TokensIn
 		m.progress.TokensOut = msg.TokensOut
-		m.progress.Cost = msg.Cost
+		// Only update cost if the new value is greater (cost accumulates, never decreases).
+		// This prevents the bridge's parser (which starts fresh each TUI session) from
+		// overwriting accumulated cost from previous sessions set via ProgressMsg.
+		if msg.Cost > m.progress.Cost {
+			m.progress.Cost = msg.Cost
+		}
 		m.progress.CurrentIterTokensIn = msg.CurrentIterTokensIn
 		m.progress.CurrentIterTokensOut = msg.CurrentIterTokensOut
 		return m, nil
