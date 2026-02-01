@@ -68,9 +68,13 @@ type Executor struct {
 
 // New creates a new Executor with the given configuration.
 func New(cfg *config.Config) *Executor {
+	claudeCmd := "claude"
+	if cfg.ClaudeBin != "" {
+		claudeCmd = cfg.ClaudeBin
+	}
 	return &Executor{
 		config:    cfg,
-		claudeCmd: "claude",
+		claudeCmd: claudeCmd,
 		verbose:   cfg.Verbose,
 	}
 }

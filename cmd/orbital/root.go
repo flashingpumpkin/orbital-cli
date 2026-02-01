@@ -53,6 +53,7 @@ var (
 	dangerous      bool
 	maxOutputSize  int
 	themeFlag      string
+	claudeBin      string
 )
 
 var rootCmd = &cobra.Command{
@@ -115,6 +116,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&dangerous, "dangerous", false, "Enable --dangerously-skip-permissions for Claude CLI (allows execution without permission prompts)")
 	rootCmd.PersistentFlags().IntVar(&maxOutputSize, "max-output-size", config.DefaultMaxOutputSize, "Maximum output size in bytes to retain (0 = unlimited)")
 	rootCmd.PersistentFlags().StringVar(&themeFlag, "theme", "auto", "Colour theme: auto (detect), dark, light")
+	rootCmd.PersistentFlags().StringVar(&claudeBin, "claude-bin", "", "Path to Claude CLI binary (default: claude in PATH)")
 }
 
 func runOrbit(cmd *cobra.Command, args []string) error {
@@ -153,6 +155,7 @@ func runOrbit(cmd *cobra.Command, args []string) error {
 		DangerouslySkipPermissions: dangerous,
 		MaxOutputSize:              maxOutputSize,
 		Theme:                      themeFlag,
+		ClaudeBin:                  claudeBin,
 	}
 
 	// Validate configuration

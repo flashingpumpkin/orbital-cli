@@ -71,6 +71,10 @@ type Config struct {
 	// "auto" detects the terminal background colour automatically.
 	// Default: "auto".
 	Theme string
+
+	// ClaudeBin is the path to the Claude CLI binary.
+	// If empty, "claude" is looked up in PATH.
+	ClaudeBin string
 }
 
 // DefaultMaxOutputSize is the default maximum output size in bytes (10MB).
