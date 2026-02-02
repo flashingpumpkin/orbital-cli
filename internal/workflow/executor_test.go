@@ -844,3 +844,56 @@ func TestRunner_Run_TimeoutSubstitutionDefault(t *testing.T) {
 		t.Errorf("prompt = %q, want %q", capturedPrompt, expected)
 	}
 }
+
+// TestRunner_Run_DeferredStepAfterGate tests the scenario where a deferred step
+// comes AFTER the gate step in the workflow. This is the common pattern:
+// implement -> verify (gate) -> fix (deferred)
+// When verify fails, it should go to fix, then return to verify.
+func TestRunner_Run_DeferredStepAfterGate(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{
+			{Name: "implement", Prompt: "Do it"},
+			{Name: "verify", Prompt: "Verify", Gate: true, OnFail: "fix"},
+			{Name: "fix", Prompt: "Fix it", Deferred: true},
+		},
+	}
+
+	exec := newMockExecutor()
+
+	// Track call count to vary responses
+	callCount := 0
+	exec.customHandler = func(ctx context.Context, stepName string, prompt string) (*ExecutionResult, error) {
+		callCount++
+		if stepName == "verify" {
+			if callCount <= 2 {
+				// First verify fails
+				return &ExecutionResult{StepName: "verify", Output: "Issues found\n<gate>FAIL</gate>", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+			}
+			// Second verify passes
+			return &ExecutionResult{StepName: "verify", Output: "All good\n<gate>PASS</gate>", CostUSD: 0.01, TokensIn: 60, TokensOut: 40}, nil
+		}
+		return &ExecutionResult{StepName: stepName, Output: "Done!", CostUSD: 0.02, TokensIn: 120, TokensOut: 80}, nil
+	}
+
+	runner := NewRunner(w, exec)
+	result, err := runner.Run(context.Background())
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if !result.CompletedAllSteps {
+		t.Error("CompletedAllSteps = false, want true")
+	}
+
+	// Should have: implement -> verify (fail) -> fix -> verify (pass)
+	expectedCalls := []string{"implement", "verify", "fix", "verify"}
+	if len(exec.calls) != len(expectedCalls) {
+		t.Errorf("calls = %v, want %v", exec.calls, expectedCalls)
+	}
+	for i, expected := range expectedCalls {
+		if i < len(exec.calls) && exec.calls[i] != expected {
+			t.Errorf("calls[%d] = %q, want %q", i, exec.calls[i], expected)
+		}
+	}
+}

@@ -180,6 +180,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 	gateRetries := make(map[string]int)
 	timeoutRetries := make(map[string]bool)
 	arrivedViaOnFail := false
+	returnToGateIndex := -1 // Index of gate to return to after deferred step
 
 	for stepIndex < len(r.workflow.Steps) {
 		step := r.workflow.Steps[stepIndex]
@@ -316,6 +317,7 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 					if targetIndex < 0 {
 						return result, fmt.Errorf("step %q: on_fail target %q not found", step.Name, step.OnFail)
 					}
+					returnToGateIndex = stepIndex // Remember which gate to return to
 					stepIndex = targetIndex
 					arrivedViaOnFail = true
 				}
@@ -331,8 +333,15 @@ func (r *Runner) Run(ctx context.Context) (*RunResult, error) {
 				// Retry the step
 			}
 		} else {
-			// Not a gate step, move to next
-			stepIndex++
+			// Not a gate step
+			if returnToGateIndex >= 0 && step.Deferred {
+				// Deferred step completed, return to the gate that triggered on_fail
+				stepIndex = returnToGateIndex
+				returnToGateIndex = -1
+			} else {
+				// Normal step, move to next
+				stepIndex++
+			}
 		}
 	}
 
